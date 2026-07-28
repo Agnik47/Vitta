@@ -8,6 +8,10 @@ You are building **Mandate Gate**: a policy engine that gates an AI browser-auto
 
 This is not a research task. Do not summarize, do not produce analysis documents, do not write anything to the `03-Research/` folder elsewhere in this workspace — that folder is a separate, already-finished research corpus. Your job here is to **write and run real code** in this repo.
 
+## Parallel development mode
+
+If `docs/common/00-START-HERE.md` exists (it does, as of this writing), this project is being built by **two Claude Code instances in parallel** on two machines, synced through Git. If that's you, read `docs/common/00-START-HERE.md` FIRST — before the reading order below — it establishes which agent you are, what's already done, what the other agent is doing right now, and which half of the reading order and phases below are yours at this moment. It does not override any rule in this file; it only sequences who does what, when. A solo session with no parallel partner can skip straight to the reading order below, as before.
+
 ## Required reading order — do this first, every session
 
 1. `docs/00-PRODUCT-BRIEF.md` — scope and hard boundaries

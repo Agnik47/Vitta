@@ -1,0 +1,30 @@
+# 03 — Shared Interfaces (Contract Registry)
+
+This is a **registry**, not a copy of the code. The actual type definitions live in the numbered specs and, once written, in `src/`. This file exists so either agent can answer "is this contract stable, who owns it, and who do I coordinate with before changing it" in one glance, without re-deriving it from `docs/01-ARCHITECTURE.md` and `docs/04-POLICY-ENGINE-SPEC.md` every time. If this file and the actual source code ever disagree, **the source code wins** — update this table to match, the same way `CLAUDE.md` already requires for `docs/OUTCOME.md`.
+
+## Registry
+
+| Contract | Source of truth (spec) | Defined in (code, once built) | Owner | Consumed by | Status |
+|---|---|---|---|---|---|
+| `Mandate` | `docs/04-POLICY-ENGINE-SPEC.md` § The Mandate schema | `src/mandate/schema.ts` | Agent A | policy, receipt, cli, dashboard | 🔒 Frozen once Phase 1a ships |
+| `canonicalJSON()` / `sign()` / `verify()` | `docs/04-POLICY-ENGINE-SPEC.md` § Canonical JSON + Ed25519 signing | `src/mandate/sign.ts` | Agent A | mandate, receipt, cli | 🔒 Frozen once Phase 1a ships |
+| `Decision` / `SpendRequest` / `decide()` | `docs/04-POLICY-ENGINE-SPEC.md` § The decide() function | `src/policy/decide.ts` | Agent A | cli, (later) the Phase 3 MCP stub | 🔒 Frozen once Phase 1b ships — rule order is part of the contract, not just the types |
+| `Ledger` interface | `docs/01-ARCHITECTURE.md` § Ledger interface | `src/ledger/Ledger.ts` | Agent A defines (Phase 0) / Agent B implements (`DodoCreditLedger`, Phase 1c) | cli, whatever calls `decide()` | 🔒 Frozen at Phase 0 |
+| `GateEvent` / `DenyCode` | `docs/01-ARCHITECTURE.md` § GateEvent | `src/events/GateEvent.ts` | Joint — created once in Phase 0 | everything, including the dashboard | 🔒 Frozen at Phase 0. CLAUDE.md itself: "never restructure it later." Treat any proposed change as a stop-the-line event. |
+| `Receipt` | `docs/04-POLICY-ENGINE-SPEC.md` § The Receipt schema | `src/receipt/schema.ts` | Agent A | cli, dashboard (re-implemented reader, see `docs/06-DASHBOARD-SPEC.md`'s duplication note) | 🔒 Frozen once Phase 1e ships |
+| webcmd manifest access-map shape (`Map<string, 'read'\|'write'>`) | `docs/03-WEBCMD-INTEGRATION.md` § Step 1 | `src/webcmd/manifest.ts` | Agent B | cli, whatever calls `decide()` | 🔒 Frozen once Phase 1d ships |
+| Dashboard API response shapes (`/api/mandate`, `/api/events`, `/api/receipts`) | `docs/06-DASHBOARD-SPEC.md` | `dashboard/app/api/*/route.ts` | Agent B | dashboard frontend only | Owned entirely within Phase 1h — no cross-agent risk, Agent A never imports these |
+
+## Change protocol
+
+Everything marked 🔒 above is meant to be written once and not touched again — that's what makes the parallel split safe. If real API behavior or a real bug forces a change to a frozen contract (this **will** happen per `CLAUDE.md` rule 6 — Dodo's real response shapes are explicitly unverified until you call the API):
+
+1. Before editing, add an entry to `04-BLOCKERS.md` if the change would block the other agent, or just a heads-up in `08-CHANGELOG.md` if it's purely additive (e.g. adding an optional field).
+2. `git pull --rebase` immediately before making the change, to minimize the window where the other agent could be building against the stale shape.
+3. Make the change, update this table's `Status` cell (e.g. "🔒 Frozen once Phase 1a ships" → "⚠️ Amended 2026-07-29, see ADR-00X"), and update the owning spec file too if the spec's sketch was simply wrong (this is `CLAUDE.md` rule 6, already in force).
+4. **If this is a change to an already-frozen contract** (not the first time it's being defined), write an ADR entry in `02-DECISIONS.md` — what changed, why, what alternatives existed, and what it impacts. Changing something both agents already built against is exactly the kind of decision that log exists to preserve; a one-line changelog entry isn't enough context for the other agent to trust the change without re-deriving your reasoning.
+5. Push immediately — do not batch a frozen-contract change with unrelated work.
+6. Log it in `08-CHANGELOG.md` with `Interface changes:` filled in explicitly, not left as "none," and link the ADR number.
+7. The other agent pulls and re-runs their own tests against the new shape before continuing any work that touches it.
+
+Additive changes (new optional field, new `DenyCode` value) are lower-risk than changes that alter an existing field's type or remove one — still go through steps 2, 3, 5-7, but step 4 (the ADR) is only mandatory when altering or removing something, not for a purely additive field that can't break anything already written. Use judgment; when in doubt, write the ADR.
