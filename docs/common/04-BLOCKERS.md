@@ -11,7 +11,7 @@ A fast-scan list of anything currently stopping either agent. This is deliberate
 
 | ID | Raised by | Date | Blocking | Description | Status |
 |---|---|---|---|---|---|
-| _(none yet)_ | | | | | |
+| B-001 | Agent B | 2026-07-29 | Phase 1c (Dodo Payments integration) | No real Dodo Payments test-mode account exists yet. `docs/02-DODO-INTEGRATION.md` and `docs/PROMPTS.md` Phase 1c both require a real account, a write API key (`DODO_API_KEY`) and a read-only key (`DODO_API_KEY_READONLY`) in a local, uncommitted `.env` (see `.env.example`), plus a one-time test-mode Product ("Agent Spend Credits") created in the dashboard. Per `CLAUDE.md` § "If you're blocked," this is not being mocked — Phase 1c code will not be written until this exists. Phase 1d (webcmd) is unaffected and proceeding in parallel. | ❌ Open |
 
 ## Resolved
 

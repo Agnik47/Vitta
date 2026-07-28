@@ -56,10 +56,10 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent B — status
 
-**Current phase:** none yet
-**Current task:** Phase 0 is now pushed — pull, verify `tsc --noEmit` locally, then start Phase 1c or 1d (either order).
-**Last commit:** —
-**Blocked on:** nothing, as of this update — was waiting on Phase 0, now unblocked
+**Current phase:** 1d (webcmd) starting now; 1c (Dodo) blocked
+**Current task:** Pulled and verified Phase 0 (`tsc --noEmit` + `npm test` clean on this machine too). Starting Phase 1d (self-serve: global webcmd install + `webcmd doctor`). Phase 1c cannot start until a real Dodo test-mode account/API keys exist — see `04-BLOCKERS.md`.
+**Last commit:** — (about to push agent-b docs: `TASKS.md`, `ROADMAP.md`, `ERROR-HANDLING.md`, `WORKSPACE.md` update)
+**Blocked on:** Phase 1c only — needs a real Dodo test-mode account + `.env` (`DODO_API_KEY`, `DODO_API_KEY_READONLY`) from the user. Phase 1d is unblocked and starting now.
 
 ## Repo state
 
