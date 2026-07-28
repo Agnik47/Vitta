@@ -1,13 +1,19 @@
 // renderConsent(mandate) -> human sentence. See docs/04-POLICY-ENGINE-SPEC.md § renderConsent().
 //
-// Deviates from that section's plain `.join(', ')` code sketch in two ways, both because
-// docs/05-DEMO-SCRIPT.md Beat 2's exact expected output — "Blinkit, Zepto or BigBasket" — needs
-// them, and docs/AGENTS.md § UI rules treats the demo script's terminal output as exact, not
-// illustrative. See docs/OUTCOME.md Phase 1a for the full note:
+// Deviates from that section's plain `.join(', ')` code sketch in three ways, all because
+// docs/05-DEMO-SCRIPT.md Beat 2's exact expected output needs them, and docs/AGENTS.md § UI rules
+// treats the demo script's terminal output as exact, not illustrative. See docs/OUTCOME.md Phase
+// 1a and 1f for the full notes:
 //   1. A grammatical "a, b or c" join, not a flat comma-separated list.
 //   2. A brand-name lookup for merchants whose display name isn't a simple capitalization of
 //      their webcmd site key (bigbasket -> BigBasket, not Bigbasket).
+//   3. (Found in Phase 1f, running this for real) the spec's own toLocaleTimeString() options
+//      produce "06:00 pm" on this Node/ICU version (77.1) — a leading zero and lowercase am/pm —
+//      not Beat 2's "6:00 PM". Switched hour: '2-digit' to 'numeric' (drops the leading zero) and
+//      uppercase the am/pm marker explicitly; en-IN's default AM/PM casing isn't something the
+//      Intl options alone can control.
 import type { Mandate } from './schema';
+import { formatInr } from './currency';
 
 const BRAND_NAMES: Record<string, string> = {
   blinkit: 'Blinkit',
@@ -18,8 +24,13 @@ const BRAND_NAMES: Record<string, string> = {
 
 export function renderConsent(m: Mandate): string {
   const merchants = joinWithOr(m.scope.merchants.map(brandName));
-  const time = new Date(m.scope.expires_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  return `${m.subject} may spend up to ₹${m.scope.cap_inr} at ${merchants}, in one transaction, before ${time} today.`;
+  const time = formatTime(new Date(m.scope.expires_at));
+  return `${m.subject} may spend up to ₹${formatInr(m.scope.cap_inr)} at ${merchants}, in one transaction, before ${time} today.`;
+}
+
+function formatTime(date: Date): string {
+  const raw = date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  return raw.replace(/\b(am|pm)\b/i, (marker) => marker.toUpperCase());
 }
 
 function brandName(site: string): string {

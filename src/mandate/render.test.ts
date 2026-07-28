@@ -44,3 +44,20 @@ test('an unlisted merchant falls back to a plain capitalized name', () => {
   const sentence = renderConsent(baseMandate({ merchants: ['someneworchid'] }));
   assert.match(sentence, /Someneworchid/);
 });
+
+test('formats a 6pm expiry as "6:00 PM" — no leading zero, uppercase — not "06:00 pm"', () => {
+  // Constructed in local time (matching how src/cli/gate.ts's parseExpiryTime() builds
+  // expires_at), so this is self-consistent regardless of which timezone the test runs in.
+  const localSixPm = new Date();
+  localSixPm.setHours(18, 0, 0, 0);
+  const sentence = renderConsent(baseMandate({ expires_at: localSixPm.toISOString() }));
+  assert.match(sentence, /before 6:00 PM today/);
+  assert.doesNotMatch(sentence, /06:00 pm/);
+});
+
+test('formats a morning expiry without a leading zero either (e.g. "9:05 AM", not "09:05 am")', () => {
+  const localMorning = new Date();
+  localMorning.setHours(9, 5, 0, 0);
+  const sentence = renderConsent(baseMandate({ expires_at: localMorning.toISOString() }));
+  assert.match(sentence, /before 9:05 AM today/);
+});

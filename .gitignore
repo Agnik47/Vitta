@@ -13,9 +13,18 @@ dist/
 # their own locally; the two only need to line up for the joint Phase 5 rehearsal, run on one machine.
 /mandates/
 /receipts/
-/manifest.json
 /events.jsonl
 /ledger.jsonl
+
+# manifest.json is deliberately NOT gitignored, unlike the runtime data above — see
+# docs/OUTCOME.md Phase 1f. It's a relatively stable cache of external reference data (webcmd's
+# real command list), not per-run demo state, and Agent A's machine has no webcmd install (that's
+# Agent B's territory by design per docs/common/05-PHASE-OWNERSHIP.md) — without committing this,
+# `gate scan` can never be tested against real data on Agent A's side at all.
+
+# Ed25519 keypairs (issuer + gate), auto-generated on first CLI use by src/cli/keys.ts.
+# Private keys must never be committed, full stop — and per-machine, same reasoning as above.
+/keys/
 
 # Editor/OS cruft
 .DS_Store

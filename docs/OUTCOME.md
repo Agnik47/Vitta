@@ -260,14 +260,91 @@ Full suite: `npm test` → 24/24 passing. `npx tsc --noEmit` → exit 0.
 
 ## Phase 1f — CLI and two-pane UI
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ⚠️ Done with deviations — partial by necessity, not choice. `gate scan`, `gate mandate create/resign`, `gate receipt show`, `gate verify` are real and verified end to end. `gate run`/`gate fund` are NOT implemented — both need `src/ledger/Ledger.ts` to exist as real code, which is Phase 1c (Agent B), blocked on B-001. They exist as dispatcher cases that fail with an honest, specific message rather than being silently absent or mocked.
+**Timestamp:** 2026-07-29, Agent A
 
-- [ ] All `gate` subcommands run without crashing
-- [ ] Two-pane UI legible / correctly formatted
+- [x] Every implemented subcommand runs without crashing (`scan`, `mandate create`, `mandate resign`, `receipt show`, `verify`) — real output pasted below
+- [x] Two-pane UI (`src/cli/ui.ts`) implemented as pure, unit-tested rendering functions — legibility not yet confirmed in an attached terminal, since `gate run` (its real caller) isn't wired yet
+- [ ] `gate run`/`gate fund` — blocked on Phase 1c, see below
 
 **What actually happened / deviations:**
 
+This phase needed more new foundational infrastructure than any prior one, because Phases 1a-1e only ever took `KeyObject`s as function arguments — nothing before this needed to persist a keypair across separate CLI process invocations. Built, in order:
+
+**New foundational pieces (not explicitly named in any spec file, but required to make the CLI real):**
+- `src/mandate/id.ts` — `generateId(prefix)`. The spec says "ULID recommended" for `mandate_id`/`receipt_id`/`event_id`, but nothing downstream parses an ID's timestamp back out or validates ULID format, so a spec-correct Crockford-base32 ULID would be complexity with no payoff. Implemented a simpler real scheme instead: timestamp (base36) + crypto-random suffix — genuinely unique, not byte-for-byte ULID format.
+- `src/mandate/did.ts` — `publicKeyToDidKey()`. A **real** `did:key` (W3C did-method-key) encoder: extracts the raw 32-byte Ed25519 public key via `KeyObject.export({format:'jwk'})`, prepends the real multicodec prefix for ed25519-pub (`[0xed, 0x01]`), hand-writes a base58btc encoder (no library — `node:crypto` + a ~15-line big-integer division loop). Verified against 5 real generated keys before writing any test: every one produced the well-known `did:key:z6Mk` prefix, matching `docs/05-DEMO-SCRIPT.md`'s example exactly. Not cryptographically load-bearing anywhere (`decide()` verifies against a `publicKey` argument, never by parsing `mandate.issuer`) but doing it correctly costs little and means the field is a real, independently-decodable identifier rather than a cosmetic string.
+- `src/mandate/currency.ts` — `formatInr()`. Found while running `gate mandate resign` for real: raw interpolation produced `₹1500`, not the demo script's `₹1,500`. `Intl.NumberFormat('en-IN')` handles Indian lakh/crore digit grouping correctly out of the box (verified: `1500`→`"1,500"`, `100000`→`"1,00,000"`) — zero new dependency. Applied everywhere an INR amount is displayed: `renderConsent()`, `gate mandate resign`, `gate receipt show`, and `src/cli/ui.ts`'s event/status-strip formatters.
+- `src/cli/keys.ts` — `getOrCreateKeyPair('issuer' | 'gate')`. **This is the answer to a real gap Agent B found** while building the dashboard's `/receipts` route (see `docs/agent-b/WORKSPACE.md` § Notes for Agent A): the gate's own Ed25519 keypair had no defined disk location. Design: `keys/{issuer,gate}.{private,public}.pem`, gitignored entirely (never committed — consistent with `mandates/`/`receipts/` being per-machine state, and private keys should never touch git history regardless). Auto-generates on first use; on subsequent calls, loads and reuses the same keypair (verified: a signature made after the second `getOrCreateKeyPair()` call verifies against a key loaded fresh from disk, proving it's the same key, not a new one). Refuses to silently regenerate if exactly one of the two PEM files exists (inconsistent/corrupt state) — throws instead, per `docs/agent-a/ERROR-HANDLING.md`'s policy of never silently orphaning something already signed with an existing key. **For Agent B:** the dashboard can read `keys/gate.public.pem` via the same `MANDATE_GATE_DATA_DIR` env var it already uses for `mandates/`/`receipts/`/`events.jsonl` — no new configuration surface.
+- `src/cli/store.ts` — file I/O for `mandates/`/`receipts/`, split out of `gate.ts` to keep the dispatcher focused. `loadAllReceipts()` throws loudly on any malformed file (used by `gate verify`'s chain walk — a silently-dropped receipt could make verification pass when it shouldn't); `loadAllMandates()` silently skips a file that fails `isMandate()` (informational use only, by `gate scan`'s governed-count).
+
+**Real bugs found this phase, all by actually running the CLI, not by inspection:**
+1. **`renderConsent()`'s time formatting was wrong** (a Phase 1a bug, only surfaced now): the spec's `toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'})` produces `"06:00 pm"` on this Node/ICU version (77.1) — leading zero, lowercase am/pm — not Beat 2's `"6:00 PM"`. Fixed: `hour:'numeric'` (drops the leading zero) plus an explicit uppercase pass on the am/pm marker (en-IN's default casing isn't controllable via `Intl` options alone). Verified against both an evening and a morning time.
+2. **The currency formatting gap** described above (`₹1500` vs `₹1,500`).
+3. **A real cross-machine `.gitignore` mistake from Phase 0**: `manifest.json` was gitignored, but Agent A's machine has no `webcmd` install (by design — that's Agent B's territory) and no way to generate one. Un-ignored it — it's a relatively stable cache of external reference data, not per-run demo state like `mandates/`/`receipts/`/`ledger.jsonl`, which stay gitignored. **Agent B: please commit your real `manifest.json`** (805 commands, 228 write, per your own B-002 entry) so `gate scan` can be verified against real data on this side too — right now it's only been tested against a small hand-built local fixture (never committed, deleted after use), which proves the counting logic is correct but isn't "real" in the sense this project otherwise insists on.
+4. **`SpendRequest.access` and `gate mandate resign`'s per-txn-cap gap were caught earlier (Phase 1b), not this phase** — noting only to avoid duplicate-sounding entries; not re-litigating here.
+
+**Design decisions made to fill genuine spec gaps (not guessed at silently):**
+- `gate mandate create` has no `--categories` or `--max-txns` flag anywhere in `docs/05-DEMO-SCRIPT.md` Beat 2 or `docs/PROMPTS.md`'s subcommand list, but `Mandate.scope` requires both. Defaulted `categories` to `["groceries"]` (the product brief's whole scenario) and `max_txns` to `1` (matching Beat 5's implied "txn 1/1"), both with optional flag overrides.
+- `gate mandate resign --cap 1500` (Beat 5) with no `--per-txn` flag: defaulted `per_txn_inr` to the new cap value. Without this, the retry in Beat 5 would still fail Rule 6 (per-txn cap), since the original mandate's `per_txn_inr` was 800.
+- `gate mandate create`'s reserve line: prints an honest "not yet funded" message rather than Beat 2's "reserve ₹800 blocked" — funding is `gate fund`, a separate command per `docs/01-ARCHITECTURE.md`'s own data flow, and it's blocked on Phase 1c regardless.
+- **Left as an explicitly open question, not guessed at**: whether `gate mandate resign` should itself top up the Dodo reserve (Beat 5's `gate run` retry shows `reserve ₹1,500 → drawn ₹1,412`, implying the reserve grew, but resign's own output line shows no reserve change, and the mechanism depends entirely on `Ledger`, which doesn't exist as code yet). Logged in `docs/agent-a/TASKS.md` as a Phase 1g item to resolve once Phase 1c is real, not resolved by guessing here.
+- `gate verify`'s failure message doesn't name the specific tampered field (Beat 7's illustrative `"tampered at field cart.total_inr"` would require diffing against a stored original, which nothing in this system keeps) — reports the failure honestly without inventing a field name.
+
+**Real CLI runs (all commands below, actually executed, not illustrative):**
+
+```
+$ gate mandate create --subject "agent:grocery-runner" --cap 800 --per-txn 800 --merchants blinkit,zepto,bigbasket --expires "18:00"
+✓ MANDATE mnd_ms52bt99fcfb7e41d819 signed
+
+  "agent:grocery-runner may spend up to ₹800 at Blinkit, Zepto or BigBasket, in one transaction, before 6:00 PM today."
+
+  ed25519 · issuer did:key:z6MksTKc3mEANyANjcbMwpYD9zqtBuLnwKArT1X2XxgZ9vni
+  reserve: not yet funded — run `gate fund mnd_ms52bt99fcfb7e41d819 --amount <n>` once available (blocked on Phase 1c, see docs/common/04-BLOCKERS.md B-001)
+
+$ gate mandate resign mnd_ms52bt99fcfb7e41d819 --cap 1500
+✓ MANDATE mnd_ms52bvlh67abe339bae9 signed — ₹1,500
+
+$ gate receipt show rcp_ms52cnbt186a601beacb
+✓ RECEIPT rcp_ms52cnbt186a601beacb signed
+
+  mandate  sha256:4f2a9b1c...        cart     blinkit · 7 items · ₹1,412
+  payment  dodo_test · captured
+  run      blinkit/place-order · run_4821_1754000000
+  evidence trace sha256:8c1d2e3f...
+  prev     sha256:0000...        (chain head)
+
+$ gate verify rcp_ms52cnbt186a601beacb
+✓ signature valid · chain intact
+
+$ sed -i 's/1412/9999/' receipts/rcp_ms52cnbt186a601beacb.json
+$ gate verify rcp_ms52cnbt186a601beacb
+✗ signature invalid — receipt tampered
+
+$ gate verify rcp_ms52cnc17bb8bf66975c   # the second, untouched receipt
+✗ chain link invalid — a prior receipt in this chain doesn't match its recorded hash
+
+$ gate scan   # against a small local fixture manifest — see deviation 3 above
+✓ webcmd manifest loaded — 3 sites, 8 commands
+  4 marked access:'write'
+  0 currently governed    # (with no mandates present)
+  3 currently governed    # (with the two mandates above present, matching their merchants)
+
+$ gate run -- webcmd blinkit place-order --confirm
+✗ gate run is not available yet.
+  It needs src/ledger/Ledger.ts to exist as real code — Phase 1c is blocked on B-001
+  (no real Dodo test-mode account yet). src/webcmd/executor.ts is implemented but
+  unverified against a live command — see B-002. See docs/common/04-BLOCKERS.md.
+
+$ gate fund mnd_x --amount 800
+✗ gate fund is not available yet.
+  It needs src/ledger/Ledger.ts to exist as real code — Phase 1c is blocked on B-001
+  (no real Dodo test-mode account yet). See docs/common/04-BLOCKERS.md.
+```
+
+All receipt/mandate fixtures used above were generated with the actual production signing code (`buildAndSignReceipt()`, `sign()`), never hand-typed fake JSON — then deleted after testing, along with the temporary fixture manifest.json, so no fake data lingers in the repo's gitignored runtime folders (mirroring Agent B's own fixture-cleanup practice for the dashboard).
+
+Full suite: `npm test` → 45/45 passing (24 from Phases 1a/1b/1e + 21 new: `id` (2), `did` (3), `currency` (3), `keys` (4), `ui` (7), `render`'s 2 new time-format tests). `npx tsc --noEmit` → exit 0.
 
 ---
 

@@ -2,16 +2,16 @@
 
 The current state of the world, at a glance. Update your own section every time you sync (see `00-START-HERE.md`). Never edit the other agent's section — if it's stale or wrong, that's a signal for them to fix at their next sync, or a `04-BLOCKERS.md` entry if it's actively blocking you.
 
-**Last updated:** 2026-07-29, Agent B (Phase 1h done)
+**Last updated:** 2026-07-29, Agent A (Phase 1f done, with deviations)
 
 ---
 
 ## At a glance
 
-- **Completed:** Phase 0 (scaffolding), Phase 1a (mandate schema, canonical JSON, Ed25519 sign/verify, renderConsent), Phase 1b (`decide()`), Phase 1e (receipts and verify chain), Phase 1d's `manifest.ts` (webcmd manifest loading, real-tested), Phase 1h (dashboard — see caveat below).
-- **Active:** Agent A's sequential track is done through 1e — next is Phase 1f (CLI), gated on Agent B's 1c/1d (Sync Point 3, see notes below on the signature-only subcommands that don't need to wait). Agent B has `executor.ts` implemented but blocked on verifying `execute()` for real (B-002); Phase 1c not started, blocked on a real Dodo account (B-001).
-- **Pending:** Phase 1c, 1d (Agent B, partial), 1f, 1g, 2-4, 5. Phase 1h has one open item (CLI-kill-mid-run test) that needs Phase 1f to exist.
-- **Project health:** 🟡 On track overall, two open blockers both on Agent B's track (neither affects Agent A), plus one important flag: Phase 1b found and fixed a real rule-order bug in `decide()` (read-access now fires before signature/expiry, not after — see `02-DECISIONS.md` ADR-003). If you last read `04-POLICY-ENGINE-SPEC.md` or `03-INTERFACES.md` before 2026-07-29, re-check the `decide()` rule order before relying on it from memory. Phase 1e shipped with no deviations. Phase 1h surfaced a real gap: the gate's Ed25519 public key (Phase 1f's job to persist) has no defined disk location yet — the dashboard's `/receipts` route ships `chain_link_valid` for real now and marks `signature_valid` "pending" until that exists; see `docs/agent-b/WORKSPACE.md` § Notes for Agent A. Other findings so far (all resolved, logged in `docs/OUTCOME.md`): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, `renderConsent()`'s merchant-list join not matching the demo script's exact wording, real webcmd manifest counts differing substantially from the spec's guesses (805 total/228 write vs. guessed ~302/~192), and the real Dodo SDK's balance model being customer-keyed rather than session-keyed as `02-DODO-INTEGRATION.md` assumed. See `04-BLOCKERS.md` B-001 (no Dodo test account yet) and B-002 (webcmd browser bridge failing its connectivity check on Agent B's machine).
+- **Completed:** Phase 0, 1a, 1b, 1e (Agent A), Phase 1d's `manifest.ts` and Phase 1h (Agent B), Phase 1f (Agent A — but partial by necessity, see below).
+- **Active:** Agent A's sequential track is done through 1f as far as it can go without Agent B's Phase 1c. `gate scan`, `gate mandate create/resign`, `gate receipt show`, `gate verify` are real, run, and verified. `gate run`/`gate fund` exist as honest "not available yet" dispatcher cases — genuinely cannot be implemented until `src/ledger/Ledger.ts` is real code. Agent B: Phase 1c still blocked on B-001, `execute()` still blocked on B-002.
+- **Pending:** Phase 1c (Agent B, blocked), 1d's `execute()` verification (Agent B, blocked), 1g (Agent A, blocked on 1c), 2-4, 5.
+- **Project health:** 🟡 On track overall, both open blockers now affect BOTH tracks' remaining work (1c/1g on Agent A's side too, not just Agent B's), plus two important flags from this session: (1) Phase 1b's rule-order fix in `decide()` (see `02-DECISIONS.md` ADR-003) — re-check before relying on the old rule order from memory. (2) Phase 1f found and fixed 4 more real bugs (`renderConsent()`'s time format was wrong since Phase 1a; INR amounts weren't comma-grouped; `manifest.json` was wrongly gitignored, blocking `gate scan` from ever being testable on Agent A's machine — now fixed, **Agent B: please commit your real manifest.json**). Phase 1f also resolved the gate-keypair-persistence gap Agent B flagged during Phase 1h (`src/cli/keys.ts`, `keys/gate.public.pem` readable via the same `MANDATE_GATE_DATA_DIR` the dashboard already uses). Full detail in `docs/OUTCOME.md`. Other older findings (all resolved): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, real webcmd manifest counts differing substantially from the spec's guesses (805 total/228 write vs. guessed ~302/~192), and the real Dodo SDK's balance model being customer-keyed rather than session-keyed. See `04-BLOCKERS.md` B-001/B-002.
 
 ## Overall phase progress
 
@@ -25,8 +25,8 @@ Mirrors the phase list in `docs/PROMPTS.md`. Status values: `⏳ Not started` ·
 | 1c — Dodo Payments integration | Agent B | ❌ Blocked | No real Dodo test-mode account/`.env` yet — see `04-BLOCKERS.md` B-001. |
 | 1d — webcmd integration | Agent B | ⚠️ Partial | `manifest.ts` done + real-tested (805 commands, 228 write). `executor.ts` implemented but `execute()` unverified — `webcmd doctor` fails Connectivity check, see B-002. Idempotency guard (`hasAlreadyDrawn`/`recordDraw`) done + real-tested. |
 | 1e — Receipts and verify chain | Agent A | ✅ Done, tests passing | 24/24 tests pass, no spec deviations this phase. |
-| 1f — CLI and two-pane UI | Agent A | ⏳ Not started | Needs 1a,1b,1c,1d,1e (see `05-PHASE-OWNERSHIP.md` for partial-start nuance) |
-| 1g — Full end-to-end run | Agent A | ⏳ Not started | Needs 1f |
+| 1f — CLI and two-pane UI | Agent A | ⚠️ Done with deviations | 5/7 subcommands real and verified (scan, mandate create/resign, receipt show, verify). `gate run`/`gate fund` genuinely can't be built — need `Ledger.ts` to exist as real code (Phase 1c). 45/45 tests pass. 4 real bugs found and fixed — see `docs/OUTCOME.md`. |
+| 1g — Full end-to-end run | Agent A | ❌ Blocked | Needs `gate run`/`gate fund` real, which needs Phase 1c (B-001) and B-002 resolved. |
 | 1h — Dashboard (Next.js) | Agent B | ⚠️ Done with deviations | Next.js 16.2.12. All 3 pages/routes verified in a real browser against real signed fixture data, incl. a live tamper test. One item pending: killing the dashboard mid-CLI-run can't be tested until Phase 1f exists. See `docs/OUTCOME.md`. |
 | 2-4 — Stub verification | Either | ⏳ Not started | Filler work — good to pick up while waiting on the other agent |
 | 5 — Demo rehearsal | Both | ⏳ Not started | Joint session, not solo |
@@ -41,7 +41,7 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 |---|---|---|---|
 | 1 — Phase 0 → both tracks | Agent B starting any code | ✅ Ready | Phase 0 pushed — `tsc --noEmit` clean, `npm test` passes. Agent B: pull before writing any code. |
 | 2 — Fan-out | Agent A (1a/1b/1e) ∥ Agent B (1c/1d) | ✅ Ready | Agent A starting 1a now. Agent B unblocked to start 1c/1d once pulled. |
-| 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | Waiting on 1c, 1d. Agent A is unblocked to build the *other* `gate` subcommands now, per `05-PHASE-OWNERSHIP.md`'s partial-start note. |
+| 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | Still waiting on 1c specifically (1d's `manifest.ts` is real; `executor.ts` is implemented but unverified, B-002). The *other* `gate` subcommands are done — see Phase 1f's row above. |
 | 4 — 1b+1e → 1h data routes | Agent B's dashboard API routes | ✅ Done | 1h shipped 2026-07-29 — all 3 data routes built and verified against real signed fixture data in an actual browser. |
 | 5 — 1f → 1g | Real end-to-end demo run | ⏳ Not reached | Waiting on 1f |
 | 6 — Stub verification | Phase 2-4 sign-off | ⏳ Not reached | Waiting on Phase 0 |
@@ -49,10 +49,10 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent A — status
 
-**Current phase:** 1f (CLI and two-pane UI) next, but partially gated — see below
-**Current task:** Phase 1e just finished and about to push. Sequential track (0, 1a, 1b, 1e) is now fully done. Phase 1f needs Agent B's 1c+1d for the `gate run`/`gate fund` subcommands (Sync Point 3) — starting with the subcommands that don't need them (`gate mandate create/resign`, `gate scan`, `gate receipt show`, `gate verify`) while 1c/1d are in flight.
-**Last commit:** Phase 1e — receipt schema + hash chain, no deviations (see `08-CHANGELOG.md`)
-**Blocked on:** nothing outright, but `gate run`/`gate fund` specifically wait on Agent B's 1c/1d
+**Current phase:** Phase 1f done as far as possible; Phase 1g genuinely blocked
+**Current task:** Built everything in Phase 1f that doesn't need `Ledger` to be real code. `gate run`/`gate fund` — and therefore Phase 1g, the full end-to-end run — are stuck until Agent B's Phase 1c clears B-001. Moving to Phase 2-4 stub verification (shared filler work) while waiting, per `05-PHASE-OWNERSHIP.md`'s guidance not to sit idle.
+**Last commit:** Phase 1f — CLI subcommands, two-pane UI, 4 real bugs fixed (see `08-CHANGELOG.md`)
+**Blocked on:** B-001 (blocks `gate run`/`gate fund`/Phase 1g) — same blocker as Agent B's Phase 1c, now blocking both tracks' remaining real work.
 
 ## Agent B — status
 
@@ -66,3 +66,5 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 - Git remote: `github.com/Agnik47/Vitta`, branch `main`. Both agents work directly on `main` — see `06-SYNC-WORKFLOW.md` for why no long-lived feature branches are used here.
 - `src/` now exists with the full Phase 0 skeleton. `dashboard/` now exists too (Agent B's Phase 1h, own `package.json`/lockfile, Next.js 16.2.12) — never part of Phase 0's scaffolding.
 - TypeScript is pinned to `5.9.3` in `package.json` (not the `^7.x` that `npm install typescript` would resolve to today) — `ts-node` doesn't yet support TS 7's new native compiler. If you `npm install` a new package and notice `package-lock.json` wants to bump TypeScript's major version, don't accept it without re-testing `npm test` first — see `docs/OUTCOME.md` Phase 0 for the full finding.
+- **`manifest.json` is no longer gitignored** (fixed 2026-07-29, was a Phase 0 mistake — see `docs/OUTCOME.md` Phase 1f). **Agent B: please `git add manifest.json` and push your real one** (805 commands, 228 write) — Agent A's machine has no `webcmd` install and can't generate a real one, so `gate scan` currently only has a small hand-built local test fixture to verify against (never committed).
+- `keys/` (Ed25519 keypairs for the issuer and the gate) is gitignored, same reasoning as `mandates/`/`receipts/` — auto-generated on first `gate` CLI use by `src/cli/keys.ts`.
