@@ -6,9 +6,19 @@ Scope discipline: everything below is work **assigned to Agent B**. Agent A's ph
 
 ---
 
-## Phase 1c — Dodo Payments integration (test mode) — **REASSIGNED TO AGENT A, 2026-07-29 (ADR-005)**
+## Phase 1c — Dodo Payments integration (test mode) — **implemented 2026-07-29 (later same day), per direct user instruction — ADR-006**
 
-No longer this track's phase. Left here only as history — do not pick up `src/ledger/` work even though B-001 is now clear on this machine too; check `01-PROJECT-STATUS.md` before assuming otherwise. See `docs/common/02-DECISIONS.md` ADR-005 for the reassignment reasoning.
+Reassigned to Agent A earlier the same day (ADR-005), then the user directly instructed this session to implement it after confirming Agent A hadn't started — see ADR-006 for the full timing.
+
+- [x] Confirm a real Dodo test-mode account exists with `DODO_API_KEY` / `DODO_API_KEY_READONLY` — done, the user shared real credentials (Agent A's Phase 1c provisioning), populated in `.env`
+- [x] `src/ledger/Ledger.ts` — was still a comment stub, written for real to match `docs/01-ARCHITECTURE.md` exactly
+- [x] `src/ledger/DodoCreditLedger.ts implements Ledger`
+  - [x] `fund()` — real Checkout Session, `credit_entitlements` override matching `amountInrPaise`, tagged `metadata.mandate_id` — creates the session for real; cannot complete payment itself (prohibited agent action)
+  - [x] `balance()` — real `creditEntitlements.balances.retrieve()`, confirmed against the real account
+  - [x] `draw()` — real `creditEntitlements.balances.createLedgerEntry()` with `idempotency_key: runId` — **confirmed for real that a repeat call with the same runId does not double-deduct**
+  - [x] `release()` — no-op, confirmed doesn't throw
+- [x] Integration script (real network) — created session, read real balance, drew ₹100 with a fake runId, re-drew with the same runId (idempotency check), read balance again, restored it afterward — full output in `docs/OUTCOME.md`
+- [x] Update `docs/common/03-INTERFACES.md` — done, `Ledger`/`DodoCreditLedger` row now 🔒 frozen, shipped
 
 ## Phase 1d — webcmd integration
 

@@ -262,6 +262,64 @@ Real `credit.added` body (live, abridged to the fields that matter):
 
 ---
 
+### Phase 1c follow-up — `DodoCreditLedger.ts` implemented and real-tested
+
+**Status:** ✅ Done — implemented and verified against the real account, including a real answer to the previously-open idempotency question
+**Timestamp:** 2026-07-29 (later same day), Agent B, on direct user instruction — see `docs/common/02-DECISIONS.md` ADR-006 for the full reassignment-timing reasoning
+
+- [x] `src/ledger/Ledger.ts` — was still an unimplemented comment stub despite `03-INTERFACES.md` calling it "frozen"; written for real, matches `docs/01-ARCHITECTURE.md`'s interface exactly
+- [x] `src/ledger/DodoCreditLedger.ts implements Ledger` — `fund()`, `balance()`, `draw()`, `release()` all real
+- [x] Integration script run against the real API — output below
+- [x] `draw()` idempotency — **CONFIRMED for real**, resolving the open question both `docs/02-DODO-INTEGRATION.md` and Agent B's Phase 1d notes had left unanswered: calling `draw()` twice with the identical `runId` does **not** double-deduct.
+
+**What actually happened / deviations:**
+
+Before writing anything, confirmed `src/ledger/DodoCreditLedger.ts` was still just a comment stub on this machine (Agent A hadn't started it) — checked specifically to avoid the exact parallel-implementation conflict `docs/common/02-DECISIONS.md` ADR-005 flagged as a rejected alternative. See ADR-006 for the full reasoning behind proceeding.
+
+Implemented against the real API shapes both agents had already found (not re-deriving anything): `client.creditEntitlements.balances.retrieve()`/`.createLedgerEntry()`, the checkout-session→payment→customer resolution chain, `environment: 'test_mode'` passed explicitly on every client construction (the live-mode-default bug found while building the dashboard, `docs/OUTCOME.md` Phase 1h addendum — this alone would have made every real call in this file fail with a misleading 401 if missed here too).
+
+**Real design decisions, none specified in any spec doc — see ADR-006 for full alternatives-considered writeups:**
+1. Env vars (`DODO_CREDIT_ENTITLEMENT_ID`, `DODO_TOPUP_PRODUCT_ID`) read lazily via a `requireEnv()` helper at each call site, not as module-level consts — caught a real bug in this session's own first integration-test attempt where import ordering silently captured `undefined` before the test script's `.env` loader had run, producing a confusing Dodo `422` ("missing field `credit_entitlement_id`") instead of a clear local error, even though the field genuinely was being sent — it was just `undefined`.
+2. `fund()` passes the same demo customer email every call rather than a hardcoded `customer_id`, relying on Dodo's documented "email finds an existing customer" behavior to reuse Agent A's already-provisioned real customer.
+3. `fund()` creates the checkout session and returns immediately — it cannot and does not attempt to complete a real payment, since entering payment credentials is a prohibited agent action. A human completing checkout out of band is the same real constraint Agent A's own provisioning ran into, not a shortcut specific to this implementation.
+4. `credit_entitlements[].credits_amount` is overridden per-session to grant exactly `amountInrPaise` credits, independent of the top-up product's fixed ₹42 sticker price — same decoupling Agent A already established.
+5. Added `DODO_TOPUP_PRODUCT_ID=pdt_0NkBmcZQJLSicxFMHlNHX` to `.env`/`.env.example` — a new env var, not in the original spec's list, needed because `fund()` must reference the real top-up product Agent A created.
+
+**Real integration test run** (`_ledger-integration-test.ts`, root-level, deleted after use — same discipline as every prior real-verification pass this build). `fund()` can only create a session, not complete payment (see above), so this test exercises `balance()`/`draw()`/`release()` against the already-funded real demo customer (`cus_0NkBwH3N9Ld41wgNzK6ty`, 100000 paise from Agent A's Phase 1c purchase) and restores its balance afterward so no lasting change is left on the shared account:
+
+```
+=== fund(): create a real checkout session for ₹800 ===
+fund() returned: {
+  "reserveRef": "cks_0NkCFQTyse1Xf5MB20LEP"
+}
+(session created for real; a human would complete payment via its checkout_url — not done here, see comment above)
+
+=== balance(): read the ALREADY-FUNDED real demo customer ===
+balance() returned (paise): 100000
+
+=== draw(): deduct ₹100 (10000 paise) with a fake runId ===
+draw() completed, runId = run_integration_test_1785282052432
+
+=== balance(): read again, should be exactly 10000 lower ===
+balance() returned (paise): 90000
+difference: 10000 (expect 10000)
+
+=== draw() idempotency check: same runId again, should not double-deduct ===
+Second draw() with same runId did not throw. Balance after: 90000 (expect unchanged from 90000 )
+
+=== release(): no-op, confirm it does not throw ===
+release() completed (no-op, as expected)
+
+=== Restore: credit back whatever was actually deducted, to leave the real demo account unchanged ===
+Credited back 10000 paise. Balance restored to: 100000 (expect 100000 )
+```
+
+`npx tsc --noEmit` → exit 0 on the whole project throughout (root + `dashboard/`). No unit tests added — this is a live-API integration file, matching the same manual-verification pattern used for every other real Dodo/webcmd integration point in this build, per `docs/PROMPTS.md` Phase 1c's own instruction to write an integration script, not a unit-test suite, for this phase.
+
+**What this does and doesn't unlock:** `gate run`/`gate fund` can now be wired to real calls in `src/cli/gate.ts` (still Agent A's file, not touched here). Phase 1g (the full demo script run) still additionally needs B-002 (webcmd browser connectivity) resolved on Agent B's machine before a complete Beat 1-8 run is possible there — this phase's own scope (the ledger) is fully done and real either way.
+
+---
+
 ## Phase 1d — webcmd integration
 
 **Status:** ⚠️ Done with deviation — `manifest.ts` fully done and verified for real; `executor.ts`'s `execute()` implemented per spec but UNVERIFIED against a live command (browser connectivity blocker, see `docs/common/04-BLOCKERS.md` B-002)
