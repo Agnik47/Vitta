@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "dodo-knowledge": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://knowledge.dodopayments.com/mcp"
+      ],
+      "env": {}
+    }
+  }
+}

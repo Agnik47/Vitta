@@ -176,3 +176,16 @@ Verified for real, not just "it compiles": generated cryptographically valid fix
 **Interface changes:** New row in `03-INTERFACES.md` for key persistence (`keys/*.pem`, `getOrCreateKeyPair()`). `SpendRequest`/`decide()` unchanged this phase (already covered in the Phase 1b entry).
 **Blockers introduced/resolved:** None introduced. B-001 now also blocks Phase 1g on Agent A's side, not just Phase 1c on Agent B's — noted in `01-PROJECT-STATUS.md`, not a new blocker ID since it's the same root cause.
 **Blockers introduced/resolved:** none introduced. B-001 and B-002 remain open but no longer block any further Phase 1h work — only Phase 1f does now.
+
+---
+
+## [2026-07-29] — Agent A — Added the Dodo Knowledge MCP server (project-scoped, shared)
+
+**What changed:** Registered Dodo Payments' own `dodo-knowledge` MCP server (semantic docs search, no API key needed) at project scope: `claude mcp add dodo-knowledge --scope project -- npx -y mcp-remote@latest https://knowledge.dodopayments.com/mcp`. This writes to `.mcp.json` at the repo root, which is now committed — so it's available to both agents automatically, not just this machine.
+**Why:** The user pointed both agents at this tool. It's genuinely useful research for `docs/02-DODO-INTEGRATION.md`'s open questions (idempotency key support, exact API shapes) without needing a real Dodo account — unblocked work either agent can do right now regardless of B-001.
+**Files touched:** `.mcp.json` (new), `docs/common/01-PROJECT-STATUS.md` § Repo state.
+**Testing status:** Added successfully (`claude mcp add` confirmed the write), but **not yet usable in this session** — Claude Code requires a session restart to connect and approve a newly-added project-scoped MCP server; this is normal behavior, not a bug. Will actually query it and update `docs/02-DODO-INTEGRATION.md`'s open questions next session (or later this session if a restart happens to occur).
+**Known issues:** None. Worth knowing: there's a *second*, separate Dodo MCP server (`dodopayments_api`, Code Mode — actually executes API calls against the SDK in a sandbox) that needs a real `DODO_PAYMENTS_API_KEY`. Not added yet since neither agent has real credentials (same root cause as B-001). Once B-001 clears, whoever has the real key should add it — the command is in `01-PROJECT-STATUS.md` § Repo state. This could meaningfully de-risk Phase 1c once it's addable.
+**Other agent needs to:** Nothing required, but restart your session at some point to pick up `.mcp.json` and get `dodo-knowledge` connected — useful for cross-checking the real API shapes you've already found empirically (the customer-keyed balance model, etc.) against Dodo's own documentation.
+**Interface changes:** none.
+**Blockers introduced/resolved:** none.
