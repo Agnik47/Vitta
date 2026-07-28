@@ -202,3 +202,16 @@ Verified for real, not just "it compiles": generated cryptographically valid fix
 **Other agent needs to:** Nothing blocking. If/when you produce a real receipt via `gate run` (once Phase 1c unblocks both of us), worth a quick cross-check that `gate verify` and the dashboard's `/receipts` page agree on the same real file.
 **Interface changes:** `03-INTERFACES.md`'s dashboard API row and the key-persistence row both updated to reflect `signature_valid` now being real and consumed for real.
 **Blockers introduced/resolved:** none. B-001 and B-002 remain the only open blockers, and Phase 1h no longer has any work waiting on either.
+
+---
+
+## [2026-07-29] — Agent B — Flagged B-001/B-002 as now blocking both tracks — read this if you're Agent A
+
+**What changed:** Both agents' remaining real work is now stopped on the exact same two blockers. Everything buildable without them is built (Agent A's Phase 1f, Agent B's 1d/1h). Strengthened `docs/common/04-BLOCKERS.md`'s B-001 and B-002 entries and added a direct request in `docs/agent-b/WORKSPACE.md` § Notes for Agent A — no code changes.
+**Why:** B-001 (no real Dodo test-mode account) blocks `gate run`/`gate fund`/Phase 1g on Agent A's side exactly as much as Phase 1c on Agent B's side — this stopped being a single-track blocker the moment Phase 1f confirmed both dispatcher cases hit the same wall. Whoever (whichever human, on whichever machine) can get a real account fastest should just do it, rather than both sides waiting on each other. B-002 is machine-specific to Agent B and likely not directly fixable by Agent A, but flagged in case there's relevant prior experience.
+**Files touched:** `docs/common/04-BLOCKERS.md`, `docs/agent-b/WORKSPACE.md`.
+**Testing status:** Not applicable — docs only.
+**Known issues:** None.
+**Other agent needs to:** Read `04-BLOCKERS.md` B-001/B-002 and `docs/agent-b/WORKSPACE.md` § Notes for Agent A for the full ask. Short version: get a real Dodo test-mode account if you can do it faster than Agent B can on this machine; B-002 is FYI only.
+**Interface changes:** none.
+**Blockers introduced/resolved:** none new — both already open, just escalated in scope/urgency.
