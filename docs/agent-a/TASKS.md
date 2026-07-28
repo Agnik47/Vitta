@@ -1,6 +1,6 @@
 # Agent A — Durable Task Checklist
 
-Checkbox-level tracking for Agent A's phases (0, 1a, 1b, 1e, 1f, 1g, plus shared 2-4/5), so progress survives a session restart without re-deriving it from `docs/PROMPTS.md` each time. `WORKSPACE.md` stays the narrative/current-task view; this is the mechanical one. Check items off as they're actually done and verified — not when merely attempted.
+Checkbox-level tracking for Agent A's phases (0, 1a, 1b, 1e, 1c, 1f, 1g, plus shared 2-4/5 — **1c added 2026-07-29, reassigned from Agent B per ADR-005**), so progress survives a session restart without re-deriving it from `docs/PROMPTS.md` each time. `WORKSPACE.md` stays the narrative/current-task view; this is the mechanical one. Check items off as they're actually done and verified — not when merely attempted.
 
 ## Phase 0 — Scaffolding ✅ Done
 
@@ -31,6 +31,22 @@ Checkbox-level tracking for Agent A's phases (0, 1a, 1b, 1e, 1f, 1g, plus shared
 - [x] `sha256Hex()`, `verifyChain()` (chain-walking, own design — spec described in prose only)
 - [x] Two-receipt chain verifies cleanly
 - [x] Tamper on receipt N breaks receipt N+1's chain link (not just N's own signature)
+
+## Phase 1c — Dodo Payments integration ❌ Blocked on B-001 (reassigned from Agent B 2026-07-29, ADR-005)
+
+**Prerequisite — do not write code until these exist in a local, uncommitted `.env`:**
+- [ ] Real Dodo Payments account, Test Mode — **confirmed real** (user shared a Promotions-tab screenshot), but this alone isn't the checklist
+- [ ] `DODO_API_KEY` (write key)
+- [ ] `DODO_API_KEY_READONLY` (read-only key)
+- [ ] A one-time test-mode Product ("Agent Spend Credits", INR) created in the dashboard
+- [ ] That Product's Credit Entitlement ID (`DODO_CREDIT_ENTITLEMENT_ID`) — required per Agent B's real-SDK research, not in the original spec's env list
+- [ ] (Optional) `DODO_WEBHOOK_SECRET`, Dodo CLI installed (`dodo wh listen`/`dodo wh trigger`) for webhook testing
+
+**Once unblocked:**
+- [ ] `src/ledger/Ledger.ts` — the `Ledger` interface, exactly as specified in `docs/01-ARCHITECTURE.md`
+- [ ] `src/ledger/DodoCreditLedger.ts` — `fund()`, `balance()`, `draw()`, `release()`, built on Agent B's real-SDK findings (`docs/OUTCOME.md` open-questions table): `creditEntitlements.balances.retrieve(customerID, {credit_entitlement_id})` for balance, `creditEntitlements.balances.createLedgerEntry(...)` for draw (not `.deduct()`, which doesn't exist), session→payment→customer resolution chain for turning a `reserveRef` into a customer id
+- [ ] `draw()`'s idempotency: confirm the real `createLedgerEntry()` call accepts `idempotency_key` (Agent B's type-level finding says yes) — still call `hasAlreadyDrawn()`/`recordDraw()` from `src/webcmd/executor.ts` regardless, per the spec's "belt and suspenders" instruction and ADR-004
+- [ ] Integration script (not a unit test): create session, fund ₹800, read balance, draw ₹100 with a fake runId, read balance again — paste real output into `docs/OUTCOME.md`, per `CLAUDE.md` rule 6
 
 ## Phase 1f — CLI and two-pane UI ⚠️ Done with deviations (partial by necessity — see below)
 

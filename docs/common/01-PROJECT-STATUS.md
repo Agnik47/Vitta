@@ -9,7 +9,7 @@ The current state of the world, at a glance. Update your own section every time 
 ## At a glance
 
 - **Completed:** Phase 0, 1a, 1b, 1e (Agent A), Phase 1d's `manifest.ts` and Phase 1h (Agent B), Phase 1f (Agent A — but partial by necessity, see below).
-- **Active:** Agent A's sequential track is done through 1f as far as it can go without Agent B's Phase 1c. `gate scan`, `gate mandate create/resign`, `gate receipt show`, `gate verify` are real, run, and verified. `gate run`/`gate fund` exist as honest "not available yet" dispatcher cases — genuinely cannot be implemented until `src/ledger/Ledger.ts` is real code. Agent B: Phase 1c still blocked on B-001, `execute()` still blocked on B-002.
+- **Active:** **Phase 1c reassigned from Agent B to Agent A, 2026-07-29 (`02-DECISIONS.md` ADR-005)** — per direct user instruction. Agent A now owns `src/ledger/` and is waiting on the user to provide a real Dodo test-mode account before writing any code. `gate scan`, `gate mandate create/resign`, `gate receipt show`, `gate verify` are already real, run, and verified; `gate run`/`gate fund` will become buildable once 1c lands. Agent B keeps 1d's `execute()` verification (still blocked on B-002, machine-specific) and Phase 1h maintenance.
 - **Pending:** Phase 1c (Agent B, blocked), 1d's `execute()` verification (Agent B, blocked), 1g (Agent A, blocked on 1c), 2-4, 5.
 - **Project health:** 🟡 On track overall, both open blockers now affect BOTH tracks' remaining work (1c/1g on Agent A's side too, not just Agent B's), plus important flags from this session: (1) Phase 1b's rule-order fix in `decide()` (see `02-DECISIONS.md` ADR-003) — re-check before relying on the old rule order from memory. (2) Phase 1f found and fixed 4 more real bugs (`renderConsent()`'s time format was wrong since Phase 1a; INR amounts weren't comma-grouped; `manifest.json` was wrongly gitignored — **now fixed and committed for real by Agent B**, 805 commands/228 write, `gate scan` can now be tested against real data on either machine). Phase 1f also resolved the gate-keypair-persistence gap Agent B flagged during Phase 1h (`src/cli/keys.ts`) — **Agent B has now wired this up on the dashboard side too**: `/api/receipts`' `signature_valid` is real, verified against a bootstrapped real gate keypair including a live tamper test that correctly distinguished a receipt's own signature failure from its chain-link failure. Full detail in `docs/OUTCOME.md`. Other older findings (all resolved): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, real webcmd manifest counts differing substantially from the spec's guesses (805 total/228 write vs. guessed ~302/~192), and the real Dodo SDK's balance model being customer-keyed rather than session-keyed. See `04-BLOCKERS.md` B-001/B-002 — both still open, blocking `gate run`/`gate fund`/Phase 1g on Agent A's side and Phase 1c/`execute()` on Agent B's side.
 
@@ -22,7 +22,7 @@ Mirrors the phase list in `docs/PROMPTS.md`. Status values: `⏳ Not started` ·
 | 0 — Scaffolding | Agent A | ✅ Done, tests passing | `tsc --noEmit` + `npm test` both pass. See `docs/OUTCOME.md` for 2 deviations (GateEvent.ts written for real, DenyCode gained ALREADY_EXECUTED) and 2 toolchain findings (TS pinned to 5.9.3, test script drops the path arg). |
 | 1a — Mandate schema, canonical JSON, Ed25519 signing | Agent A | ✅ Done, tests passing | 9/9 real tests pass (5 required + 4 for a `renderConsent()` deviation, see `docs/OUTCOME.md`). |
 | 1b — Policy Engine `decide()` | Agent A | ✅ Done, tests passing | 20/20 tests pass. Real rule-order bug found and fixed — see `02-DECISIONS.md` ADR-003. |
-| 1c — Dodo Payments integration | Agent B | ❌ Blocked | No real Dodo test-mode account/`.env` yet — see `04-BLOCKERS.md` B-001. |
+| 1c — Dodo Payments integration | **Agent A** (reassigned 2026-07-29, ADR-005) | ❌ Blocked | No real Dodo test-mode account/`.env` yet — see `04-BLOCKERS.md` B-001. Builds on Agent B's real-SDK research (see `docs/OUTCOME.md` open-questions table), not starting from the spec's guesses. |
 | 1d — webcmd integration | Agent B | ⚠️ Partial | `manifest.ts` done + real-tested (805 commands, 228 write). `executor.ts` implemented but `execute()` unverified — `webcmd doctor` fails Connectivity check, see B-002. Idempotency guard (`hasAlreadyDrawn`/`recordDraw`) done + real-tested. |
 | 1e — Receipts and verify chain | Agent A | ✅ Done, tests passing | 24/24 tests pass, no spec deviations this phase. |
 | 1f — CLI and two-pane UI | Agent A | ⚠️ Done with deviations | 5/7 subcommands real and verified (scan, mandate create/resign, receipt show, verify). `gate run`/`gate fund` genuinely can't be built — need `Ledger.ts` to exist as real code (Phase 1c). 45/45 tests pass. 4 real bugs found and fixed — see `docs/OUTCOME.md`. |
@@ -41,7 +41,7 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 |---|---|---|---|
 | 1 — Phase 0 → both tracks | Agent B starting any code | ✅ Ready | Phase 0 pushed — `tsc --noEmit` clean, `npm test` passes. Agent B: pull before writing any code. |
 | 2 — Fan-out | Agent A (1a/1b/1e) ∥ Agent B (1c/1d) | ✅ Ready | Agent A starting 1a now. Agent B unblocked to start 1c/1d once pulled. |
-| 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | Still waiting on 1c specifically (1d's `manifest.ts` is real; `executor.ts` is implemented but unverified, B-002). The *other* `gate` subcommands are done — see Phase 1f's row above. |
+| 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | 1c is now Agent A's own work (ADR-005) — no cross-agent sync needed for that half anymore. Still waiting on Agent B's 1d `execute()` to be live-verified (B-002), and on B-001 for 1c itself. The *other* `gate` subcommands are done — see Phase 1f's row above. |
 | 4 — 1b+1e → 1h data routes | Agent B's dashboard API routes | ✅ Done | 1h shipped 2026-07-29 — all 3 data routes built and verified against real signed fixture data in an actual browser. |
 | 5 — 1f → 1g | Real end-to-end demo run | ⏳ Not reached | Waiting on 1f |
 | 6 — Stub verification | Phase 2-4 sign-off | ✅ Done | Confirmed 2026-07-29 — all 4 stubs already met the definition. |
@@ -49,10 +49,10 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent A — status
 
-**Current phase:** Phase 2-4 stub verification done; Phase 1g still genuinely blocked
-**Current task:** Pulled Agent B's manifest.json commit and dashboard signature_valid wiring. Phase 2-4 stub verification done (all 4 stubs already correct, nothing to fix). Still stuck on `gate run`/`gate fund`/Phase 1g until B-001 clears. Deciding what's next given both blockers are external — see `04-BLOCKERS.md`.
-**Last commit:** Phase 2-4 stub verification — all 4 files confirmed correct (see `08-CHANGELOG.md`)
-**Blocked on:** B-001 (blocks `gate run`/`gate fund`/Phase 1g) — same blocker as Agent B's Phase 1c, now blocking both tracks' remaining real work.
+**Current phase:** 1c (Dodo Payments integration) — reassigned here 2026-07-29, ADR-005
+**Current task:** Per direct user instruction, taking over Phase 1c from Agent B (see ADR-005 for the reasoning — B-002 would have kept blocking Agent B even after B-001 clears, while `src/ledger/` has zero webcmd dependency). Asked the user for the concrete Dodo test-mode account/keys needed. Not writing any `src/ledger/` code until they exist, per `CLAUDE.md` § "If you're blocked."
+**Last commit:** Phase 2-4 stub verification (previous task) — all 4 files confirmed correct (see `08-CHANGELOG.md`)
+**Blocked on:** B-001 (real Dodo test-mode account) — now the only thing blocking Agent A's own Phase 1c, not just Agent B's.
 
 ## Agent B — status
 

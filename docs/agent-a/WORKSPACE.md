@@ -8,6 +8,8 @@ See also, in this same folder: `TASKS.md` (durable checklist for 0/1a/1b/1e/1f/1
 
 You own the **pure-logic-and-integration chain**: Mandate → Policy Engine → Receipts → CLI/UI → the end-to-end acceptance run. This is the sequential backbone of Phase 1 — each of your phases imports from the one before it, which is why it's one continuous track rather than split further. See `docs/common/05-PHASE-OWNERSHIP.md` for the full rationale, and `docs/common/02-DECISIONS.md` ADR-002 for why this split beats a 50/50 one.
 
+**2026-07-29: you also now own Phase 1c (`src/ledger/`)**, reassigned from Agent B per direct user instruction — see ADR-005 for why (B-002 would keep blocking Agent B on webcmd execution even after B-001 clears; `src/ledger/` has zero webcmd dependency).
+
 You also default-own **Phase 0** (whole-repo scaffolding) — see that file's Sync Point 1 for the exception case.
 
 ## Phases you own
@@ -18,24 +20,25 @@ You also default-own **Phase 0** (whole-repo scaffolding) — see that file's Sy
 | 1a — Mandate schema, canonical JSON, Ed25519 signing | ✅ Done, tests passing | Phase 0 |
 | 1b — Policy Engine `decide()` | ✅ Done, tests passing | 1a |
 | 1e — Receipts and verify chain | ✅ Done, tests passing | 1a |
-| 1f — CLI and two-pane UI | ⚠️ Done with deviations — see below | 1a, 1b, 1e (done); `gate run`/`gate fund` still need Agent B's 1c |
-| 1g — Full end-to-end run | ❌ Blocked | 1f's remaining pieces, which need Agent B's Phase 1c (B-001) |
+| **1c — Dodo Payments integration** | ❌ Blocked on B-001 (real Dodo account) | Phase 0. **Reassigned here 2026-07-29, ADR-005.** |
+| 1f — CLI and two-pane UI | ⚠️ Done with deviations — see below | 1a, 1b, 1e (done), 1c (blocked — no cross-agent wait anymore, just your own sequencing); `gate run`/`gate fund` need 1c |
+| 1g — Full end-to-end run | ❌ Blocked | 1f's remaining pieces, which need 1c (B-001) and B-002 (Agent B's webcmd connectivity) |
 
-Plus: Phase 2-4 stub verification and Phase 5 rehearsal are shared with Agent B — see `docs/common/05-PHASE-OWNERSHIP.md`.
+Plus: Phase 2-4 stub verification (done) and Phase 5 rehearsal are shared with Agent B — see `docs/common/05-PHASE-OWNERSHIP.md`.
 
 ## Folders/files you own
 
-`src/mandate/`, `src/policy/`, `src/receipt/`, `src/cli/`, `src/events/` (frozen after Phase 0, see `docs/common/03-INTERFACES.md`), plus the repo-wide scaffolding from Phase 0 (`package.json`, `tsconfig.json`, `.env.example`, `src/phase2-4-stubs/*` stub contents).
+`src/mandate/`, `src/policy/`, `src/receipt/`, `src/cli/`, `src/events/` (frozen after Phase 0, see `docs/common/03-INTERFACES.md`), **`src/ledger/` (new, ADR-005)**, plus the repo-wide scaffolding from Phase 0 (`package.json`, `tsconfig.json`, `.env.example`, `src/phase2-4-stubs/*` stub contents).
 
-Never edit `src/ledger/`, `src/webcmd/`, or `dashboard/` without flagging it first per `docs/common/06-SYNC-WORKFLOW.md` — those are Agent B's.
+Never edit `src/webcmd/` or `dashboard/` without flagging it first per `docs/common/06-SYNC-WORKFLOW.md` — those stay Agent B's.
 
 ## Current task
 
-Phase 1f and Phase 2-4 stub verification are both done. Both remaining tracks (my `gate run`/`gate fund`/Phase 1g, Agent B's Phase 1c/`execute()`) are now stuck on the same two external blockers (B-001, B-002) that only the user can resolve — flagged clearly to the user. Deciding what unblocked work is left to harden while waiting.
+Phase 1c (Dodo Payments integration) reassigned to you 2026-07-29 per direct user instruction — see ADR-005. Waiting on a real Dodo test-mode account (`DODO_API_KEY`, `DODO_API_KEY_READONLY`, a Product + its Credit Entitlement ID) before writing any `src/ledger/` code, per `CLAUDE.md` § "If you're blocked." User confirmed a real test-mode account exists and shared a Promotions-tab screenshot showing a $1,000 fee-waiver promo — clarified this is NOT the same thing as spendable credit and doesn't complete the checklist; still need the actual API keys + Product + Credit Entitlement ID. Build on Agent B's already-done real-SDK research (`docs/OUTCOME.md`'s open-questions table) rather than re-deriving it once unblocked.
 
 ## Status
 
-⚠️ Phase 1f done with deviations (partial by necessity). Phase 2-4 done. Phase 1g blocked on B-001. See `docs/OUTCOME.md` and `docs/common/04-BLOCKERS.md`.
+❌ Phase 1c blocked on B-001 (account confirmed real, keys/Product/Credit-Entitlement-ID still needed). Phase 1f done with deviations (partial). Phase 2-4 done. See `docs/OUTCOME.md` and `docs/common/04-BLOCKERS.md`.
 
 ## Progress log
 
@@ -48,12 +51,14 @@ _(Append new entries at the bottom, most recent last. Include date, what you did
 - 2026-07-29 — Phase 1e complete. `src/receipt/schema.ts` (`Receipt`) and `chain.ts` (`buildAndSignReceipt()`, `verifyReceipt()` from the spec exactly, plus `sha256Hex()`/`verifyChain()` — the spec describes these in prose, no code shown, so their shape here is this phase's own design). 4 tests, all passing, no spec bugs found this time. Also synced `01-PROJECT-STATUS.md`'s 1c/1d table rows to match what Agent B had already written in their own status section (table was getting stale — I didn't invent anything, just propagated). Full detail in `docs/OUTCOME.md` Phase 1e entry. Committed, pushed (`e9467d8`).
 - 2026-07-29 — Pulled and read Agent B's Phase 1c/1d/1h progress in full (`01-PROJECT-STATUS.md`, `02-DECISIONS.md` ADR-004, `04-BLOCKERS.md` B-001/B-002, `docs/agent-b/WORKSPACE.md`). Per the user's request, added `TASKS.md`/`ROADMAP.md`/`ERROR-HANDLING.md` to this folder, mirroring Agent B's structure. Then built Phase 1f as far as possible without Agent B's Phase 1c: `src/cli/gate.ts`, `ui.ts`, `store.ts`, `keys.ts` (resolves the gate-keypair-location gap Agent B flagged), plus `src/mandate/id.ts`/`did.ts`/`currency.ts`. Ran every implemented subcommand for real (not just unit tests) — `mandate create`, `mandate resign`, `receipt show`, `verify` (full Beat 7 tamper test via real `sed -i`), `scan` (against a local fixture, since this machine has no `webcmd` install). Found and fixed 3 more real bugs while doing this: `renderConsent()`'s time format (a Phase 1a bug, "06:00 pm" not "6:00 PM"), missing INR comma-grouping, and a real Phase-0 `.gitignore` mistake (`manifest.json` was ignored, which meant `gate scan` could never be tested against real data on this machine — un-ignored it, flagged for Agent B to push their real one). `gate run`/`gate fund` left as honest blocked-message stubs — genuinely can't be built until `Ledger.ts` is real. 45/45 tests passing, `tsc --noEmit` clean. Full detail in `docs/OUTCOME.md` Phase 1f entry and a long changelog entry addressing Agent B's two open questions directly. Committed, pushed.
 - 2026-07-29 — Per the user, added the `dodo-knowledge` MCP server (project-scoped, `.mcp.json`, committed) — needs a session restart to connect, not usable yet. Pulled Agent B's follow-up work: real `manifest.json` committed (805 commands, 228 write — `gate scan` can now be tested against real data), and `signature_valid` wired up for real on the dashboard using `src/cli/keys.ts`. Both pulled cleanly, 45/45 tests still pass. Ran Phase 2-4 stub verification (per `docs/PROMPTS.md`) before Agent B got to it, since both of us were independently circling it — all 4 stub files already correct, nothing to fix. Both tracks' remaining real work (my `gate run`/`gate fund`/1g, Agent B's 1c/`execute()`) now genuinely blocked on the same two external prerequisites (B-001, B-002) — flagging to the user directly since neither agent can resolve either one.
+- 2026-07-29 — Per direct user instruction, took over Phase 1c (Dodo Payments integration) from Agent B. Wrote up the reassignment as `docs/common/02-DECISIONS.md` ADR-005 (why: B-002 would keep blocking Agent B on webcmd execution even after B-001 clears; `src/ledger/` has zero webcmd dependency, so it can unblock independently). Updated `05-PHASE-OWNERSHIP.md`, `03-INTERFACES.md`'s `Ledger` row, `01-PROJECT-STATUS.md`, and `04-BLOCKERS.md`'s B-001 entry to all point at the new owner, with an explicit note for Agent B not to start `src/ledger/` work even if they separately get Dodo access. User then shared a screenshot of their real Dodo test-mode account (Settings → Promotions) showing a "$1,000 fee waiver" promo — confirmed this is a transaction-fee waiver on Dodo's own processing fees, NOT spendable credit, and doesn't complete B-001's checklist (still need real `DODO_API_KEY`/`DODO_API_KEY_READONLY`/a Product/its Credit Entitlement ID). Recorded the finding in `docs/OUTCOME.md`'s open-questions table (this directly answered a question that had been open since the original spec). Good news: confirms the account itself is real and in Test Mode. Asked the user directly, in chat, for the remaining concrete setup steps.
 
 ## Next steps
 
-1. Flag B-001/B-002 to the user directly — a real Dodo test-mode account and a working webcmd browser bridge are both needed and neither agent can create them.
-2. While waiting: look for genuinely unblocked hardening work (more edge-case tests, docs cleanup) rather than inventing busywork or guessing at Ledger-dependent behavior.
-3. The moment B-001 clears: Phase 1c becomes real on Agent B's side, then `gate run`/`gate fund` can finally be wired for real, then Phase 1g. If B-002 is still open when B-001 clears, `gate run` can be *wired* against a real `Ledger` but not *verified* against a live browser command until B-002 also resolves — don't let one blocker clearing create false confidence about the other.
+1. Waiting on the user for: `DODO_API_KEY` (write), `DODO_API_KEY_READONLY` (read-only), a test-mode "Agent Spend Credits" Product created in the dashboard, and that Product's Credit Entitlement ID (`DODO_CREDIT_ENTITLEMENT_ID`) — exact checklist given directly to the user in chat, per `docs/02-DODO-INTEGRATION.md` § Setup.
+2. The moment those exist in a local `.env`: implement `src/ledger/Ledger.ts` (interface) and `DodoCreditLedger.ts` (real implementation), per `docs/PROMPTS.md` Phase 1c and `docs/02-DODO-INTEGRATION.md` — building on Agent B's real-SDK findings (`creditEntitlements.balances.retrieve()`/`.createLedgerEntry()`, customer-keyed balance model, session→payment→customer resolution chain) rather than the spec's original guesses.
+3. Write the required integration script (creates a session, funds ₹800, reads balance, draws ₹100 with a fake runId, reads balance again) and paste real output into `docs/OUTCOME.md`, per `CLAUDE.md` rule 6 — do not proceed on assumed shapes without seeing a real response.
+4. Then Phase 1f's remaining pieces (`gate run`/`gate fund`) become buildable — but `gate run`'s live verification still needs B-002 resolved separately (Agent B's webcmd browser connectivity), so don't conflate "Ledger is real" with "the full end-to-end run works."
 
 ## Known issues / rough edges
 

@@ -113,3 +113,23 @@ _(Originally written as ADR-003; renumbered to ADR-004 on merge — Agent A's AD
 **Impact on other modules:** Phase 1f (Agent A, CLI wiring) will need to call `hasAlreadyDrawn(runId)` before `Ledger.draw()` and `recordDraw(...)` after a successful draw — this is now the concrete contract, not just prose. `src/webcmd/executor.ts` exports `LedgerEntry` as the shape to construct.
 
 **Required follow-up work:** None currently — Phase 1c (once unblocked) should just call these as documented. If Dodo's real API turns out to support a request-side `idempotency_key` cleanly (still an open question per `docs/02-DODO-INTEGRATION.md`), this guard stays as defense-in-depth, not dead code — the spec calls for "belt and suspenders" regardless.
+
+---
+
+## ADR-005 — Phase 1c (Dodo Payments integration) reassigned from Agent B to Agent A
+
+**Date:** 2026-07-29
+**Author:** Agent A, on direct instruction from the user
+**Status:** Accepted
+
+**What changed:** `src/ledger/Ledger.ts` and `src/ledger/DodoCreditLedger.ts` — previously Agent B's Phase 1c deliverable per ADR-002 — are now Agent A's. Agent B keeps everything else already assigned (Phase 1d's remaining `execute()` verification, Phase 1h maintenance). `05-PHASE-OWNERSHIP.md`'s ownership table and both `docs/agent-*/WORKSPACE.md`/`TASKS.md` files updated to match.
+
+**Why:** ADR-002's own "required follow-up work" clause anticipated this exact situation: "If Sync Point 3 or 4 repeatedly causes one agent to sit idle in practice, that's worth a new ADR reconsidering the split, not a silent workaround." B-001 (no real Dodo account) has been blocking Agent B's Phase 1c since it opened, and even once B-001 clears *for Agent B specifically*, B-002 (webcmd browser connectivity, machine-specific to Agent B) still blocks everything execution-related on that side. `Ledger`/`DodoCreditLedger` never touch webcmd at all — `decide()` takes `ledgerBalanceInr` as a plain argument, and the whole point of that seam (ADR-002's own reasoning) is that the ledger and the browser-automation layer are independent. Moving Phase 1c to whichever side can actually get unblocked first, rather than leaving it stuck behind a blocker that compounds with a second, unrelated one, is a direct application of ADR-002's own criteria — not an abandonment of it.
+
+**Alternatives considered:**
+- *Wait for Agent B's B-001 to clear on their machine, leave the split as-is.* Rejected by the user's direct instruction, but also independently weak: even if B-001 clears for Agent B, B-002 still stops them from finishing Phase 1d, and Phase 1c has zero dependency on Phase 1d — no reason to let one blocker's resolution wait on an unrelated second blocker clearing too.
+- *Both agents implement Phase 1c in parallel, whoever gets credentials first wins.* Rejected — `src/ledger/Ledger.ts`/`DodoCreditLedger.ts` are single files; two independent implementations would guarantee a real merge conflict on core logic, not just docs, the exact failure mode `05-PHASE-OWNERSHIP.md`'s disjoint-ownership design exists to prevent.
+
+**Impact on other modules:** None on `decide()`, `GateEvent`, `Mandate`, or `Receipt` — this only moves *who* writes `src/ledger/`, not any interface shape already frozen in `03-INTERFACES.md`. Agent A now needs a real Dodo test-mode account (write key, read-only key, a test-mode Product + its Credit Entitlement ID) before writing any Phase 1c code, per `CLAUDE.md` § "If you're blocked" — not mocked, not started until it exists. Agent B's own Phase 1c research already done (real SDK type inspection: `docs/OUTCOME.md`'s "Running list of open questions resolved" table — the real `creditEntitlements.balances.retrieve()`/`.createLedgerEntry()` method names, the customer-keyed balance model, the checkout-session→payment→customer resolution chain) carries over directly; Agent A builds from those findings rather than re-deriving them.
+
+**Required follow-up work:** Agent B should not start `src/ledger/` work even if their own B-001 clears independently — check `01-PROJECT-STATUS.md` first. If B-001 clears with credentials usable by both agents, that's a coordination question for the user, not something to resolve by both agents guessing.
