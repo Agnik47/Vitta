@@ -23,6 +23,7 @@ This is Agent B's own pacing plan, not a shared commitment Agent A is bound by. 
 _(Update every session — one line per milestone, most recent state.)_
 
 - **2026-07-28:** Phase 0 scaffolding drafted locally (uncommitted) as a working baseline — package.json, tsconfig.json, full `src/` skeleton, `.env.example`, `dodopayments` installed. M1 and M2 are both open: no `.env` with real Dodo keys yet, no webcmd installed yet. Both are hard blockers for M3/M4 — cannot write real Phase 1c/1d code until resolved. Working on docs/task-tracking in the meantime; will pick up M3/M4 the moment M1/M2 clear, without waiting on Agent A's own phases.
+- **2026-07-29:** Pulled Agent A's real Phase 0. M2 cleared partially (webcmd installed, but its browser-connectivity check fails — new blocker B-002) → M4 (webcmd) done except `execute()`'s live verification. M1 still open (no Dodo account) → M3 (Dodo) still fully blocked, B-001. M5-M7 (dashboard) pulled forward hard once Agent A shipped 1b+1e (Sync Point 4 opened same day) — built the whole dashboard in one pass rather than just the shell, since M1/M2 were still blocking M3/M4 anyway: Next.js app, 3 API routes, 3 pages, verified in an actual browser against real signed fixture data including a live tamper test. M7's acceptance checklist passes except the CLI-kill-mid-run item, which needs Phase 1f to exist first. M8/M9 not started.
 
 ## Sequencing rule
 

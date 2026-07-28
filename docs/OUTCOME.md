@@ -299,17 +299,39 @@ Full suite: `npm test` → 24/24 passing. `npx tsc --noEmit` → exit 0.
 
 ## Phase 1h — Dashboard (Next.js, read-only)
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ⚠️ Done with deviations (see below) — core acceptance checklist passes for real; one item can't be tested until Phase 1f (CLI) exists
+**Timestamp:** 2026-07-29, Agent B
 
-- [ ] Next.js version actually installed: ___
-- [ ] `/`, `/events`, `/receipts` all show real data, not mocked
-- [ ] Confirmed no API route writes anywhere (code-reviewed, not assumed)
-- [ ] Confirmed only `DODO_API_KEY_READONLY` is used in this app, never the write key
-- [ ] `npm run build && npm run start` tested on the actual demo machine
-- [ ] Dashboard process killed mid-rehearsal — CLI demo path confirmed unaffected
+- [x] Next.js version actually installed: **16.2.12** (App Router, Turbopack), React 19.2.4, Tailwind CSS v4
+- [x] `/`, `/events`, `/receipts` all show real data, not mocked — verified in an actual Chrome tab (screenshots taken), against real fixture data generated with the production signing code (`src/mandate/sign.ts`, `src/receipt/chain.ts`), not hand-typed JSON
+- [x] Confirmed no API route writes anywhere (code-reviewed) — all three routes (`app/api/mandate|events|receipts/route.ts`) export only `GET`, no filesystem writes, no `Ledger` calls, no webcmd invocation anywhere in `dashboard/`
+- [x] Confirmed only `DODO_API_KEY_READONLY` is used in this app, never the write key — grepped `dashboard/` for `DODO_API_KEY` (without `_READONLY`), zero matches
+- [x] `npm run build && npm run start` tested — real production build + start, verified via curl and an actual browser tab, not `next dev`
+- [ ] Dashboard process killed mid-rehearsal, CLI demo path confirmed unaffected — **cannot test yet**, Phase 1f (`gate` CLI) doesn't exist. Revisit once Agent A ships it; nothing about this app's design should make it fail (it's fully read-only, own process, own port), but "should" isn't "confirmed."
 
 **What actually happened / deviations:**
+
+Scaffolded with `npx create-next-app@latest dashboard --typescript --tailwind --app --no-src-dir --import-alias "@/*" --eslint --use-npm`, then `npm install dodopayments` inside `dashboard/` (its own dependency tree, separate lockfile, per `docs/06-DASHBOARD-SPEC.md`). This Next.js version ships its own `AGENTS.md` warning that it has breaking changes from older Next.js conventions — read its bundled `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md` and the actual generated `app/page.tsx`/`app/layout.tsx` before writing any route/page code, rather than assuming prior-knowledge conventions still applied. They mostly did (Route Handlers, `params` as a `Promise`, App Router file conventions) — no exotic API surface was actually needed for this app's scope.
+
+Implemented exactly the structure in `docs/06-DASHBOARD-SPEC.md`: `lib/types.ts`, `lib/hash.ts` (`canonicalJSON()`/`sha256Hex()`/`CHAIN_HEAD_HASH`, byte-for-byte duplicates of `src/mandate/sign.ts` and `src/receipt/chain.ts` — verified by testing the tamper-test scenario, see below), `lib/read.ts` (mandate/events/receipts file reading + local chain verification), `lib/dodo.ts` (balance lookup), three API routes, three pages, four components (`StatusBadge`, `EventRow`, `ReceiptCard`, `ReserveBalanceCard`).
+
+**Deviation 1 — real SDK types diverge substantially from `docs/02-DODO-INTEGRATION.md`'s balance-read sketch.** Discovered by reading the installed `dodopayments` package's actual `.d.ts` files directly (no live account needed for this, though B-001 still blocks an actual call): there is no `creditEntitlementBalances.retrieve(reserveRef)` method. Balances are keyed by `(customer_id, credit_entitlement_id)` via `client.creditEntitlements.balances.retrieve()`; resolving a checkout-session-style `reserveRef` to a customer requires a second hop (`checkoutSessions.retrieve(id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`). `lib/dodo.ts` implements this real chain, handles either convention defensively (a `cus_...` id used directly, or a session id resolved through the chain), and is clearly marked unverified-live pending B-001 — same posture as Phase 1d's `execute()`. Full writeup with the exact real interfaces in this file's "Running list of open questions resolved" table above. Added `DODO_CREDIT_ENTITLEMENT_ID` to `.env.example` (root) and `dashboard/.env.local.example` — needed by this real chain, not in the original spec's env var list.
+
+**Deviation 2 — the gate's Ed25519 public key has no defined persistence location yet, since Phase 1f hasn't shipped.** `ChainVerification.signature_valid` is `null` ("pending") rather than a real boolean for now — `chain_link_valid` needs no key at all and IS fully real. Flagged for Agent A in `docs/agent-b/WORKSPACE.md` § Notes for Agent A; will wire up the moment Phase 1f defines where the key lives.
+
+**Deviation 3 — "current mandate" resolution is an undocumented design call.** `mandates/` can hold more than one file (`gate mandate resign` creates a new `mandate_id` rather than mutating the original, per `05-DEMO-SCRIPT.md` Beat 3-4). `readCurrentMandate()` picks the greatest `mandate_id` by string sort (ULIDs sort lexicographically by creation time) — not specified anywhere else, documented as a comment in `lib/read.ts`.
+
+**Real verification, not just "it compiles":** Generated real, cryptographically valid fixtures (a signed mandate, two hash-chained signed receipts, four `GateEvent`s) using the actual production `sign()`/`buildAndSignReceipt()` functions from `src/mandate/sign.ts`/`src/receipt/chain.ts` — not hand-typed JSON, not a dashboard-side mock — via a one-off script (`_gen-fixtures.ts`, deleted after use, not committed). Ran `npm run build && npm run start` for real. Confirmed via `curl` and an actual Chrome tab (`mcp__claude-in-chrome`):
+- `/` showed the real mandate fields, correct expiry countdown, and the balance card correctly displaying "Unavailable — Dodo not yet configured (missing DODO_API_KEY_READONLY or DODO_CREDIT_ENTITLEMENT_ID)" (both env vars were deliberately left unset to test this real degradation path, not a happy-path-only test)
+- `/events` showed all 4 events, reverse-chronological, color-coded verdict badges, and confirmed via network-request inspection that polling correctly uses `?since=<last_event_id>` and appends only new rows rather than re-fetching the whole list
+- `/receipts` showed both receipts with `chain_link_valid: true`. **Then performed the actual tamper test**: edited `total_inr` in `receipts/rcp_fixture001.json` on disk while the dashboard was running, waited for the next poll cycle (no manual refresh) — the SECOND receipt's badge flipped live from "chain valid" to "chain INVALID" in the browser, while the tampered receipt's own badge stayed "chain valid" (only its own field changed, its own link to `CHAIN_HEAD_HASH` is unaffected) — this is the exact distinction `05-DEMO-SCRIPT.md` Beat 7 and this file's Phase 1e entry require. Reverted the edit afterward.
+- Zero console errors in the browser tab throughout.
+
+Fixed a Turbopack build warning ("whole project traced unintentionally") by setting `turbopack.root` in `next.config.ts` to the dashboard's own directory (it's a genuinely separate app, not a workspace member of the outer repo) and adding a `turbopackIgnore` comment on the one dynamic `process.cwd()` path resolution in `lib/read.ts` — cosmetic, not a functional bug, but worth doing cleanly since it flagged real over-tracing.
+
+`npm audit` in `dashboard/` reports 12 high-severity advisories, all pre-existing in `create-next-app`'s own scaffold dependency tree (eslint/postcss/sharp transitive deps), not introduced by adding `dodopayments`. Fixing them requires downgrading Next.js itself (`npm audit fix --force` → Next 9.x) — not worth it for a locally-run demo dashboard; noting instead of silently ignoring.
+
+Deleted the fixture data and generator script after verification (`_gen-fixtures.ts`, the fixture `mandates/`/`receipts/`/`events.jsonl` files) so no fake data is sitting in the repo's runtime-data folders — those paths are gitignored anyway, but leaving fabricated data around risked confusing a future real demo run or Agent A's own Phase 1f testing.
 
 
 ---
@@ -353,8 +375,8 @@ Full suite: `npm test` → 24/24 passing. `npx tsc --noEmit` → exit 0.
 
 | Question | Where it was open | Real answer found | Date |
 |---|---|---|---|
-| Does Dodo's checkout/payment API accept a request-side idempotency key? | `02-DODO-INTEGRATION.md` | | |
-| Exact field name for Credit Entitlement Balance | `02-DODO-INTEGRATION.md` | | |
+| Does Dodo's checkout/payment API accept a request-side idempotency key? | `02-DODO-INTEGRATION.md` | **Partially, from real SDK types (not yet a live call — B-001 still blocks that).** `checkoutSessions.create()`'s params (`CheckoutSessionCreateParams`) have no `idempotency_key` field at all — no evidence funding itself is natively idempotent. But the actual spend-deduction operation is a different, real SDK method than the doc guessed (`client.creditEntitlements.balances.createLedgerEntry(customerID, { credit_entitlement_id, entry_type: 'debit', amount, idempotency_key })` — not `creditEntitlements.deduct()`, which doesn't exist), and its params (`BalanceCreateLedgerEntryParams`) DO include a real `idempotency_key?: string \| null` field. So the piece that actually matters for `draw()` (the deduct call) has native idempotency support; the `ledger.jsonl` guard built in Phase 1d (`hasAlreadyDrawn`/`recordDraw`, see ADR-004) stays as defense-in-depth per the spec's "belt and suspenders" instruction, not because native support is absent. | 2026-07-29, Agent B |
+| Exact field name for Credit Entitlement Balance | `02-DODO-INTEGRATION.md` | **From real SDK types (not a live response yet):** the doc's guess of `balance` was correct, but the *shape around it* is not what the sketch assumed. There is no `creditEntitlementBalances.retrieve(reserveRef)` method at all. The real hierarchy is `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })` → `CustomerCreditBalance { id, balance: string, credit_entitlement_id, customer_id, overage, ... }` — keyed by **customer**, not by checkout-session id. `balance` is a `string` (decimal), not a `number`. This means `Ledger.fund()`'s `reserveRef` can't simply be the checkout session's `session_id` (also note: the field is `session_id`, not `.id` as the doc's sketch used) if `balance()`/`draw()` need a customer id — resolving a session to its customer requires `checkoutSessions.retrieve(session_id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`. Recorded here now so whoever picks up Phase 1c (still blocked on B-001) doesn't re-derive this from scratch; the dashboard's `/api/mandate` route (Phase 1h) implements this resolution chain for real, marked unverified-live pending B-001, same as Phase 1d's `execute()`. | 2026-07-29, Agent B |
 | Is the $1,000 promotional credit visible/real in the dashboard? | vault `_TASKS & STATUS` Q8 | | |
 
 ---

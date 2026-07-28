@@ -40,14 +40,14 @@ Spec: `docs/03-WEBCMD-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1d.
 
 Spec: `docs/06-DASHBOARD-SPEC.md`. Prompt: `docs/PROMPTS.md` § Phase 1h. Depends on Agent A's 1b + 1e for the data routes (Sync Point 4) — the app shell does not.
 
-- [ ] App shell: `create-next-app` scaffold at `dashboard/` (own `package.json`, App Router, Tailwind) — can start as soon as 1c/1d are done, does not need frozen schemas
-- [ ] Record the exact Next.js version installed into `docs/OUTCOME.md`
-- [ ] `GET /api/mandate`, `GET /api/events`, `GET /api/receipts` — GET-only, read-only, no exceptions
-- [ ] Pages: `/` (mandate summary + live Dodo balance), `/events` (live feed, 1.5-2s polling, no WebSockets/SSE), `/receipts` (verify status)
-- [ ] Verify no route imports `DODO_API_KEY` (write key) — only `DODO_API_KEY_READONLY`
-- [ ] `npm run build && npm run start` (not `next dev`), confirm all three pages show real data from the actual CLI-produced `mandates/`, `receipts/`, `events.jsonl`
-- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected
-- [ ] Go through `docs/06-DASHBOARD-SPEC.md` § Acceptance checklist explicitly, log results into `docs/OUTCOME.md`
+- [x] App shell: `create-next-app` scaffold at `dashboard/` (own `package.json`, App Router, Tailwind) — Next.js 16.2.12, React 19.2.4, Tailwind v4
+- [x] Record the exact Next.js version installed into `docs/OUTCOME.md`
+- [x] `GET /api/mandate`, `GET /api/events`, `GET /api/receipts` — GET-only, read-only, no exceptions — done, code-reviewed, no writes anywhere
+- [x] Pages: `/` (mandate summary + live Dodo balance), `/events` (live feed, 1.8s polling, no WebSockets/SSE), `/receipts` (verify status) — done, all verified against real fixture data in an actual browser tab
+- [x] Verify no route imports `DODO_API_KEY` (write key) — only `DODO_API_KEY_READONLY` — grepped, confirmed clean
+- [x] `npm run build && npm run start` (not `next dev`), confirm all three pages show real data — done for real; data was fixture data generated with the production signing code (Phase 1f/CLI doesn't exist yet to produce it directly, see `docs/OUTCOME.md` for why that's not a mock)
+- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **cannot test yet, no CLI exists.** Revisit once Agent A ships Phase 1f.
+- [x] Go through `docs/06-DASHBOARD-SPEC.md` § Acceptance checklist explicitly, log results into `docs/OUTCOME.md` — done, one item pending (above)
 
 ## Shared / filler work (pick up when blocked on the above)
 
