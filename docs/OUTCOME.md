@@ -61,14 +61,41 @@ ok 1 - src\policy\decide.test.ts
 
 ## Phase 1a — Mandate schema, canonical JSON, Ed25519 signing
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ✅ Done as spec'd (with two recorded deviations in `render.ts`, see below)
+**Timestamp:** 2026-07-29, Agent A
 
-- [ ] Sign/verify round-trip test passes
-- [ ] Tamper-detection test passes
-- [ ] canonicalJSON key-order independence test passes
+- [x] Sign/verify round-trip test passes
+- [x] Tamper-detection test passes
+- [x] canonicalJSON key-order independence test passes
 
 **What actually happened / deviations:**
+
+Implemented `src/mandate/schema.ts` (the `Mandate` interface plus a hand-written `isMandate()` structural type guard — no validation library, per `CLAUDE.md` § Package choices), `src/mandate/sign.ts` (`canonicalJSON()`, `generateKeyPair()`, `sign()`, `verify()` — copied faithfully from `04-POLICY-ENGINE-SPEC.md`'s code, no changes needed), and `src/mandate/render.ts` (`renderConsent()`).
+
+**Deviation — `renderConsent()` doesn't match `04-POLICY-ENGINE-SPEC.md`'s code sketch verbatim, and that's deliberate.** The spec's sketch does `m.scope.merchants.map(capitalize).join(', ')`. Smoke-testing it against the mandate from `05-DEMO-SCRIPT.md` Beat 2 surfaced two real problems:
+1. Beat 2's exact required output is `"...at Blinkit, Zepto or BigBasket, in one transaction..."` — a grammatical list with a trailing "or", not a flat comma join. The spec's own sketch would have produced `"Blinkit, Zepto, Bigbasket"`.
+2. A generic `capitalize()` cannot turn `bigbasket` (webcmd's lowercase site key) into `BigBasket` (the brand's actual capitalization) — it has no way to know where the internal capital belongs.
+
+Per `docs/AGENTS.md` § UI rules ("`docs/05-DEMO-SCRIPT.md` is the equivalent of an attached design file... treat every code block in it as exact"), Beat 2's wording wins over the plainer code sketch in `04-POLICY-ENGINE-SPEC.md`. Implemented a `joinWithOr()` grammatical-list helper and a small `BRAND_NAMES` lookup table (`blinkit`, `zepto`, `bigbasket`, `district` — the merchants named across `03-WEBCMD-INTEGRATION.md` and `05-DEMO-SCRIPT.md`) with a `capitalize()` fallback for anything not in the table. Added `src/mandate/render.test.ts` (not required by `docs/PROMPTS.md` Phase 1a's prompt, which only asks for `sign.test.ts` — added anyway since I'd just found two real bugs in code the acceptance test checks byte-for-byte) covering both fixes plus the fallback path.
+
+**Test run (`src/mandate/sign.test.ts`, 5 tests, all required by `docs/PROMPTS.md` Phase 1a plus one extra keypair-isolation check):**
+```
+ok 1 - signing an object and verifying it unmodified passes
+ok 2 - mutating any single field after signing causes verification to fail
+ok 3 - canonicalJSON() produces identical output regardless of top-level key order
+ok 4 - canonicalJSON() is deterministic through nested objects and arrays of objects
+ok 5 - a signature from one keypair does not verify against a different keypair
+```
+
+**Test run (`src/mandate/render.test.ts`, 4 tests, added for the deviation above):**
+```
+ok 1 - renders a Beat-2-shaped sentence with a grammatical "a, b or c" merchant list
+ok 2 - bigbasket renders as BigBasket, not Bigbasket — brand name, not a generic capitalize()
+ok 3 - a two-merchant mandate joins with "or" and no comma
+ok 4 - an unlisted merchant falls back to a plain capitalized name
+```
+
+Full suite: `npm test` → 10/10 passing (9 real + the still-empty `decide.test.ts` stub, which will gain real tests in Phase 1b). `npx tsc --noEmit` → exit 0.
 
 
 ---

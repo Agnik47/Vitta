@@ -2,16 +2,16 @@
 
 The current state of the world, at a glance. Update your own section every time you sync (see `00-START-HERE.md`). Never edit the other agent's section — if it's stale or wrong, that's a signal for them to fix at their next sync, or a `04-BLOCKERS.md` entry if it's actively blocking you.
 
-**Last updated:** 2026-07-28, Agent A (Phase 0 complete)
+**Last updated:** 2026-07-29, Agent A (Phase 1a complete)
 
 ---
 
 ## At a glance
 
-- **Completed:** Phase 0 (scaffolding) — full `src/` tree created, `tsc --noEmit` and `npm test` both pass, `dodopayments` SDK installed.
-- **Active:** nothing yet — Agent A about to start Phase 1a. Agent B still waiting on this push.
-- **Pending:** Phases 1a-1h, 2-4, 5.
-- **Project health:** 🟢 On track. Two real findings surfaced during Phase 0 (TS 7 / `ts-node` incompatibility, `node --test` directory-argument behavior) — both resolved, see `docs/OUTCOME.md` Phase 0 entry. Nothing currently blocked.
+- **Completed:** Phase 0 (scaffolding), Phase 1a (mandate schema, canonical JSON, Ed25519 sign/verify, renderConsent).
+- **Active:** Agent A starting Phase 1b (`decide()`). Agent B still to start Phase 1c/1d (Phase 0 has been available to pull since 2026-07-28).
+- **Pending:** Phases 1b-1h, 2-4, 5.
+- **Project health:** 🟢 On track. Findings so far: 2 toolchain issues in Phase 0 (resolved), 2 spec inconsistencies caught and fixed in Phase 0/1a (`DenyCode` missing `ALREADY_EXECUTED`; `renderConsent()`'s merchant-list join didn't match the demo script's exact wording). All logged in `docs/OUTCOME.md`. Nothing currently blocked.
 
 ## Overall phase progress
 
@@ -20,8 +20,8 @@ Mirrors the phase list in `docs/PROMPTS.md`. Status values: `⏳ Not started` ·
 | Phase | Owner | Status | Notes |
 |---|---|---|---|
 | 0 — Scaffolding | Agent A | ✅ Done, tests passing | `tsc --noEmit` + `npm test` both pass. See `docs/OUTCOME.md` for 2 deviations (GateEvent.ts written for real, DenyCode gained ALREADY_EXECUTED) and 2 toolchain findings (TS pinned to 5.9.3, test script drops the path arg). |
-| 1a — Mandate schema, canonical JSON, Ed25519 signing | Agent A | 🔨 In progress | |
-| 1b — Policy Engine `decide()` | Agent A | ⏳ Not started | |
+| 1a — Mandate schema, canonical JSON, Ed25519 signing | Agent A | ✅ Done, tests passing | 9/9 real tests pass (5 required + 4 for a `renderConsent()` deviation, see `docs/OUTCOME.md`). |
+| 1b — Policy Engine `decide()` | Agent A | 🔨 In progress | |
 | 1c — Dodo Payments integration | Agent B | ⏳ Not started | |
 | 1d — webcmd integration | Agent B | ⏳ Not started | |
 | 1e — Receipts and verify chain | Agent A | ⏳ Not started | |
@@ -49,9 +49,9 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent A — status
 
-**Current phase:** 1a (Mandate schema, canonical JSON, Ed25519 signing) — starting next
-**Current task:** Phase 0 just finished and pushed. Moving to Phase 1a per `docs/agent-a/WORKSPACE.md`.
-**Last commit:** Phase 0 scaffolding (see `08-CHANGELOG.md` for the entry)
+**Current phase:** 1b (Policy Engine `decide()`) — starting next
+**Current task:** Phase 1a just finished and about to push. Moving to Phase 1b per `docs/04-POLICY-ENGINE-SPEC.md` § The decide() function.
+**Last commit:** Phase 1a — mandate schema, signing, renderConsent (see `08-CHANGELOG.md`)
 **Blocked on:** nothing
 
 ## Agent B — status
