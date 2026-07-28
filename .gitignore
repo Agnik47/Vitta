@@ -33,3 +33,5 @@ dist/
 # Editor/OS cruft
 .DS_Store
 Thumbs.db
+
+.env
