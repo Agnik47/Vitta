@@ -12,8 +12,8 @@ You also default-own **Phase 0** (whole-repo scaffolding) — see that file's Sy
 
 | Phase | Status | Depends on |
 |---|---|---|
-| 0 — Scaffolding | ⏳ Not started | none |
-| 1a — Mandate schema, canonical JSON, Ed25519 signing | ⏳ Not started | Phase 0 |
+| 0 — Scaffolding | ✅ Done, tests passing | none |
+| 1a — Mandate schema, canonical JSON, Ed25519 signing | 🔨 In progress | Phase 0 |
 | 1b — Policy Engine `decide()` | ⏳ Not started | 1a |
 | 1e — Receipts and verify chain | ⏳ Not started | 1a |
 | 1f — CLI and two-pane UI | ⏳ Not started | 1a, 1b, 1e, **and Agent B's 1c + 1d** (Sync Point 3) |
@@ -29,31 +29,31 @@ Never edit `src/ledger/`, `src/webcmd/`, or `dashboard/` without flagging it fir
 
 ## Current task
 
-_(Not started. First task: Phase 0 scaffolding, per `docs/PROMPTS.md` Phase 0 prompt and `docs/01-ARCHITECTURE.md` § Repo layout. Read `docs/00-PRODUCT-BRIEF.md` and `docs/01-ARCHITECTURE.md` in full first, per that prompt's own instruction.)_
+Phase 0 is done and about to be pushed. Starting Phase 1a next: mandate schema, `canonicalJSON()`, Ed25519 `sign()`/`verify()`, `renderConsent()`, per `docs/04-POLICY-ENGINE-SPEC.md` § The Mandate schema and § Canonical JSON + Ed25519 signing, and the unit tests in `docs/PROMPTS.md` Phase 1a's prompt (round-trip sign/verify, tamper detection, canonicalJSON key-order independence).
 
 ## Status
 
-⏳ Not started
+🔨 In progress (Phase 1a starting)
 
 ## Progress log
 
 _(Append new entries at the bottom, most recent last. Include date, what you did, what passed/failed, and anything the reader would need to resume mid-task.)_
 
 - 2026-07-28 — Workspace file created as part of the parallel-development docs restructuring. No implementation work has started yet.
+- 2026-07-28 — Phase 0 complete. Full `src/` tree scaffolded per `docs/01-ARCHITECTURE.md`, `tsc --noEmit` and `npm test` both pass clean. Found and fixed two toolchain issues (TS 7 incompatible with `ts-node`, pinned to 5.9.3; `node --test <dir>` fails on this Node version, dropped the path arg) and two spec gaps (`DenyCode` was missing `ALREADY_EXECUTED`; `03-INTERFACES.md`'s `Ledger` ownership row was wrong). Full detail in `docs/OUTCOME.md` Phase 0 entry and `docs/common/08-CHANGELOG.md`. About to commit and push, then start Phase 1a.
 
 ## Next steps
 
-1. Confirm with the user (or the other Claude Code session) which agent identity you are, if ambiguous.
-2. Run Phase 0 per `docs/PROMPTS.md`, confirm `tsc --noEmit` passes, push, log completion in `docs/common/08-CHANGELOG.md` and `docs/OUTCOME.md`.
-3. Wait for nothing — proceed straight to Phase 1a once Phase 0 is committed (you don't need to wait for Agent B to pull before starting 1a, only Agent B needs to wait for your push).
-4. Phase 1a → 1b → 1e in sequence, per `docs/common/05-PHASE-OWNERSHIP.md`.
-5. At Sync Point 3 (before 1f), confirm Agent B's 1c and 1d are pushed and their manual test scripts pass locally for you (`docs/common/07-INTEGRATION.md`) before wiring the CLI's `gate run` / `gate fund` subcommands. The signature-only subcommands (`gate mandate create/resign`, `gate receipt show`, `gate verify`) can be built earlier if you're waiting.
+1. Commit and push Phase 0. Confirm the push landed before starting Phase 1a — if for some reason it doesn't, don't start 1a on top of uncommitted Phase 0 work.
+2. Phase 1a: `src/mandate/schema.ts`, `sign.ts`, `render.ts`, and `sign.test.ts` per `docs/PROMPTS.md` Phase 1a. Zero dependency on webcmd/Dodo/filesystem beyond its own inputs.
+3. Phase 1b → 1e in sequence after that, per `docs/common/05-PHASE-OWNERSHIP.md`.
+4. At Sync Point 3 (before 1f), confirm Agent B's 1c and 1d are pushed and their manual test scripts pass locally for you (`docs/common/07-INTEGRATION.md`) before wiring the CLI's `gate run` / `gate fund` subcommands. The signature-only subcommands (`gate mandate create/resign`, `gate receipt show`, `gate verify`) can be built earlier if you're waiting.
 
 ## Known issues / rough edges
 
 _(Running list of anything you're leaving unfinished, hacky, or worth a second look — not a bug tracker, just enough that the other agent (or you, next session) isn't surprised. Clear an item when it's fixed; move anything genuinely blocking into `docs/common/04-BLOCKERS.md` instead.)_
 
-_(none yet)_
+- TypeScript is pinned to `5.9.3`, not the `^7.x` `npm install typescript` would resolve to today, because `ts-node@10.9.2` doesn't support TS 7's new native compiler yet (`ts.sys` is undefined). If `ts-node` ships TS 7 support later, this pin can be revisited — not urgent, current setup works cleanly.
 
 ## Notes for Agent B
 

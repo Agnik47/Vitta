@@ -52,3 +52,16 @@ This is the lightweight, per-commit companion to two other logs — don't duplic
 **Other agent needs to:** Nothing yet — still pre-Phase-0, no work has started. Whichever agent starts first should follow the new `00-START-HERE.md` reading order as written.
 **Interface changes:** None — no code contracts exist yet. This pass only restructured documentation.
 **Blockers introduced/resolved:** none.
+
+---
+
+## [2026-07-28] — Agent A — Phase 0 complete: repo scaffolding
+
+**What changed:** Ran `docs/PROMPTS.md` Phase 0. `npm init`, installed `typescript`/`ts-node`/`@types/node` (dev) and `dodopayments` (prod), wrote `tsconfig.json`, created the full `src/` tree from `docs/01-ARCHITECTURE.md` § Repo layout (one-line comment stubs for every Phase 1 file, real typed stub content for the four Phase 2-4 files), wrote `.env.example` and `.gitignore`. `tsc --noEmit` and `npm test` both pass clean.
+**Why:** First task in the phase-ownership split — Phase 0 is a prerequisite for both agents' tracks (Sync Point 1, `05-PHASE-OWNERSHIP.md`).
+**Files touched:** `package.json`, `tsconfig.json`, `.env.example`, `.gitignore`, all 19 files under `src/` (see `docs/OUTCOME.md` Phase 0 entry for the full list and per-file rationale), plus doc corrections: `docs/01-ARCHITECTURE.md` (added missing `ALREADY_EXECUTED` to `DenyCode`), `docs/common/03-INTERFACES.md` (fixed the `Ledger` interface ownership row — it's a Phase 1c/Agent B deliverable, not Phase 0), `docs/OUTCOME.md` Phase 0 section, `docs/common/01-PROJECT-STATUS.md`.
+**Testing status:** `npx tsc --noEmit` → exit 0, clean. `npm test` → 1 test file discovered (`src/policy/decide.test.ts`, currently empty since Phase 1b hasn't run), 0 failures. Full output pasted in `docs/OUTCOME.md`.
+**Known issues:** None outstanding. Two toolchain issues were found and fixed during this phase (not left as known issues): `npm install typescript` resolves to `7.0.2` today, which `ts-node` doesn't support (`ts.sys` undefined) — pinned to `5.9.3` instead. `node --test <directory>` fails on Node 22.18.0 — fixed by dropping the path argument and relying on `--test`'s default recursive discovery from cwd. Full detail in `docs/OUTCOME.md`.
+**Other agent needs to:** Agent B — pull this, run `npx tsc --noEmit` yourself to confirm it's clean on your machine too (Sync Point 1's own compatibility check per `07-INTEGRATION.md`), then start Phase 1c and/or 1d. Note the TypeScript version pin above before your own `npm install` touches `package-lock.json`.
+**Interface changes:** `GateEvent`/`DenyCode` (`src/events/GateEvent.ts`) created for real, not left as a comment stub — deliberate deviation from the literal Phase 0 instruction, justified in `docs/OUTCOME.md`. `DenyCode` gained `ALREADY_EXECUTED`, which was missing from the original spec despite `docs/05-DEMO-SCRIPT.md` Beat 8 needing it. `Ledger` interface ownership corrected in `03-INTERFACES.md` (Agent B/Phase 1c, not Agent A/Phase 0) — `src/ledger/Ledger.ts` itself is still just a comment stub right now.
+**Blockers introduced/resolved:** none.

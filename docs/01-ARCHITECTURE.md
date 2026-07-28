@@ -76,7 +76,8 @@ export type DenyCode =
   | 'OVER_TOTAL_CAP'
   | 'TXN_LIMIT_REACHED'
   | 'CART_DRIFT'
-  | 'INSUFFICIENT_RESERVE';
+  | 'INSUFFICIENT_RESERVE'
+  | 'ALREADY_EXECUTED';
 
 export interface GateEvent {
   event_id: string;          // ULID or crypto.randomUUID()

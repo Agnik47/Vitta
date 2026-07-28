@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Secrets — never commit
+.env
+
+# Runtime data — created by the app at runtime, not hand-authored (see CLAUDE.md § Where things live).
+# Gitignored deliberately: these are per-machine demo state (mandate IDs, timestamps, local ledger
+# entries) that would just create merge noise between the two agents' local runs. Each agent generates
+# their own locally; the two only need to line up for the joint Phase 5 rehearsal, run on one machine.
+/mandates/
+/receipts/
+/manifest.json
+/events.jsonl
+/ledger.jsonl
+
+# Editor/OS cruft
+.DS_Store
+Thumbs.db
