@@ -71,3 +71,23 @@ If you're not sure whether something rises to ADR-level, err toward writing it �
 **Impact on other modules:** Defines the folder-ownership boundaries referenced throughout `docs/common/` and both `docs/agent-*/WORKSPACE.md` files. Any change to this split should update `05-PHASE-OWNERSHIP.md` and both workspace files' "Folders/files you own" sections.
 
 **Required follow-up work:** None currently. If Sync Point 3 or 4 (`05-PHASE-OWNERSHIP.md`) repeatedly causes one agent to sit idle in practice, that's worth a new ADR reconsidering the split, not a silent workaround.
+
+---
+
+## ADR-003 — `decide()`'s read-access check moved to Rule 0, ahead of signature/expiry
+
+**Date:** 2026-07-29
+**Author:** Agent A (Phase 1b)
+**Status:** Accepted
+
+**What changed:** In `src/policy/decide.ts`, the read-access short-circuit is now Rule 0 — it fires before the signature check and the expiry check, which are now Rules 1 and 2. Originally (per `docs/04-POLICY-ENGINE-SPEC.md`'s first draft) read-access was Rule 3, checked *after* signature and expiry. `SpendRequest.access` also widened from `'read' | 'write'` to `'read' | 'write' | undefined`.
+
+**Why:** Two independent sources plus the acceptance test itself all pointed the same direction, and the original ordering contradicted all three: (1) `docs/03-WEBCMD-INTEGRATION.md` § Step 3 says reads get "no mandate check, no ledger touch, no signature verification"; (2) `docs/PROMPTS.md` Phase 1b's required test is literally titled "read access always allows, regardless of mandate state"; (3) with the original ordering, a read against an expired or badly-signed mandate would be denied — that's not "regardless of mandate state," that's exactly state-dependent. This isn't a fail-closed violation despite moving a check earlier — `CLAUDE.md`'s fail-closed rule is scoped to money-moving actions, and reads categorically can't spend money regardless of mandate validity, which is precisely why `03-WEBCMD-INTEGRATION.md` designed them to bypass mandate checks in the first place.
+
+**Alternatives considered:**
+- *Leave the original order, treat `03-WEBCMD-INTEGRATION.md` and the Phase 1b test title as loose/aspirational language rather than literal requirements.* Rejected — two separately-authored spec files and the acceptance test's own wording all agree; treating that as coincidental rather than intentional seemed like the less likely explanation, and `CLAUDE.md` rule 6 explicitly directs correcting the spec when reality (here, cross-spec consistency) shows it was wrong rather than building around a known-wrong assumption.
+- *Also move "unknown command" (Rule 3) ahead of signature/expiry, on the theory that cheap/mandate-independent checks should generally run first.* Rejected — no spec file or required test provides evidence for this. Unlike the read case, nothing establishes that an unrecognized command should bypass signature/expiry checks. Extending the fix on inferred symmetry alone would have been guessing, not correcting a demonstrated bug. Left unknown-command in its original relative position (now Rule 3, still after signature/expiry).
+
+**Impact on other modules:** `docs/04-POLICY-ENGINE-SPEC.md` updated to match (code block + a new "Rule order note" explaining the change). `docs/common/03-INTERFACES.md`'s registry row for `Decision`/`SpendRequest`/`decide()` flags the reorder explicitly so Agent B (or anyone reasoning about `decide()` from memory/an earlier read of the spec) doesn't build against the stale ordering. Does not affect `docs/05-DEMO-SCRIPT.md`'s scripted `OVER_TOTAL_CAP` beat — that path is a write request, unreachable until Rule 4 regardless of how Rules 0-3 are ordered among themselves. No impact on Agent B's Phase 1c/1d work (neither imports `decide()`).
+
+**Required follow-up work:** None. `src/policy/decide.test.ts` includes a dedicated regression test ("read access allows even against a badly signed mandate") that will fail loudly if this ever regresses.

@@ -102,14 +102,41 @@ Full suite: `npm test` → 10/10 passing (9 real + the still-empty `decide.test.
 
 ## Phase 1b — Policy Engine (`decide()`)
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ✅ Done as spec'd (with one significant, well-evidenced rule-order correction — see below)
+**Timestamp:** 2026-07-29, Agent A
 
-- [ ] All rule-table unit tests pass (0 through 8)
-- [ ] Rule-order test (BAD_SIGNATURE beats EXPIRED) passes
-- [ ] `decide()` confirmed to have zero I/O
+- [x] All rule-table unit tests pass (0 through 8)
+- [x] Rule-order test (BAD_SIGNATURE beats EXPIRED) passes
+- [x] `decide()` confirmed to have zero I/O — takes only plain data (`SpendRequest`, `Mandate`, `publicKey`, `ledgerBalanceInr`, `txnCountSoFar`, `now`), no filesystem/network/console calls anywhere in the function
 
 **What actually happened / deviations:**
+
+**Significant deviation — reordered Rule 0-3, and updated `04-POLICY-ENGINE-SPEC.md` to match.** Before writing tests, cross-checked the spec's decide() sketch against `03-WEBCMD-INTEGRATION.md` § Step 3, which says read commands get "no mandate check, no ledger touch, no signature verification." The spec's own decide() had signature (Rule 0) and expiry (Rule 1) checks running *before* the read short-circuit (Rule 3) — meaning a read against an expired or badly-signed mandate would be denied, directly contradicting `03-WEBCMD-INTEGRATION.md`, and also directly contradicting the literal wording of `docs/PROMPTS.md` Phase 1b's own required test: "read access always allows, **regardless of mandate state**." Two independent spec sources and the acceptance test itself all pointed the same direction, so this reads as a genuine bug in the original sketch, not an intentional design choice.
+
+Fixed by moving the read-access check to Rule 0 (fires before anything else). Signature, expiry, and unknown-command checks kept their relative order among each other, just shifted down one slot each (now Rules 1, 2, 3). Rules 4-8 (merchant/amount/per-txn/total-cap/txn-limit) are unchanged in content and position. Updated `docs/04-POLICY-ENGINE-SPEC.md`'s code block and added a "Rule order note" explaining the correction, per `CLAUDE.md` rule 3's requirement to update the spec file whenever rule order changes. Confirmed this doesn't affect `05-DEMO-SCRIPT.md`'s scripted `OVER_TOTAL_CAP` scenario — that's a write request, unreachable until Rule 4 regardless of how 0-3 are ordered.
+
+Deliberately did **not** reorder "unknown command" (Rule 3) relative to signature/expiry, even though the same "check cheap things first" logic might suggest it — nothing in either spec or the required tests provides evidence for that change, so extending the fix beyond what the read-access case actually demonstrated would have been guessing, not correcting a proven bug.
+
+**Second deviation — `SpendRequest.access` widened to include `undefined`.** The spec typed it `'read' | 'write'` only, which makes Rule 3's `req.access === undefined` check unreachable dead code under TypeScript — the type itself guarantees it can never be true. `03-WEBCMD-INTEGRATION.md`'s manifest lookup (`Map<string, 'read'|'write'>`) naturally returns `undefined` for an unrecognized command, so the type just needed to say what the real caller's data actually looks like. This is a fail-closed correctness issue, not a style nit: without it, an unrecognized command could never actually hit the `UNKNOWN_COMMAND` deny path through the type system as originally sketched.
+
+Did not implement `rules.ts` — `docs/PROMPTS.md` Phase 1b's prompt only asks for `decide.ts` and `decide.test.ts`; `rules.ts` is described in `01-ARCHITECTURE.md`'s repo layout as "the ordered rule table as data + functions" but nothing currently needs that decomposition, and inventing content for it now would be exactly the kind of unrequested abstraction `CLAUDE.md`/`AGENTS.md` warn against. Left as its Phase 0 comment stub.
+
+**Test run (`src/policy/decide.test.ts`, 11 tests — the 9 required by `docs/PROMPTS.md` Phase 1b plus 2 extra: an `AMOUNT_UNPARSEABLE` case, and a dedicated regression test proving read beats a bad signature):**
+```
+ok - read access always allows, regardless of mandate state
+ok - read access allows even against a badly signed mandate — proves Rule 0 (read) fires before Rule 1 (signature)
+ok - unknown command (access undefined) denies with UNKNOWN_COMMAND
+ok - expired mandate denies with EXPIRED even if amount is fine
+ok - bad signature denies with BAD_SIGNATURE before any other rule can fire (beats EXPIRED)
+ok - amount over per_txn_inr denies with OVER_PER_TXN_CAP and correct overBy
+ok - amount over remaining ledgerBalanceInr denies with OVER_TOTAL_CAP and correct overBy
+ok - merchant not in mandate.scope.merchants denies with MERCHANT_NOT_ALLOWED
+ok - txnCountSoFar >= max_txns denies with TXN_LIMIT_REACHED
+ok - amount unparseable (undefined) denies with AMOUNT_UNPARSEABLE
+ok - a request satisfying every rule allows
+```
+
+Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc --noEmit` → exit 0.
 
 
 ---

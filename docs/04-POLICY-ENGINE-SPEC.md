@@ -93,7 +93,7 @@ export type Decision =
 export interface SpendRequest {
   command: string;      // "blinkit/place-order"
   site: string;          // "blinkit"
-  access: 'read' | 'write';
+  access: 'read' | 'write' | undefined; // undefined = command not found in the webcmd manifest — see § Rule order note below
   amountInr?: number;    // authoritative cart total, if applicable
 }
 
@@ -105,21 +105,23 @@ export function decide(
   txnCountSoFar: number,
   now: Date
 ): Decision {
-  // Rule 0 — signature valid?
+  // Rule 0 — reads are free, short-circuit before any mandate check at all — no signature
+  // check, no expiry check. See § Rule order note below for why this moved ahead of
+  // signature/expiry.
+  if (req.access === 'read') {
+    return { verdict: 'ALLOW' };
+  }
+  // Rule 1 — signature valid?
   if (!verify(stripSig(mandate), mandate.sig, publicKey)) {
     return { verdict: 'DENY', code: 'BAD_SIGNATURE', reason: 'Mandate signature does not verify.' };
   }
-  // Rule 1 — not expired?
+  // Rule 2 — not expired?
   if (now >= new Date(mandate.scope.expires_at)) {
     return { verdict: 'DENY', code: 'EXPIRED', reason: 'Mandate has expired.' };
   }
-  // Rule 2 — command known? (fail closed on anything not in the manifest)
+  // Rule 3 — command known? (fail closed on anything not in the manifest)
   if (req.access === undefined) {
     return { verdict: 'DENY', code: 'UNKNOWN_COMMAND', reason: 'Command not found in webcmd manifest.' };
-  }
-  // Rule 3 — reads are free, short-circuit here
-  if (req.access === 'read') {
-    return { verdict: 'ALLOW' };
   }
   // Rule 4 — merchant in scope?
   if (!mandate.scope.merchants.includes(req.site)) {
@@ -149,6 +151,10 @@ export function decide(
 ```
 
 **Rule order is the spec.** The first failing rule is the DENY reason shown on screen during the demo. Do not reorder rules 0–8 without a reason, and if you do, update this document to match — `05-DEMO-SCRIPT.md` depends on `OVER_TOTAL_CAP` being the deny reason for the scripted over-cap scenario.
+
+**Rule order note (corrected during Phase 1b, 2026-07-29):** the read-access short-circuit was originally Rule 3, after signature (Rule 0) and expiry (Rule 1). That was a real bug: `03-WEBCMD-INTEGRATION.md` § Step 3 is explicit that reads get "no mandate check, no ledger touch, no signature verification," and `docs/PROMPTS.md` Phase 1b's own required test is literally titled "read access always allows, regardless of mandate state" — with signature/expiry checked first, a read against an expired or badly-signed mandate would have been denied, contradicting both. Read access is now Rule 0, ahead of everything else; signature (now Rule 1), expiry (now Rule 2), and unknown-command (now Rule 3) all kept their relative order among themselves, just shifted down by one. This does not affect the `OVER_TOTAL_CAP` scripted scenario referenced above — that path is unreachable until Rule 4 (merchant) regardless of numbering. See `docs/OUTCOME.md` Phase 1b for the full write-up.
+
+`SpendRequest.access` is typed `'read' | 'write' | undefined`, not just `'read' | 'write'` as originally sketched — the manifest lookup in `03-WEBCMD-INTEGRATION.md` (`Map<string, 'read'|'write'>`) returns `undefined` for an unrecognized command, and Rule 3 needs to actually be able to observe that value. Under the original narrower type, Rule 3's `req.access === undefined` check was unreachable dead code.
 
 `decide()` must have zero I/O. `ledgerBalanceInr` and `txnCountSoFar` are computed by the caller (which does talk to Dodo/disk) and passed in as plain numbers. Unit test with fake mandates, fake balances, fake dates — no network, no filesystem, no webcmd.
 

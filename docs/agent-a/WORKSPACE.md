@@ -14,8 +14,8 @@ You also default-own **Phase 0** (whole-repo scaffolding) — see that file's Sy
 |---|---|---|
 | 0 — Scaffolding | ✅ Done, tests passing | none |
 | 1a — Mandate schema, canonical JSON, Ed25519 signing | ✅ Done, tests passing | Phase 0 |
-| 1b — Policy Engine `decide()` | 🔨 In progress | 1a |
-| 1e — Receipts and verify chain | ⏳ Not started | 1a |
+| 1b — Policy Engine `decide()` | ✅ Done, tests passing | 1a |
+| 1e — Receipts and verify chain | 🔨 In progress | 1a |
 | 1f — CLI and two-pane UI | ⏳ Not started | 1a, 1b, 1e, **and Agent B's 1c + 1d** (Sync Point 3) |
 | 1g — Full end-to-end run | ⏳ Not started | 1f |
 
@@ -29,11 +29,11 @@ Never edit `src/ledger/`, `src/webcmd/`, or `dashboard/` without flagging it fir
 
 ## Current task
 
-Phase 1a is done and about to be pushed. Starting Phase 1b next: `decide()`, per `docs/04-POLICY-ENGINE-SPEC.md` § The decide() function — the single most important function in the codebase. Rule order (0 through 8) is load-bearing for the demo script; build the full rule-table test suite (`decide.test.ts`) before considering this phase done, including the rule-order test (bad signature beats expired, per `docs/PROMPTS.md` Phase 1b).
+Phase 1b is done and about to be pushed. Starting Phase 1e next: the `Receipt` schema and hash-chain (`buildAndSignReceipt()`, `verifyReceipt()`, chain-walking), per `docs/04-POLICY-ENGINE-SPEC.md` § The Receipt schema and `docs/PROMPTS.md` Phase 1e. This reuses `sign()`/`verify()` from Phase 1a with the gate's own keypair, separate from the mandate issuer's.
 
 ## Status
 
-🔨 In progress (Phase 1b starting)
+🔨 In progress (Phase 1e starting)
 
 ## Progress log
 
@@ -41,13 +41,14 @@ _(Append new entries at the bottom, most recent last. Include date, what you did
 
 - 2026-07-28 — Workspace file created as part of the parallel-development docs restructuring. No implementation work has started yet.
 - 2026-07-28 — Phase 0 complete. Full `src/` tree scaffolded per `docs/01-ARCHITECTURE.md`, `tsc --noEmit` and `npm test` both pass clean. Found and fixed two toolchain issues (TS 7 incompatible with `ts-node`, pinned to 5.9.3; `node --test <dir>` fails on this Node version, dropped the path arg) and two spec gaps (`DenyCode` was missing `ALREADY_EXECUTED`; `03-INTERFACES.md`'s `Ledger` ownership row was wrong). Full detail in `docs/OUTCOME.md` Phase 0 entry and `docs/common/08-CHANGELOG.md`. Committed and pushed (`46f8514`).
-- 2026-07-29 — Phase 1a complete. `src/mandate/schema.ts` (`Mandate` + `isMandate()` guard), `sign.ts` (`canonicalJSON`/`generateKeyPair`/`sign`/`verify`, matches the spec exactly), `render.ts` (`renderConsent()`, deviated from the spec's plain `.join(', ')` sketch — see below). 9 real tests across `sign.test.ts` (5) and `render.test.ts` (4, added after finding bugs), all passing; `tsc --noEmit` clean. Found and fixed two more real bugs by smoke-testing `renderConsent()` against Beat 2's exact expected sentence: the spec's plain comma-join doesn't match Beat 2's grammatical "a, b or c" wording, and a naive `capitalize()` can't turn `bigbasket` into `BigBasket`. Full detail in `docs/OUTCOME.md` Phase 1a entry. About to commit and push, then start Phase 1b.
+- 2026-07-29 — Phase 1a complete. `src/mandate/schema.ts` (`Mandate` + `isMandate()` guard), `sign.ts` (`canonicalJSON`/`generateKeyPair`/`sign`/`verify`, matches the spec exactly), `render.ts` (`renderConsent()`, deviated from the spec's plain `.join(', ')` sketch — see below). 9 real tests across `sign.test.ts` (5) and `render.test.ts` (4, added after finding bugs), all passing; `tsc --noEmit` clean. Found and fixed two more real bugs by smoke-testing `renderConsent()` against Beat 2's exact expected sentence: the spec's plain comma-join doesn't match Beat 2's grammatical "a, b or c" wording, and a naive `capitalize()` can't turn `bigbasket` into `BigBasket`. Full detail in `docs/OUTCOME.md` Phase 1a entry. Committed and pushed (`b8e9882`).
+- 2026-07-29 — Phase 1b complete. `src/policy/decide.ts` + `decide.test.ts` (11 tests). Found a real, significant rule-order bug: the spec's decide() checked signature/expiry *before* the read-access short-circuit, which would deny a read against an expired/badly-signed mandate — contradicting both `docs/03-WEBCMD-INTEGRATION.md`'s explicit "no signature verification" for reads and the required test's own title ("read access always allows, regardless of mandate state"). Moved read-access to Rule 0. Wrote up the full reasoning as `docs/common/02-DECISIONS.md` ADR-003 (not just a changelog note — this changes a contract). Also widened `SpendRequest.access` to include `undefined` (the original `'read'|'write'`-only type made the `UNKNOWN_COMMAND` check unreachable dead code). Updated `docs/04-POLICY-ENGINE-SPEC.md` to match, per CLAUDE.md's rule-order-change requirement. 20/20 tests passing, `tsc --noEmit` clean. Did NOT implement `rules.ts` — not required by the Phase 1b prompt, left as its Phase 0 stub. Full detail in `docs/OUTCOME.md` Phase 1b entry. About to commit and push, then start Phase 1e.
 
 ## Next steps
 
-1. Commit and push Phase 1a.
-2. Phase 1b: `src/policy/decide.ts` and `rules.ts`, plus the full rule-table test suite in `decide.test.ts` (read/unknown-command/expired/bad-signature-beats-expired/over-per-txn/over-total-cap/merchant-not-allowed/txn-limit/happy-path — per `docs/PROMPTS.md` Phase 1b). Zero I/O in `decide()` itself — `ledgerBalanceInr` and `txnCountSoFar` are caller-supplied plain numbers.
-3. Phase 1e after that, per `docs/common/05-PHASE-OWNERSHIP.md`.
+1. Commit and push Phase 1b.
+2. Phase 1e: `src/receipt/schema.ts` (`Receipt` interface) and `chain.ts` (`buildAndSignReceipt()`, `verifyReceipt()`, chain-walking logic), per `docs/PROMPTS.md` Phase 1e. Required tests: a valid two-receipt chain verifies end to end, and editing the first receipt breaks the *second* receipt's chain link (not just the first's own signature) — this is what Beat 7's tamper test depends on.
+3. Phase 1f after that, per `docs/common/05-PHASE-OWNERSHIP.md` — but check Sync Point 3 first (next item).
 4. At Sync Point 3 (before 1f), confirm Agent B's 1c and 1d are pushed and their manual test scripts pass locally for you (`docs/common/07-INTEGRATION.md`) before wiring the CLI's `gate run` / `gate fund` subcommands. The signature-only subcommands (`gate mandate create/resign`, `gate receipt show`, `gate verify`) can be built earlier if you're waiting.
 
 ## Known issues / rough edges
@@ -56,6 +57,7 @@ _(Running list of anything you're leaving unfinished, hacky, or worth a second l
 
 - TypeScript is pinned to `5.9.3`, not the `^7.x` `npm install typescript` would resolve to today, because `ts-node@10.9.2` doesn't support TS 7's new native compiler yet (`ts.sys` is undefined). If `ts-node` ships TS 7 support later, this pin can be revisited — not urgent, current setup works cleanly.
 - `render.ts`'s `BRAND_NAMES` lookup only covers `blinkit`/`zepto`/`bigbasket`/`district`. A merchant added later that isn't in this table and has an internal capital in its brand name (like `bigbasket` did) will render wrong via the `capitalize()` fallback. Not a blocker — just remember to extend the table if the demo ever adds a merchant.
+- `src/policy/rules.ts` is still just its Phase 0 comment stub — not populated in Phase 1b, since nothing currently needs the "rule table as data" decomposition `01-ARCHITECTURE.md` describes for it. If Phase 1f's CLI later wants a friendlier rule-name lookup for display, that's the natural point to fill it in.
 
 ## Notes for Agent B
 
