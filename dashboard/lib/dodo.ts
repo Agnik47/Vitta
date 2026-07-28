@@ -19,7 +19,10 @@ import DodoPayments from 'dodopayments';
 
 let client: DodoPayments | null = null;
 function getClient(): DodoPayments {
-  if (!client) client = new DodoPayments({ bearerToken: process.env.DODO_API_KEY_READONLY });
+  // environment MUST be explicit — the SDK defaults to live_mode (https://live.dodopayments.com)
+  // when unset, which silently rejects test-mode keys with a 401 rather than erroring loudly.
+  // Found by testing against a real account; see docs/OUTCOME.md Phase 1h addendum.
+  if (!client) client = new DodoPayments({ bearerToken: process.env.DODO_API_KEY_READONLY, environment: 'test_mode' });
   return client;
 }
 

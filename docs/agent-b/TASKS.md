@@ -6,20 +6,9 @@ Scope discipline: everything below is work **assigned to Agent B**. Agent A's ph
 
 ---
 
-## Phase 1c — Dodo Payments integration (test mode)
+## Phase 1c — Dodo Payments integration (test mode) — **REASSIGNED TO AGENT A, 2026-07-29 (ADR-005)**
 
-Spec: `docs/02-DODO-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1c.
-
-- [ ] Confirm a real Dodo test-mode account exists with `DODO_API_KEY` / `DODO_API_KEY_READONLY`, and a local uncommitted `.env` is populated — **do not proceed past this without real keys** (`CLAUDE.md` rule 7: never mock this)
-- [ ] `src/ledger/Ledger.ts` — interface (created in Phase 0 scaffolding, frozen — do not redefine)
-- [ ] `src/ledger/DodoCreditLedger.ts implements Ledger`
-  - [ ] `fund()` — real Checkout Session, tagged `metadata.mandate_id`
-  - [ ] `balance()` — real Credit Entitlement Balance retrieval (verify actual SDK method/field names against a real response before finalizing — the doc's version is a sketch)
-  - [ ] `draw()` — deduct credit tagged with `runId`; confirm whether the SDK/API takes a request-side `idempotency_key`; if not, the disk-based fallback (`ledger.jsonl` runId check) lives in `src/webcmd/executor.ts`, not in `DodoCreditLedger` itself
-  - [ ] `release()` — test-mode no-op is acceptable for Phase 1
-- [ ] Integration script (not a unit test — real network): create session → fund ₹800 → read balance → draw ₹100 with a fake runId → read balance again → print every raw API response
-- [ ] Run it for real, paste actual output into `docs/OUTCOME.md` (Phase 1c section)
-- [ ] Update `docs/common/03-INTERFACES.md` if the real response shape forces any change to the sketched fields
+No longer this track's phase. Left here only as history — do not pick up `src/ledger/` work even though B-001 is now clear on this machine too; check `01-PROJECT-STATUS.md` before assuming otherwise. See `docs/common/02-DECISIONS.md` ADR-005 for the reassignment reasoning.
 
 ## Phase 1d — webcmd integration
 
@@ -46,10 +35,11 @@ Spec: `docs/06-DASHBOARD-SPEC.md`. Prompt: `docs/PROMPTS.md` § Phase 1h. Depend
 - [x] Pages: `/` (mandate summary + live Dodo balance), `/events` (live feed, 1.8s polling, no WebSockets/SSE), `/receipts` (verify status) — done, all verified against real fixture data in an actual browser tab
 - [x] Verify no route imports `DODO_API_KEY` (write key) — only `DODO_API_KEY_READONLY` — grepped, confirmed clean
 - [x] `npm run build && npm run start` (not `next dev`), confirm all three pages show real data — done for real; data was fixture data generated with the production signing code (Phase 1f/CLI doesn't exist yet to produce it directly, see `docs/OUTCOME.md` for why that's not a mock)
-- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **cannot test yet** — Phase 1f's CLI exists now but `gate run` itself needs Phase 1c (B-001). Revisit once that clears.
+- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **cannot test yet** — needs Phase 1g (full `gate run`) to exist. The only remaining open item in this phase.
 - [x] Go through `docs/06-DASHBOARD-SPEC.md` § Acceptance checklist explicitly, log results into `docs/OUTCOME.md` — done, one item pending (above)
 - [x] **Follow-up, same day:** wired up real `signature_valid` in `/api/receipts` using `keys/gate.public.pem` (Phase 1f's `src/cli/keys.ts`) — verified against a bootstrapped real keypair, including a live tamper test distinguishing signature vs. chain-link failure. See `docs/OUTCOME.md`.
 - [x] **Follow-up, same day:** committed the real `manifest.json` (805 commands, 228 write) Agent A requested, so `gate scan` is testable against real data on both machines.
+- [x] **Follow-up, same day (later):** the user shared real Dodo test-mode credentials directly — verified `/api/mandate`'s balance lookup against the real account (both the checkout-session and direct-customer-id resolution paths), found and fixed a real `environment: 'test_mode'` SDK-client bug along the way (was silently hitting the live API host). Confirmed real "₹1,000" balance in an actual browser tab. See `docs/OUTCOME.md` Phase 1h addendum.
 
 ## Shared / filler work (pick up when blocked on the above)
 
@@ -60,8 +50,8 @@ Spec: `docs/06-DASHBOARD-SPEC.md`. Prompt: `docs/PROMPTS.md` § Phase 1h. Depend
 
 ## Current blockers against this list
 
-See `docs/common/04-BLOCKERS.md` for the live, shared version of this. As of this file's creation:
-- Phase 1c needs a real Dodo test-mode account + `.env` — not yet present on this machine.
-- Phase 1d needs `@agentrhq/webcmd@0.4.3` installed and `webcmd doctor` passing — not yet installed on this machine.
+See `docs/common/04-BLOCKERS.md` for the live, shared version of this.
+- Phase 1d's `execute()` still needs the webcmd browser bridge (B-002) fixed on this machine — `webcmd doctor` fails its Connectivity check.
+- Phase 1c is no longer this track's blocker to track (reassigned, ADR-005) — B-001 itself is resolved as of 2026-07-29.
 
-Neither blocker excuses picking up Agent A's phases instead — see the scope note at the top of this file.
+Not a reason to pick up Agent A's phases instead — see the scope note at the top of this file.
