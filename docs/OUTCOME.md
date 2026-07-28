@@ -143,16 +143,23 @@ Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc 
 
 ## Phase 1c — Dodo Payments integration
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ❌ Blocked — partial credentials, not enough to start
+**Timestamp:** 2026-07-29, Agent A (reassigned from Agent B, ADR-005)
 
-- [ ] Dodo test-mode account created, API keys obtained
+- [x] Dodo test-mode account confirmed to exist (user screenshot, Settings → Promotions)
+- [ ] All required API keys/IDs obtained — **partial: `DODO_API_KEY` (write key) provided, `DODO_API_KEY_READONLY`, the test-mode Product ID, and `DODO_CREDIT_ENTITLEMENT_ID` still needed**
 - [ ] `fund()` creates a real Checkout Session — paste session ID/response below
-- [ ] `balance()` — **record the ACTUAL field name Dodo's API returns** (doc's guess may be wrong)
-- [ ] `draw()` — **record whether request-side idempotency_key is actually supported** (open question in the spec)
+- [ ] `balance()` — record the ACTUAL field name Dodo's API returns (Agent B already found this from real SDK types, see the open-questions table — still needs a live-call confirmation)
+- [ ] `draw()` — record whether request-side idempotency_key is actually supported (Agent B already found this from real SDK types too — still needs a live-call confirmation)
 - [ ] Integration script run against real API — output pasted below
 
 **What actually happened / deviations:**
+
+**Security note, not a code deviation — worth recording anyway.** While setting up credentials, a real-looking `DODO_API_KEY` value briefly appeared pasted into the tracked, committed `.env.example` template (never committed or pushed — caught in the working tree before either happened). Reverted `.env.example` to its clean placeholder state and moved the real value into the properly gitignored `.env`. Separately found `.gitignore`'s `.env` pattern was an exact-string match that did NOT cover `.env.local` — a second real credentials file, also with placeholder values only, had shown up untracked and unprotected. Widened the pattern to `.env.*` (with `.env.example` explicitly re-allowed, since that one's meant to be committed). No secret was ever committed or pushed at any point — this was a genuine near-miss, not an incident, but the `.gitignore` gap was real and is now fixed for both agents going forward.
+
+**Real finding, not yet verified against a live call:** the one real key value provided doesn't match `docs/02-DODO-INTEGRATION.md`'s assumed `sk_test_...` prefix format — it's a different-shaped token entirely. Not confirming or denying this is a problem until an actual API call is made against it (a key format assumption in a doc's placeholder text isn't authoritative), but flagging now in case the spec's placeholder pattern misled anyone into thinking a real key "looks wrong" when it doesn't match `sk_test_xxxxx`.
+
+Still waiting on: `DODO_API_KEY_READONLY`, the test-mode "Agent Spend Credits" Product (and its `product_id`), and that Product's Credit Entitlement ID (`DODO_CREDIT_ENTITLEMENT_ID`) — per `docs/02-DODO-INTEGRATION.md` § Setup. Not starting `src/ledger/` code with only one of four needed values — `balance()`/`draw()` specifically can't be tested without the read-only key and the Credit Entitlement ID (Agent B's real-SDK research: both are required parameters, not optional).
 
 **Real API response shapes observed (paste raw JSON):**
 
