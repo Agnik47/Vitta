@@ -91,3 +91,25 @@ If you're not sure whether something rises to ADR-level, err toward writing it �
 **Impact on other modules:** `docs/04-POLICY-ENGINE-SPEC.md` updated to match (code block + a new "Rule order note" explaining the change). `docs/common/03-INTERFACES.md`'s registry row for `Decision`/`SpendRequest`/`decide()` flags the reorder explicitly so Agent B (or anyone reasoning about `decide()` from memory/an earlier read of the spec) doesn't build against the stale ordering. Does not affect `docs/05-DEMO-SCRIPT.md`'s scripted `OVER_TOTAL_CAP` beat — that path is a write request, unreachable until Rule 4 regardless of how Rules 0-3 are ordered among themselves. No impact on Agent B's Phase 1c/1d work (neither imports `decide()`).
 
 **Required follow-up work:** None. `src/policy/decide.test.ts` includes a dedicated regression test ("read access allows even against a badly signed mandate") that will fail loudly if this ever regresses.
+
+---
+
+## ADR-004 — `ledger.jsonl` entry shape and where the idempotency guard lives
+
+_(Originally written as ADR-003; renumbered to ADR-004 on merge — Agent A's ADR-003 above landed first in the same sync window. See `06-SYNC-WORKFLOW.md` § Conflict resolution.)_
+
+**Date:** 2026-07-29
+**Author:** Agent B
+**Status:** Accepted
+
+**What changed:** Defined the concrete shape of `ledger.jsonl` (`{ runId, reserveRef, amountInrPaise, ts }`, one JSON object per line) and implemented the idempotency guard as two functions in `src/webcmd/executor.ts`: `hasAlreadyDrawn(runId, ledgerPath)` (read-only check) and `recordDraw(entry, ledgerPath)` (append-only write). Neither the shape nor the exact split of responsibility was pinned down in `docs/01-ARCHITECTURE.md` or `docs/02-DODO-INTEGRATION.md` — both just say "check `ledger.jsonl` for the runId" without specifying a schema.
+
+**Why:** `docs/PROMPTS.md` Phase 1c's prompt is explicit that this check must live in `src/webcmd/executor.ts`, not inside `DodoCreditLedger`, "to keep the ledger class honest about what Dodo's API actually guarantees versus what our own code guarantees." That placement decision was already made by the spec; what was still open was the actual data shape and which side (ledger vs. executor) writes the record. Putting `recordDraw()` in `executor.ts` alongside `hasAlreadyDrawn()` (rather than having `DodoCreditLedger.draw()` write its own audit line) keeps that same boundary consistent both ways: `DodoCreditLedger` only ever talks to Dodo's real API, `executor.ts` owns 100% of the "what has WE, locally, already done" bookkeeping.
+
+**Alternatives considered:**
+- *Have `DodoCreditLedger.draw()` append to `ledger.jsonl` itself after a successful API call.* Rejected — this re-blurs the exact line the spec asked to keep clean, and would mean Phase 1c code (Agent B, but conceptually "the Dodo-facing half") needs to know about a file whose entire purpose is guarding against Dodo-side idempotency gaps. Keeping both functions in `executor.ts` means whoever wires the CLI (`gate run`, Phase 1f) has one place to call both check-before and record-after, symmetrically.
+- *Store the ledger as a JSON array file instead of JSONL.* Rejected — matches the architecture doc's own naming (`ledger.jsonl`, explicitly "append-only") and appending a line is a simpler, safer concurrent-write primitive than rewriting a JSON array.
+
+**Impact on other modules:** Phase 1f (Agent A, CLI wiring) will need to call `hasAlreadyDrawn(runId)` before `Ledger.draw()` and `recordDraw(...)` after a successful draw — this is now the concrete contract, not just prose. `src/webcmd/executor.ts` exports `LedgerEntry` as the shape to construct.
+
+**Required follow-up work:** None currently — Phase 1c (once unblocked) should just call these as documented. If Dodo's real API turns out to support a request-side `idempotency_key` cleanly (still an open question per `docs/02-DODO-INTEGRATION.md`), this guard stays as defense-in-depth, not dead code — the spec calls for "belt and suspenders" regardless.

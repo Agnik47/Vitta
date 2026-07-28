@@ -25,14 +25,16 @@ Spec: `docs/02-DODO-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1c.
 
 Spec: `docs/03-WEBCMD-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1d.
 
-- [ ] Confirm `webcmd doctor` succeeds on this machine; install `@agentrhq/webcmd@0.4.3` globally if missing — do not proceed past a failing doctor check
-- [ ] `src/webcmd/manifest.ts` — `loadManifest()`: live-fetch with disk-cache fallback; a live-fetch failure must never crash the app
-- [ ] `src/webcmd/executor.ts` — `execute()`: spawns webcmd for ALLOW decisions, captures `runId`/`columns`/`tracePath`, implements the idempotency fallback check against `ledger.jsonl` (see Phase 1c above)
-- [ ] Manual test script:
-  - [ ] Prints count of write-access commands found (should be a real number near ~192, not hardcoded)
-  - [ ] Looks up `blinkit/place-order`, confirms `access === 'write'`
-  - [ ] Looks up a nonsense command name, confirms `undefined` returned (fail-closed case)
-- [ ] Run against the real webcmd install, paste actual output into `docs/OUTCOME.md` (Phase 1d section)
+- [x] Confirm `webcmd doctor` succeeds on this machine; install `@agentrhq/webcmd@0.4.3` globally if missing — **doctor does NOT succeed** (Connectivity FAIL) — see `docs/common/04-BLOCKERS.md` B-002. Installed the package itself cleanly.
+- [x] `src/webcmd/manifest.ts` — `loadManifest()`: live-fetch with disk-cache fallback; a live-fetch failure must never crash the app — done, real-tested, both live and fallback paths confirmed.
+- [x] `src/webcmd/executor.ts` — `execute()`: spawns webcmd for ALLOW decisions, captures `runId`/`columns`/`tracePath` — **implemented per spec, NOT verified against a live command** (blocked by B-002). Idempotency guard (`hasAlreadyDrawn`/`recordDraw` against `ledger.jsonl`) IS implemented and real-tested (pure fs logic, no browser dependency) — see ADR-004.
+- [x] Manual test script:
+  - [x] Prints count of write-access commands found — real number: **228** (not ~192 as the doc guessed)
+  - [x] Looks up `blinkit/place-order`, confirms `access === 'write'` — confirmed
+  - [x] Looks up a nonsense command name, confirms `undefined` returned (fail-closed case) — confirmed
+- [x] Run against the real webcmd install, paste actual output into `docs/OUTCOME.md` (Phase 1d section) — done, see that section for full output including the doctor failure and the fallback-to-cache test.
+
+**Not yet done, blocked on B-002:** verifying `execute()` against one real live webcmd write command. Revisit the moment the browser connectivity issue is resolved — don't mark this phase's `execute()` path ✅ until that real run happens.
 
 ## Phase 1h — Dashboard (Next.js, read-only)
 

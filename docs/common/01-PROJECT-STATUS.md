@@ -2,16 +2,16 @@
 
 The current state of the world, at a glance. Update your own section every time you sync (see `00-START-HERE.md`). Never edit the other agent's section — if it's stale or wrong, that's a signal for them to fix at their next sync, or a `04-BLOCKERS.md` entry if it's actively blocking you.
 
-**Last updated:** 2026-07-29, Agent A (Phase 1e complete)
+**Last updated:** 2026-07-29, Agent B (merging Phase 1d status with Agent A's Phase 1e complete)
 
 ---
 
 ## At a glance
 
-- **Completed:** Phase 0 (scaffolding), Phase 1a (mandate schema, canonical JSON, Ed25519 sign/verify, renderConsent), Phase 1b (`decide()`), Phase 1e (receipts and verify chain).
-- **Active:** Agent A's sequential track is done through 1e — next is Phase 1f (CLI), gated on Agent B's 1c/1d (Sync Point 3, see notes below on the signature-only subcommands that don't need to wait). Agent B working Phase 1d (webcmd) now; Phase 1c (Dodo) blocked on a real test-mode account (see `04-BLOCKERS.md` B-001).
-- **Pending:** Phase 1c, 1d (Agent B, in progress), 1f-1h, 2-4, 5.
-- **Project health:** 🟢 On track, but one important flag: Phase 1b found and fixed a real rule-order bug in `decide()` (read-access now fires before signature/expiry, not after — see `02-DECISIONS.md` ADR-003). If you last read `04-POLICY-ENGINE-SPEC.md` or `03-INTERFACES.md` before 2026-07-29, re-check the `decide()` rule order before relying on it from memory. Phase 1e shipped with no deviations. Other findings so far (all resolved, logged in `docs/OUTCOME.md`): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, `renderConsent()`'s merchant-list join not matching the demo script's exact wording. One open blocker: B-001 (Phase 1c needs a real Dodo account).
+- **Completed:** Phase 0 (scaffolding), Phase 1a (mandate schema, canonical JSON, Ed25519 sign/verify, renderConsent), Phase 1b (`decide()`), Phase 1e (receipts and verify chain), Phase 1d's `manifest.ts` (webcmd manifest loading, real-tested).
+- **Active:** Agent A's sequential track is done through 1e — next is Phase 1f (CLI), gated on Agent B's 1c/1d (Sync Point 3, see notes below on the signature-only subcommands that don't need to wait). Agent B has `executor.ts` implemented but blocked on verifying `execute()` for real (B-002); Phase 1c not started, blocked on a real Dodo account (B-001).
+- **Pending:** Phase 1c, 1d (Agent B, partial), 1f-1h, 2-4, 5.
+- **Project health:** 🟡 On track overall, two open blockers both on Agent B's track (neither affects Agent A), plus one important flag: Phase 1b found and fixed a real rule-order bug in `decide()` (read-access now fires before signature/expiry, not after — see `02-DECISIONS.md` ADR-003). If you last read `04-POLICY-ENGINE-SPEC.md` or `03-INTERFACES.md` before 2026-07-29, re-check the `decide()` rule order before relying on it from memory. Phase 1e shipped with no deviations. Other findings so far (all resolved, logged in `docs/OUTCOME.md`): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, `renderConsent()`'s merchant-list join not matching the demo script's exact wording, real webcmd manifest counts differing substantially from the spec's guesses (805 total/228 write vs. guessed ~302/~192). See `04-BLOCKERS.md` B-001 (no Dodo test account yet) and B-002 (webcmd browser bridge failing its connectivity check on Agent B's machine).
 
 ## Overall phase progress
 
@@ -22,8 +22,8 @@ Mirrors the phase list in `docs/PROMPTS.md`. Status values: `⏳ Not started` ·
 | 0 — Scaffolding | Agent A | ✅ Done, tests passing | `tsc --noEmit` + `npm test` both pass. See `docs/OUTCOME.md` for 2 deviations (GateEvent.ts written for real, DenyCode gained ALREADY_EXECUTED) and 2 toolchain findings (TS pinned to 5.9.3, test script drops the path arg). |
 | 1a — Mandate schema, canonical JSON, Ed25519 signing | Agent A | ✅ Done, tests passing | 9/9 real tests pass (5 required + 4 for a `renderConsent()` deviation, see `docs/OUTCOME.md`). |
 | 1b — Policy Engine `decide()` | Agent A | ✅ Done, tests passing | 20/20 tests pass. Real rule-order bug found and fixed — see `02-DECISIONS.md` ADR-003. |
-| 1c — Dodo Payments integration | Agent B | ❌ Blocked | See `04-BLOCKERS.md` B-001 — needs a real Dodo test-mode account + `.env` from the user. Synced from Agent B's own status section on 2026-07-29; Agent B owns keeping this row current. |
-| 1d — webcmd integration | Agent B | 🔨 In progress | Self-serve (global npm install), unaffected by B-001. Synced from Agent B's own status section on 2026-07-29. |
+| 1c — Dodo Payments integration | Agent B | ❌ Blocked | No real Dodo test-mode account/`.env` yet — see `04-BLOCKERS.md` B-001. |
+| 1d — webcmd integration | Agent B | ⚠️ Partial | `manifest.ts` done + real-tested (805 commands, 228 write). `executor.ts` implemented but `execute()` unverified — `webcmd doctor` fails Connectivity check, see B-002. Idempotency guard (`hasAlreadyDrawn`/`recordDraw`) done + real-tested. |
 | 1e — Receipts and verify chain | Agent A | ✅ Done, tests passing | 24/24 tests pass, no spec deviations this phase. |
 | 1f — CLI and two-pane UI | Agent A | ⏳ Not started | Needs 1a,1b,1c,1d,1e (see `05-PHASE-OWNERSHIP.md` for partial-start nuance) |
 | 1g — Full end-to-end run | Agent A | ⏳ Not started | Needs 1f |
@@ -56,10 +56,10 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent B — status
 
-**Current phase:** 1d (webcmd) starting now; 1c (Dodo) blocked
-**Current task:** Pulled and verified Phase 0 (`tsc --noEmit` + `npm test` clean on this machine too). Starting Phase 1d (self-serve: global webcmd install + `webcmd doctor`). Phase 1c cannot start until a real Dodo test-mode account/API keys exist — see `04-BLOCKERS.md`.
-**Last commit:** — (about to push agent-b docs: `TASKS.md`, `ROADMAP.md`, `ERROR-HANDLING.md`, `WORKSPACE.md` update)
-**Blocked on:** Phase 1c only — needs a real Dodo test-mode account + `.env` (`DODO_API_KEY`, `DODO_API_KEY_READONLY`) from the user. Phase 1d is unblocked and starting now.
+**Current phase:** 1d (webcmd) partially done; 1c (Dodo) blocked
+**Current task:** `manifest.ts` done and real-tested. `executor.ts` implemented (execute() + idempotency guard) but `execute()` unverified — `webcmd doctor` fails its Connectivity check on this machine (B-002). Phase 1c still blocked on a real Dodo account (B-001). Considering pulling forward the dashboard app shell (needs neither blocker) if both stay open.
+**Last commit:** Phase 1d — `manifest.ts` + `executor.ts` (see `08-CHANGELOG.md`)
+**Blocked on:** B-001 (Phase 1c — real Dodo test-mode account + `.env` from the user) and B-002 (Phase 1d's `execute()` verification — webcmd browser connectivity bridge failing on this machine). Both in `04-BLOCKERS.md`.
 
 ## Repo state
 
