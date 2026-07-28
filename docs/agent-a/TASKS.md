@@ -71,5 +71,5 @@ Blocked until: Phase 1f's `gate run`/`gate fund` are real (needs Phase 1c), and 
 
 ## Shared (either agent)
 
-- [ ] Phase 2-4 stub verification (`tsc --noEmit` on `src/phase2-4-stubs/*`, confirm nothing in Phase 1's runtime path imports them)
+- [x] Phase 2-4 stub verification (`tsc --noEmit` on `src/phase2-4-stubs/*`, confirm nothing in Phase 1's runtime path imports them) — done 2026-07-29, all 4 stubs already correct, nothing to fix
 - [ ] Phase 5 rehearsal (joint session — 3 timed runs, fallback recording, browser-less fallback path, `gate verify` on an older receipt)

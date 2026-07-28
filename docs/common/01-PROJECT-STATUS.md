@@ -28,7 +28,7 @@ Mirrors the phase list in `docs/PROMPTS.md`. Status values: `⏳ Not started` ·
 | 1f — CLI and two-pane UI | Agent A | ⚠️ Done with deviations | 5/7 subcommands real and verified (scan, mandate create/resign, receipt show, verify). `gate run`/`gate fund` genuinely can't be built — need `Ledger.ts` to exist as real code (Phase 1c). 45/45 tests pass. 4 real bugs found and fixed — see `docs/OUTCOME.md`. |
 | 1g — Full end-to-end run | Agent A | ❌ Blocked | Needs `gate run`/`gate fund` real, which needs Phase 1c (B-001) and B-002 resolved. |
 | 1h — Dashboard (Next.js) | Agent B | ⚠️ Done with deviations | Next.js 16.2.12. All 3 pages/routes verified in a real browser against real signed fixture data. `signature_valid` now real (wired to `keys/gate.public.pem` same day Phase 1f shipped it). One item pending: killing the dashboard mid-CLI-run can't be tested until `gate run` exists (Phase 1c). See `docs/OUTCOME.md`. |
-| 2-4 — Stub verification | Either | ⏳ Not started | Filler work — good to pick up while waiting on the other agent |
+| 2-4 — Stub verification | Agent A | ✅ Done, tests passing | All 4 stub files already met the definition, nothing needed fixing. Picked up before Agent B to avoid duplicate effort — see `08-CHANGELOG.md`. |
 | 5 — Demo rehearsal | Both | ⏳ Not started | Joint session, not solo |
 
 **A phase's `✅` reverts to `🔨 In progress` if a later integration run (Sync Point 5 or 7, see `07-INTEGRATION.md`) surfaces a bug in it. Don't leave a stale ✅ next to code that's since been proven wrong.**
@@ -44,14 +44,14 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 | 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | Still waiting on 1c specifically (1d's `manifest.ts` is real; `executor.ts` is implemented but unverified, B-002). The *other* `gate` subcommands are done — see Phase 1f's row above. |
 | 4 — 1b+1e → 1h data routes | Agent B's dashboard API routes | ✅ Done | 1h shipped 2026-07-29 — all 3 data routes built and verified against real signed fixture data in an actual browser. |
 | 5 — 1f → 1g | Real end-to-end demo run | ⏳ Not reached | Waiting on 1f |
-| 6 — Stub verification | Phase 2-4 sign-off | ⏳ Not reached | Waiting on Phase 0 |
+| 6 — Stub verification | Phase 2-4 sign-off | ✅ Done | Confirmed 2026-07-29 — all 4 stubs already met the definition. |
 | 7 — Rehearsal | Live joint session, both tracks | ⏳ Not reached | Waiting on 1g. 1h is otherwise ready but has one item (CLI-kill-mid-run) only testable once 1g's CLI exists. |
 
 ## Agent A — status
 
-**Current phase:** Phase 1f done as far as possible; Phase 1g genuinely blocked
-**Current task:** Built everything in Phase 1f that doesn't need `Ledger` to be real code. `gate run`/`gate fund` — and therefore Phase 1g, the full end-to-end run — are stuck until Agent B's Phase 1c clears B-001. Moving to Phase 2-4 stub verification (shared filler work) while waiting, per `05-PHASE-OWNERSHIP.md`'s guidance not to sit idle.
-**Last commit:** Phase 1f — CLI subcommands, two-pane UI, 4 real bugs fixed (see `08-CHANGELOG.md`)
+**Current phase:** Phase 2-4 stub verification done; Phase 1g still genuinely blocked
+**Current task:** Pulled Agent B's manifest.json commit and dashboard signature_valid wiring. Phase 2-4 stub verification done (all 4 stubs already correct, nothing to fix). Still stuck on `gate run`/`gate fund`/Phase 1g until B-001 clears. Deciding what's next given both blockers are external — see `04-BLOCKERS.md`.
+**Last commit:** Phase 2-4 stub verification — all 4 files confirmed correct (see `08-CHANGELOG.md`)
 **Blocked on:** B-001 (blocks `gate run`/`gate fund`/Phase 1g) — same blocker as Agent B's Phase 1c, now blocking both tracks' remaining real work.
 
 ## Agent B — status

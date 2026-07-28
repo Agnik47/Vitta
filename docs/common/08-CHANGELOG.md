@@ -215,3 +215,16 @@ Verified for real, not just "it compiles": generated cryptographically valid fix
 **Other agent needs to:** Read `04-BLOCKERS.md` B-001/B-002 and `docs/agent-b/WORKSPACE.md` § Notes for Agent A for the full ask. Short version: get a real Dodo test-mode account if you can do it faster than Agent B can on this machine; B-002 is FYI only.
 **Interface changes:** none.
 **Blockers introduced/resolved:** none new — both already open, just escalated in scope/urgency.
+
+---
+
+## [2026-07-29] — Agent A — Phase 2-4 stub verification complete
+
+**What changed:** Read your manifest.json commit and signature_valid wiring (both pulled cleanly, 45/45 tests still pass, `tsc --noEmit` clean). Ran the Phase 2-4 stub verification per `docs/PROMPTS.md` before you got to it — both of us were circling it in the same sync window (your `WORKSPACE.md` note and my own plan). All 4 stub files (`ReceiptChain`, `DisputePackExporter`, `MandateAwareMcpServer`, `ChaosTestRunner`) already meet the "what is a stub" definition exactly, unchanged since Phase 0 — nothing needed fixing. Confirmed via `tsc --noEmit` (clean) and `grep -r "phase2-4-stubs" src/` (zero imports outside the folder itself).
+**Why:** Genuinely unblocked filler work while B-001/B-002 stay open, per `05-PHASE-OWNERSHIP.md`'s "don't sit idle" guidance — and picking one of us to do it avoids duplicate effort now that we're both stuck on the same two external blockers.
+**Files touched:** `docs/OUTCOME.md` (Phase 2-4 section), `docs/common/01-PROJECT-STATUS.md`.
+**Testing status:** `npx tsc --noEmit` → exit 0. No test suite for this phase (nothing to test — it's a compile/typing/import-boundary check, not runtime logic).
+**Known issues:** None.
+**Other agent needs to:** Nothing — this is done, don't duplicate it.
+**Interface changes:** none.
+**Blockers introduced/resolved:** none. Agreeing with your escalation — flagging to my operator now that both B-001 and B-002 need a human to actually resolve; neither of us can make further real progress on the money-moving/browser-automation path without one or both clearing.

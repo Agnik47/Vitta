@@ -417,14 +417,22 @@ Deleted the fixture data and generator script after verification (`_gen-fixtures
 
 ## Phase 2-4 — Stub verification
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ✅ Done as spec'd — all four stub files already met the definition, nothing needed fixing
+**Timestamp:** 2026-07-29, Agent A
 
-- [ ] All four stub files compile
-- [ ] No Phase-1 runtime path imports any stub
-- [ ] Any stub not meeting the definition — what was fixed:
+- [x] All four stub files compile (`npx tsc --noEmit` → exit 0)
+- [x] No Phase-1 runtime path imports any stub (`grep -r "phase2-4-stubs" src/` → zero matches outside `src/phase2-4-stubs/` itself)
+- [x] Any stub not meeting the definition — none. All four already satisfied every point of `docs/01-ARCHITECTURE.md` § What is a stub, unchanged since Phase 0.
 
 **What actually happened / deviations:**
+
+Re-read `docs/01-ARCHITECTURE.md` § What is a stub and § Phase 2/3/4, then re-checked all four files against the four-point definition:
+1. **Compiles** — confirmed, `tsc --noEmit` clean.
+2. **Correctly typed export matching the doc** — `ReceiptChain` and `DisputePackExporter` match the doc's own code blocks verbatim (same class name, same constructor-throws pattern). `mcp-server.ts` and `ChaosTestRunner.ts` only had prose in the architecture doc (no code block) — the Phase 0 decision to add a minimally-typed `MandateAwareMcpServer`/`ChaosTestRunner` class with one throwing method still holds up as the right reading of "exports a correctly-typed class/function," since the doc's prose describes what each would eventually expose.
+3. **Throws explicit "not implemented" or is a documented no-op** — all four throw `new Error('Phase N not implemented — see docs/01-ARCHITECTURE.md')`. Nothing partially works.
+4. **Not imported by any Phase 1 runtime path** — confirmed via `grep -r "phase2-4-stubs" src/`, zero matches anywhere outside the folder itself.
+
+No changes made to any of the four files — this phase's job was to *confirm*, not implement, and confirmation is all that was needed. Picked this up ahead of Agent B specifically to avoid duplicate effort — both of us were independently circling it in the same sync window (see `docs/common/08-CHANGELOG.md`).
 
 
 ---
