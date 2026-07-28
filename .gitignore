@@ -4,8 +4,12 @@ node_modules/
 # Build output
 dist/
 
-# Secrets — never commit
+# Secrets — never commit. Covers every .env* variant (.env, .env.local, .env.production, etc.),
+# not just the exact ".env" — a real credentials file named ".env.local" showed up untracked and
+# would NOT have matched the old exact-match-only pattern. Fixed 2026-07-29, see docs/OUTCOME.md.
 .env
+.env.*
+!.env.example
 
 # Runtime data — created by the app at runtime, not hand-authored (see CLAUDE.md § Where things live).
 # Gitignored deliberately: these are per-machine demo state (mandate IDs, timestamps, local ledger
