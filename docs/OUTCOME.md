@@ -176,13 +176,32 @@ Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc 
 
 ## Phase 1e — Receipts and verify chain
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** ✅ Done as spec'd — no deviations this phase
+**Timestamp:** 2026-07-29, Agent A
 
-- [ ] Two-receipt chain verifies cleanly
-- [ ] Tampering with receipt N breaks verification of receipt N+1's chain link
+- [x] Two-receipt chain verifies cleanly
+- [x] Tampering with receipt N breaks verification of receipt N+1's chain link
 
 **What actually happened / deviations:**
+
+Implemented `src/receipt/schema.ts` (`Receipt` interface, matches `04-POLICY-ENGINE-SPEC.md` exactly) and `src/receipt/chain.ts` (`buildAndSignReceipt()`, `verifyReceipt()` — both copied faithfully from the spec's code, no changes needed — plus `sha256Hex()` and `verifyChain()`, which the spec describes in prose but doesn't show code for).
+
+No spec bugs found this phase, unlike 1a/1b — the Receipt schema and chain logic were internally consistent and matched cleanly against `docs/05-DEMO-SCRIPT.md` Beats 6-7's expected output shape (`sha256:` prefix on hashes, `sha256:0000...` for the chain head).
+
+**Design notes on the two functions the spec described but didn't show code for:**
+- `sha256Hex(obj)`: `sha256:` + hex digest of `sha256(canonicalJSON(obj))`. Exported generically (not `hashReceipt`-specific) because `Receipt.mandate_hash` needs the exact same "sha256 of canonicalJSON(x)" computation — Phase 1f's CLI can reuse this directly instead of duplicating it when it builds real receipts.
+- `verifyChain(receipts, gatePublicKey)`: sorts by `signed_at`, then for each receipt checks both its own signature (`verifyReceipt()`) and whether `prev_receipt_hash` matches `sha256Hex()` of the immediately preceding receipt (or `CHAIN_HEAD_HASH` for the first). Takes an already-parsed `Receipt[]`, not file paths — reading `receipts/*.json` off disk is a CLI-layer (Phase 1f) concern, `chain.ts` itself stays pure per the same "logic before I/O" pattern as `decide()`.
+
+**Test run (`src/receipt/chain.test.ts`, 4 tests — the 2 required by `docs/PROMPTS.md` Phase 1e plus 2 extra: a round-trip check and a chain-head-only case):**
+```
+ok - buildAndSignReceipt() + verifyReceipt() round-trip: an unmodified receipt verifies
+ok - a single-receipt chain (chain head only) verifies cleanly
+ok - a valid two-receipt chain verifies cleanly end to end
+ok - editing any field in the first receipt breaks the SECOND receipt's chain link, not just the first receipt's own signature
+```
+The last test explicitly asserts three things at once, matching the prompt's emphasis: the tampered first receipt's own signature fails, the untouched second receipt's own signature still passes, and the second receipt's chain link fails anyway — proving the chain link is a distinct check from either receipt's own signature.
+
+Full suite: `npm test` → 24/24 passing. `npx tsc --noEmit` → exit 0.
 
 
 ---

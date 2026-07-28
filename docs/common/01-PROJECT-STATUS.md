@@ -2,16 +2,16 @@
 
 The current state of the world, at a glance. Update your own section every time you sync (see `00-START-HERE.md`). Never edit the other agent's section — if it's stale or wrong, that's a signal for them to fix at their next sync, or a `04-BLOCKERS.md` entry if it's actively blocking you.
 
-**Last updated:** 2026-07-29, Agent A (Phase 1b complete)
+**Last updated:** 2026-07-29, Agent A (Phase 1e complete)
 
 ---
 
 ## At a glance
 
-- **Completed:** Phase 0 (scaffolding), Phase 1a (mandate schema, canonical JSON, Ed25519 sign/verify, renderConsent), Phase 1b (`decide()`).
-- **Active:** Agent A starting Phase 1e (receipts and verify chain). Agent B still to start Phase 1c/1d (Phase 0 has been available to pull since 2026-07-28).
-- **Pending:** Phases 1e-1h, 2-4, 5.
-- **Project health:** 🟢 On track, but one important flag: Phase 1b found and fixed a real rule-order bug in `decide()` (read-access now fires before signature/expiry, not after — see `02-DECISIONS.md` ADR-003). If you last read `04-POLICY-ENGINE-SPEC.md` or `03-INTERFACES.md` before 2026-07-29, re-check the `decide()` rule order before relying on it from memory. Other findings so far (all resolved, logged in `docs/OUTCOME.md`): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, `renderConsent()`'s merchant-list join not matching the demo script's exact wording. Nothing currently blocked.
+- **Completed:** Phase 0 (scaffolding), Phase 1a (mandate schema, canonical JSON, Ed25519 sign/verify, renderConsent), Phase 1b (`decide()`), Phase 1e (receipts and verify chain).
+- **Active:** Agent A's sequential track is done through 1e — next is Phase 1f (CLI), gated on Agent B's 1c/1d (Sync Point 3, see notes below on the signature-only subcommands that don't need to wait). Agent B working Phase 1d (webcmd) now; Phase 1c (Dodo) blocked on a real test-mode account (see `04-BLOCKERS.md` B-001).
+- **Pending:** Phase 1c, 1d (Agent B, in progress), 1f-1h, 2-4, 5.
+- **Project health:** 🟢 On track, but one important flag: Phase 1b found and fixed a real rule-order bug in `decide()` (read-access now fires before signature/expiry, not after — see `02-DECISIONS.md` ADR-003). If you last read `04-POLICY-ENGINE-SPEC.md` or `03-INTERFACES.md` before 2026-07-29, re-check the `decide()` rule order before relying on it from memory. Phase 1e shipped with no deviations. Other findings so far (all resolved, logged in `docs/OUTCOME.md`): 2 toolchain issues in Phase 0, `DenyCode` missing `ALREADY_EXECUTED`, `renderConsent()`'s merchant-list join not matching the demo script's exact wording. One open blocker: B-001 (Phase 1c needs a real Dodo account).
 
 ## Overall phase progress
 
@@ -22,9 +22,9 @@ Mirrors the phase list in `docs/PROMPTS.md`. Status values: `⏳ Not started` ·
 | 0 — Scaffolding | Agent A | ✅ Done, tests passing | `tsc --noEmit` + `npm test` both pass. See `docs/OUTCOME.md` for 2 deviations (GateEvent.ts written for real, DenyCode gained ALREADY_EXECUTED) and 2 toolchain findings (TS pinned to 5.9.3, test script drops the path arg). |
 | 1a — Mandate schema, canonical JSON, Ed25519 signing | Agent A | ✅ Done, tests passing | 9/9 real tests pass (5 required + 4 for a `renderConsent()` deviation, see `docs/OUTCOME.md`). |
 | 1b — Policy Engine `decide()` | Agent A | ✅ Done, tests passing | 20/20 tests pass. Real rule-order bug found and fixed — see `02-DECISIONS.md` ADR-003. |
-| 1c — Dodo Payments integration | Agent B | ⏳ Not started | |
-| 1d — webcmd integration | Agent B | ⏳ Not started | |
-| 1e — Receipts and verify chain | Agent A | 🔨 In progress | |
+| 1c — Dodo Payments integration | Agent B | ❌ Blocked | See `04-BLOCKERS.md` B-001 — needs a real Dodo test-mode account + `.env` from the user. Synced from Agent B's own status section on 2026-07-29; Agent B owns keeping this row current. |
+| 1d — webcmd integration | Agent B | 🔨 In progress | Self-serve (global npm install), unaffected by B-001. Synced from Agent B's own status section on 2026-07-29. |
+| 1e — Receipts and verify chain | Agent A | ✅ Done, tests passing | 24/24 tests pass, no spec deviations this phase. |
 | 1f — CLI and two-pane UI | Agent A | ⏳ Not started | Needs 1a,1b,1c,1d,1e (see `05-PHASE-OWNERSHIP.md` for partial-start nuance) |
 | 1g — Full end-to-end run | Agent A | ⏳ Not started | Needs 1f |
 | 1h — Dashboard (Next.js) | Agent B | ⏳ Not started | Needs 1b + 1e; shell/scaffold can start earlier |
@@ -41,18 +41,18 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 |---|---|---|---|
 | 1 — Phase 0 → both tracks | Agent B starting any code | ✅ Ready | Phase 0 pushed — `tsc --noEmit` clean, `npm test` passes. Agent B: pull before writing any code. |
 | 2 — Fan-out | Agent A (1a/1b/1e) ∥ Agent B (1c/1d) | ✅ Ready | Agent A starting 1a now. Agent B unblocked to start 1c/1d once pulled. |
-| 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | Waiting on 1c, 1d |
-| 4 — 1b+1e → 1h data routes | Agent B's dashboard API routes | ⏳ Not reached | Waiting on 1b, 1e |
+| 3 — 1c+1d → 1f | Agent A wiring `gate run`/`gate fund` | ⏳ Not reached | Waiting on 1c, 1d. Agent A is unblocked to build the *other* `gate` subcommands now, per `05-PHASE-OWNERSHIP.md`'s partial-start note. |
+| 4 — 1b+1e → 1h data routes | Agent B's dashboard API routes | ✅ Ready | 1b and 1e both shipped 2026-07-29. Agent B: pull, run `npx tsc --noEmit` yourself, then the dashboard's data-reading routes are unblocked (the app shell was already startable earlier, per Sync Point 4's own note). |
 | 5 — 1f → 1g | Real end-to-end demo run | ⏳ Not reached | Waiting on 1f |
 | 6 — Stub verification | Phase 2-4 sign-off | ⏳ Not reached | Waiting on Phase 0 |
 | 7 — Rehearsal | Live joint session, both tracks | ⏳ Not reached | Waiting on 1g, 1h |
 
 ## Agent A — status
 
-**Current phase:** 1e (Receipts and verify chain) — starting next
-**Current task:** Phase 1b just finished and about to push. Moving to Phase 1e per `docs/04-POLICY-ENGINE-SPEC.md` § The Receipt schema.
-**Last commit:** Phase 1b — `decide()`, with a real rule-order fix (see `08-CHANGELOG.md`, `02-DECISIONS.md` ADR-003)
-**Blocked on:** nothing
+**Current phase:** 1f (CLI and two-pane UI) next, but partially gated — see below
+**Current task:** Phase 1e just finished and about to push. Sequential track (0, 1a, 1b, 1e) is now fully done. Phase 1f needs Agent B's 1c+1d for the `gate run`/`gate fund` subcommands (Sync Point 3) — starting with the subcommands that don't need them (`gate mandate create/resign`, `gate scan`, `gate receipt show`, `gate verify`) while 1c/1d are in flight.
+**Last commit:** Phase 1e — receipt schema + hash chain, no deviations (see `08-CHANGELOG.md`)
+**Blocked on:** nothing outright, but `gate run`/`gate fund` specifically wait on Agent B's 1c/1d
 
 ## Agent B — status
 

@@ -15,7 +15,7 @@ You also default-own **Phase 0** (whole-repo scaffolding) — see that file's Sy
 | 0 — Scaffolding | ✅ Done, tests passing | none |
 | 1a — Mandate schema, canonical JSON, Ed25519 signing | ✅ Done, tests passing | Phase 0 |
 | 1b — Policy Engine `decide()` | ✅ Done, tests passing | 1a |
-| 1e — Receipts and verify chain | 🔨 In progress | 1a |
+| 1e — Receipts and verify chain | ✅ Done, tests passing | 1a |
 | 1f — CLI and two-pane UI | ⏳ Not started | 1a, 1b, 1e, **and Agent B's 1c + 1d** (Sync Point 3) |
 | 1g — Full end-to-end run | ⏳ Not started | 1f |
 
@@ -29,11 +29,11 @@ Never edit `src/ledger/`, `src/webcmd/`, or `dashboard/` without flagging it fir
 
 ## Current task
 
-Phase 1b is done and about to be pushed. Starting Phase 1e next: the `Receipt` schema and hash-chain (`buildAndSignReceipt()`, `verifyReceipt()`, chain-walking), per `docs/04-POLICY-ENGINE-SPEC.md` § The Receipt schema and `docs/PROMPTS.md` Phase 1e. This reuses `sign()`/`verify()` from Phase 1a with the gate's own keypair, separate from the mandate issuer's.
+Phase 1e is done and about to be pushed. That closes out the sequential track (0 → 1a → 1b → 1e). Next is Phase 1f (CLI + two-pane UI), but `gate run`/`gate fund` specifically need Agent B's 1c/1d (Sync Point 3) — B-001 (`04-BLOCKERS.md`) means Phase 1c is still blocked on a real Dodo account as of this writing. Starting with the CLI subcommands that don't need Agent B's modules: `gate scan`, `gate mandate create/resign`, `gate receipt show`, `gate verify`.
 
 ## Status
 
-🔨 In progress (Phase 1e starting)
+🔨 In progress (Phase 1f starting, partial — see Current task)
 
 ## Progress log
 
@@ -42,14 +42,14 @@ _(Append new entries at the bottom, most recent last. Include date, what you did
 - 2026-07-28 — Workspace file created as part of the parallel-development docs restructuring. No implementation work has started yet.
 - 2026-07-28 — Phase 0 complete. Full `src/` tree scaffolded per `docs/01-ARCHITECTURE.md`, `tsc --noEmit` and `npm test` both pass clean. Found and fixed two toolchain issues (TS 7 incompatible with `ts-node`, pinned to 5.9.3; `node --test <dir>` fails on this Node version, dropped the path arg) and two spec gaps (`DenyCode` was missing `ALREADY_EXECUTED`; `03-INTERFACES.md`'s `Ledger` ownership row was wrong). Full detail in `docs/OUTCOME.md` Phase 0 entry and `docs/common/08-CHANGELOG.md`. Committed and pushed (`46f8514`).
 - 2026-07-29 — Phase 1a complete. `src/mandate/schema.ts` (`Mandate` + `isMandate()` guard), `sign.ts` (`canonicalJSON`/`generateKeyPair`/`sign`/`verify`, matches the spec exactly), `render.ts` (`renderConsent()`, deviated from the spec's plain `.join(', ')` sketch — see below). 9 real tests across `sign.test.ts` (5) and `render.test.ts` (4, added after finding bugs), all passing; `tsc --noEmit` clean. Found and fixed two more real bugs by smoke-testing `renderConsent()` against Beat 2's exact expected sentence: the spec's plain comma-join doesn't match Beat 2's grammatical "a, b or c" wording, and a naive `capitalize()` can't turn `bigbasket` into `BigBasket`. Full detail in `docs/OUTCOME.md` Phase 1a entry. Committed and pushed (`b8e9882`).
-- 2026-07-29 — Phase 1b complete. `src/policy/decide.ts` + `decide.test.ts` (11 tests). Found a real, significant rule-order bug: the spec's decide() checked signature/expiry *before* the read-access short-circuit, which would deny a read against an expired/badly-signed mandate — contradicting both `docs/03-WEBCMD-INTEGRATION.md`'s explicit "no signature verification" for reads and the required test's own title ("read access always allows, regardless of mandate state"). Moved read-access to Rule 0. Wrote up the full reasoning as `docs/common/02-DECISIONS.md` ADR-003 (not just a changelog note — this changes a contract). Also widened `SpendRequest.access` to include `undefined` (the original `'read'|'write'`-only type made the `UNKNOWN_COMMAND` check unreachable dead code). Updated `docs/04-POLICY-ENGINE-SPEC.md` to match, per CLAUDE.md's rule-order-change requirement. 20/20 tests passing, `tsc --noEmit` clean. Did NOT implement `rules.ts` — not required by the Phase 1b prompt, left as its Phase 0 stub. Full detail in `docs/OUTCOME.md` Phase 1b entry. About to commit and push, then start Phase 1e.
+- 2026-07-29 — Phase 1b complete. `src/policy/decide.ts` + `decide.test.ts` (11 tests). Found a real, significant rule-order bug: the spec's decide() checked signature/expiry *before* the read-access short-circuit, which would deny a read against an expired/badly-signed mandate — contradicting both `docs/03-WEBCMD-INTEGRATION.md`'s explicit "no signature verification" for reads and the required test's own title ("read access always allows, regardless of mandate state"). Moved read-access to Rule 0. Wrote up the full reasoning as `docs/common/02-DECISIONS.md` ADR-003 (not just a changelog note — this changes a contract). Also widened `SpendRequest.access` to include `undefined` (the original `'read'|'write'`-only type made the `UNKNOWN_COMMAND` check unreachable dead code). Updated `docs/04-POLICY-ENGINE-SPEC.md` to match, per CLAUDE.md's rule-order-change requirement. 20/20 tests passing, `tsc --noEmit` clean. Did NOT implement `rules.ts` — not required by the Phase 1b prompt, left as its Phase 0 stub. Full detail in `docs/OUTCOME.md` Phase 1b entry. Committed, pushed — hit a real merge conflict in `08-CHANGELOG.md` with Agent B (who'd pushed their own Phase 0 sync entry in the meantime), resolved per `06-SYNC-WORKFLOW.md`'s append-only-conflict protocol (kept both entries, ordered by push order). Rebased cleanly, re-verified `tsc --noEmit`/`npm test` after, pushed (`37bf928`).
+- 2026-07-29 — Phase 1e complete. `src/receipt/schema.ts` (`Receipt`) and `chain.ts` (`buildAndSignReceipt()`, `verifyReceipt()` from the spec exactly, plus `sha256Hex()`/`verifyChain()` — the spec describes these in prose, no code shown, so their shape here is this phase's own design). 4 tests, all passing, no spec bugs found this time. Also synced `01-PROJECT-STATUS.md`'s 1c/1d table rows to match what Agent B had already written in their own status section (table was getting stale — I didn't invent anything, just propagated). Full detail in `docs/OUTCOME.md` Phase 1e entry. About to commit and push, then start Phase 1f.
 
 ## Next steps
 
-1. Commit and push Phase 1b.
-2. Phase 1e: `src/receipt/schema.ts` (`Receipt` interface) and `chain.ts` (`buildAndSignReceipt()`, `verifyReceipt()`, chain-walking logic), per `docs/PROMPTS.md` Phase 1e. Required tests: a valid two-receipt chain verifies end to end, and editing the first receipt breaks the *second* receipt's chain link (not just the first's own signature) — this is what Beat 7's tamper test depends on.
-3. Phase 1f after that, per `docs/common/05-PHASE-OWNERSHIP.md` — but check Sync Point 3 first (next item).
-4. At Sync Point 3 (before 1f), confirm Agent B's 1c and 1d are pushed and their manual test scripts pass locally for you (`docs/common/07-INTEGRATION.md`) before wiring the CLI's `gate run` / `gate fund` subcommands. The signature-only subcommands (`gate mandate create/resign`, `gate receipt show`, `gate verify`) can be built earlier if you're waiting.
+1. Commit and push Phase 1e.
+2. Phase 1f: `src/cli/gate.ts` + `src/cli/ui.ts`, per `docs/05-DEMO-SCRIPT.md` and `docs/PROMPTS.md` Phase 1f. Build in dependency order — start with `gate scan`, `gate mandate create/resign`, `gate receipt show`, `gate verify` (need only 1a/1b/1e, already done). Do NOT start `gate run`/`gate fund` until Agent B's 1c/1d are pushed and their manual test scripts pass locally (Sync Point 3, `docs/common/07-INTEGRATION.md`) — check `04-BLOCKERS.md`/`01-PROJECT-STATUS.md` each session for whether B-001 has cleared.
+3. Phase 1g (full end-to-end run) after 1f is complete, per `docs/common/05-PHASE-OWNERSHIP.md`.
 
 ## Known issues / rough edges
 
