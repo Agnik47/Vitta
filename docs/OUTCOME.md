@@ -143,26 +143,122 @@ Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc 
 
 ## Phase 1c — Dodo Payments integration
 
-**Status:** ❌ Blocked — partial credentials, not enough to start
-**Timestamp:** 2026-07-29, Agent A (reassigned from Agent B, ADR-005)
+**Status:** ✅ Provisioning + live verification complete — B-001 fully cleared. Real money-path proven end to end in test mode: product → checkout → paid → `credit.added` webhook → 100000 credits readable via the read-only key. `src/ledger/DodoCreditLedger.ts` implementation itself still not written (deliberately out of scope for this session — see below).
+**Timestamp:** 2026-07-29 (later same day), Agent A
 
 - [x] Dodo test-mode account confirmed to exist (user screenshot, Settings → Promotions)
-- [ ] All required API keys/IDs obtained — **partial: `DODO_API_KEY` (write key) provided, `DODO_API_KEY_READONLY`, the test-mode Product ID, and `DODO_CREDIT_ENTITLEMENT_ID` still needed**
-- [ ] `fund()` creates a real Checkout Session — paste session ID/response below
-- [ ] `balance()` — record the ACTUAL field name Dodo's API returns (Agent B already found this from real SDK types, see the open-questions table — still needs a live-call confirmation)
-- [ ] `draw()` — record whether request-side idempotency_key is actually supported (Agent B already found this from real SDK types too — still needs a live-call confirmation)
-- [ ] Integration script run against real API — output pasted below
+- [x] All required API keys/IDs obtained — `DODO_API_KEY` (write) and `DODO_API_KEY_READONLY` were both already present in `.env` (found populated this session; `04-BLOCKERS.md`/this file's earlier entry were stale — only `DODO_CREDIT_ENTITLEMENT_ID` and the Product were genuinely still missing). Both keys verified live this session (see below). `DODO_WEBHOOK_SECRET` remains empty — out of scope for this session's task, still optional per `docs/02-DODO-INTEGRATION.md`.
+- [x] Credit Entitlement created for real via `client.creditEntitlements.create()`: `cde_0NkBmcWcZ3I79sHr1UZCx`, name "Agent Spend Credits", `unit: "INR paise"`, `precision: 0` (see design decision below)
+- [x] Top-up Product created for real via `client.products.create()`, credit entitlement attached: `pdt_0NkBmcZQJLSicxFMHlNHX`, name "Agent Spend Credits Top-Up", one-time price ₹1,000.00 (100000 paise), 100000 credits granted on purchase
+- [x] `fund()`-shaped Checkout Session created for real via `client.checkoutSessions.create()`: `cks_0NkBmhmGVSy7WTCPOd8oh` → `https://test.checkout.dodopayments.com/session/cks_0NkBmhmGVSy7WTCPOd8oh`
+- [x] Test purchase completed — **done by the user, not the agent** (completing a hosted checkout means entering card/UPI details, a prohibited agent action even in test mode). Paid with the test Visa `4576238912771450`. Session actually used: `cks_0NkBw28CUxmbI2KsSdVFu` (the third session minted — see the price-reduction note below; the first two went stale unused).
+- [x] Entitlement confirmed present in that customer's credit entitlements, **read with the read-only key** — real output below. Customer created by the purchase: `cus_0NkBwH3N9Ld41wgNzK6ty`. Balance: `100000` credits (= ₹1,000.00 of reserve at 1 credit = 1 paise), `overage: 0`.
+- [x] `balance()` field name — **CONFIRMED against a real live balance.** The field is `balance` (the doc's original guess was right), reached via `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })`. **But its TYPE is not what the SDK's own types claim — see the finding below.**
+- [ ] `draw()` idempotency — not re-tested this session; Agent B's real-SDK-types finding (documented in the open-questions table below) still stands, unchanged.
+- [x] Integration script run against the real API — output pasted below
 
 **What actually happened / deviations:**
 
-**Security note, not a code deviation — worth recording anyway.** While setting up credentials, a real-looking `DODO_API_KEY` value briefly appeared pasted into the tracked, committed `.env.example` template (never committed or pushed — caught in the working tree before either happened). Reverted `.env.example` to its clean placeholder state and moved the real value into the properly gitignored `.env`. Separately found `.gitignore`'s `.env` pattern was an exact-string match that did NOT cover `.env.local` — a second real credentials file, also with placeholder values only, had shown up untracked and unprotected. Widened the pattern to `.env.*` (with `.env.example` explicitly re-allowed, since that one's meant to be committed). No secret was ever committed or pushed at any point — this was a genuine near-miss, not an incident, but the `.gitignore` gap was real and is now fixed for both agents going forward.
+**Correction to this file's own earlier entry.** The previous Phase 1c status (and `docs/common/04-BLOCKERS.md` B-001) said `DODO_API_KEY_READONLY` was still missing. It was not — `.env` already had a real value on that line when this session started; only the comment above it hadn't been updated. Ran a live probe (`creditEntitlements.retrieve()` with the read-only key → succeeded; `creditEntitlements.create()` with the same key → `401`) to confirm it's genuinely scoped read-only, not just present. Lesson for whoever picks this up next: trust `.env`'s actual contents over a blocker doc's prose when they disagree, then verify live either way.
 
-**Real finding, not yet verified against a live call:** the one real key value provided doesn't match `docs/02-DODO-INTEGRATION.md`'s assumed `sk_test_...` prefix format — it's a different-shaped token entirely. Not confirming or denying this is a problem until an actual API call is made against it (a key format assumption in a doc's placeholder text isn't authoritative), but flagging now in case the spec's placeholder pattern misled anyone into thinking a real key "looks wrong" when it doesn't match `sk_test_xxxxx`.
+**Real design decision — how "INR-denominated reserve credits" maps onto the SDK's actual fields.** The installed `dodopayments@2.43.0` SDK's real `CreditEntitlementCreateParams` has no `credit_type: 'fiat'` option at all (the `credit-based-billing` skill installed this session via `npx skills add dodopayments/skills` shows a `credit_type`/`unit_currency` fiat-credit example, but that field doesn't exist anywhere in the actual installed SDK types or the live API's `422` validation — skill docs and the real SDK disagree here, and the real SDK wins per `CLAUDE.md` rule 6). The only real fields are `unit` (a free-text label) and `precision` (decimal places). Chose `unit: "INR paise"`, `precision: 0` — i.e. 1 credit = 1 paise — specifically so it lines up 1:1 with the integer-paise arithmetic `docs/02-DODO-INTEGRATION.md`'s `fund()`/`draw()` sketches already use (`amountInrPaise: number`), with no rupees↔paise conversion step anywhere in `DodoCreditLedger.ts`. Whoever implements that file next should treat "credits" and "paise" as the same integer, not convert between them.
 
-Still waiting on: `DODO_API_KEY_READONLY`, the test-mode "Agent Spend Credits" Product (and its `product_id`), and that Product's Credit Entitlement ID (`DODO_CREDIT_ENTITLEMENT_ID`) — per `docs/02-DODO-INTEGRATION.md` § Setup. Not starting `src/ledger/` code with only one of four needed values — `balance()`/`draw()` specifically can't be tested without the read-only key and the Credit Entitlement ID (Agent B's real-SDK research: both are required parameters, not optional).
+**Real field-name correction, caught by an actual `422`, not by reading docs.** `Product`'s own id field is `product_id`, not `id` — `ProductEntitlementSummary` (a nested type in the same file) happens to have an `id` field, and a first pass at the provisioning script misread that nested interface as belonging to `Product` itself. First checkout-session attempt failed with a real `422 Failed to deserialize... missing field product_id`, which is what caught it. Fixed and reran; the entitlement/product from the failed attempt were reused (find-by-name-first logic), not duplicated — confirmed by the retry response reporting `"created": false` for both.
 
-**Real API response shapes observed (paste raw JSON):**
+**Real API response shapes observed:**
+```json
+{
+  "entitlement": {
+    "id": "cde_0NkBmcWcZ3I79sHr1UZCx",
+    "name": "Agent Spend Credits",
+    "unit": "INR paise",
+    "precision": 0,
+    "created": false
+  },
+  "product": {
+    "id": "pdt_0NkBmcZQJLSicxFMHlNHX",
+    "name": "Agent Spend Credits Top-Up",
+    "created": false
+  },
+  "checkout_session": {
+    "session_id": "cks_0NkBmhmGVSy7WTCPOd8oh",
+    "checkout_url": "https://test.checkout.dodopayments.com/session/cks_0NkBmhmGVSy7WTCPOd8oh"
+  }
+}
+```
+Read-only key probe: `creditEntitlements.retrieve()` → `200`, real entitlement JSON back. `creditEntitlements.create()` with the same key → `401 status code (no body)`.
 
+**Cleanup:** the provisioning script (`_dodo-setup.ts`) and the read-only-key probe script (`_dodo-verify-readonly.ts`) were one-off, root-level, not part of `src/`, and deleted after use — same fixture-discipline precedent as Phase 1h's `_gen-fixtures.ts`. If this provisioning needs to be rerun (e.g. a fresh checkout session because the one above went stale), the logic is fully reconstructable from this entry: find-or-create by name via `creditEntitlements.list()`/`products.list()`, then `checkoutSessions.create({ product_cart: [{ product_id: 'pdt_0NkBmcZQJLSicxFMHlNHX', quantity: 1 }], ... })`.
+
+**Webhook payload shapes — captured for real from `dodo wh trigger`, 2026-07-29.** Installed the Dodo CLI (`v3.4.0`) and probed five event types against a throwaway `node:http` receiver (no new deps, no express, no `standardwebhooks` — a shape probe, not a real handler; deleted after use). Four real findings, three of which contradict `docs/02-DODO-INTEGRATION.md`:
+
+1. **`payment.succeeded` is correct; the CLI's argument name is the odd one out.** `dodo wh trigger`'s supported-event list advertises `payment.success` and `refund.success`, but the actual JSON body's `type` field reads `payment.succeeded` / `refund.succeeded`. The doc's handler sketch (`case 'payment.succeeded'`) was right all along — the CLI's CLI-argument vocabulary and the on-the-wire `type` vocabulary simply differ. **Switch on the wire `type`, not on the CLI's arg names.**
+
+2. **`dodo wh trigger` sends NO Standard Webhooks signature headers at all.** The doc says three headers (`webhook-id`, `webhook-signature`, `webhook-timestamp`) and to dedupe on `webhook-id`. The real captured headers were only: `content-type`, `connection`, `user-agent: Bun/1.3.14`, `accept`, `host`, `accept-encoding`, `content-length`. That's it. This makes sense once you notice the `Bun/1.3.14` user-agent: offline `trigger` payloads are synthesized **locally by the CLI binary itself** and never round-trip through Dodo's servers, so nothing ever signed them. **Consequence: signature verification and `webhook-id` dedupe cannot be tested with `dodo wh trigger` — only with `dodo wh listen` against a real event.** Anyone writing the real handler must not conclude "signatures work" from a green offline test.
+
+3. **The doc's `case 'CreditLedgerEntry':` event name appears to be wrong.** No credit-related event exists in the CLI's offline trigger list at all. The real dashboard's webhook event catalog (seen directly in the Dodo dashboard's "Subscribe to events" picker) lists them under a `credit` group as `credit.added`, `credit.balance_low`, `credit.deducted`, `credit.expired`, `credit.manual_adjustment` — dotted lowercase, matching every other event's convention, not a PascalCase `CreditLedgerEntry`. Not yet confirmed against a live delivered payload, so recorded as "almost certainly `credit.*`" rather than settled.
+
+4. **Minor: the CLI's offline `payment.failed` fixture is internally inconsistent.** Its envelope says `"type":"payment.failed"` but the nested `data.status` still reads `"succeeded"`, with `error_code`/`error_message` both `null`. A real failed payment would presumably not look like that. Don't write logic that trusts `data.status` based on offline fixtures.
+
+Real envelope shape (consistent across all five events) — top level is `{business_id, data, timestamp, type}`, with the entity under `data` and a second discriminator `data.payload_type` (`"Payment"` / `"Refund"` / `"Dispute"` / `"Subscription"`):
+```json
+{
+  "business_id": "bus_test",
+  "type": "payment.succeeded",
+  "timestamp": "2026-07-28T21:50:26.002Z",
+  "data": {
+    "payload_type": "Payment",
+    "payment_id": "pay_test",
+    "checkout_session_id": "cks_123",
+    "status": "succeeded",
+    "currency": "USD",
+    "total_amount": 400,
+    "settlement_amount": 400,
+    "customer": { "customer_id": "cus_test", "email": "john.doe@example.com", "name": "Test user", "phone_number": "+15555550100", "metadata": {} },
+    "product_cart": [{ "product_id": "pdt_test", "quantity": 1 }],
+    "metadata": {},
+    "payment_method": "card", "card_last_four": "4242", "card_network": "VISA",
+    "invoice_id": "inv_test", "subscription_id": null, "disputes": [], "refunds": [],
+    "error_code": null, "error_message": null, "created_at": "...", "updated_at": null
+  }
+}
+```
+Note `data.metadata` and `data.customer.customer_id` are both present on payment events — that's how `fund()`'s `metadata: { mandate_id }` comes back, and how a checkout session resolves to the `customer_id` that `balances.retrieve()` needs, without the two-hop `checkoutSessions.retrieve → payments.retrieve` chain Agent B documented from SDK types. Worth confirming against a live event before relying on it.
+
+**Live end-to-end verification, 2026-07-29 — the checkout was actually paid and the credits actually landed.** Four findings, one of which contradicts a previously-recorded entry in this very file.
+
+**FINDING A — `balance` is a `number` on the wire, but the SDK types declare it `string`. This is a real trap.** Agent B's earlier open-questions entry (below) recorded, from reading `balances.ts`'s TypeScript, that "`balance` is a `string` (decimal), not a `number`." The actual live JSON says otherwise:
+```json
+{ "id": "cdb_0NkBwY5jCqg232zXsjbpn", "customer_id": "cus_0NkBwH3N9Ld41wgNzK6ty",
+  "credit_entitlement_id": "cde_0NkBmcWcZ3I79sHr1UZCx",
+  "balance": 100000, "overage": 0,
+  "last_transaction_at": "2026-07-28T22:01:36.931280Z", ... }
+```
+`100000` — unquoted, a JSON number. Meanwhile the **ledger entry** for the very same transaction reports `"amount": "100000"` and `"balance_after": "100000"` — quoted strings. So the same API is genuinely inconsistent between the balance object (number) and the ledger object (string), and the SDK's generated types are wrong about the balance one. **`balance()` must not assume either — coerce explicitly (`Number(x)`), and never `===`-compare a balance against a ledger amount without coercing both.** This is exactly the class of bug `CLAUDE.md` rule 6 exists to catch, and it was only visible by making the real call.
+
+**FINDING B — Standard Webhooks signature headers ARE present on live events, confirming the offline-trigger caveat above was the whole story.** The live `POST` carried `webhook-id: msg_3H9MzzHVbSUwcrGphkKn687qiIZ`, `webhook-signature: v1,Gn1KJ3JY2WKz6xZGdiilJ2nPYsKU9qMrAqLAcHlDQvg=`, `webhook-timestamp: 1785276097`, with `user-agent: Svix-Webhooks/rolling`. So Dodo's webhook delivery really is Svix-backed Standard Webhooks, exactly as `docs/02-DODO-INTEGRATION.md` says — the earlier "no signature headers" finding applies **only** to `dodo wh trigger`'s locally-synthesized offline payloads, not to real deliveries. Both halves of that had to be observed to state either correctly.
+
+**FINDING C — the doc's `case 'CreditLedgerEntry':` isn't wrong, it's matching the wrong field.** The real credit event has `type: "credit.added"` at the envelope level and `data.payload_type: "CreditLedgerEntry"` nested inside. Both strings are real; they live on different fields. The handler switches on `payload.type`, so it must use `'credit.added'` there — `'CreditLedgerEntry'` would only match if switching on `payload.data.payload_type`. Supersedes the "almost certainly `credit.*`" guess recorded above; now settled with a real payload.
+
+**FINDING D — `metadata` propagates from the checkout session onto BOTH the payment and the credit-ledger events.** The `metadata: { purpose: 'agent-spend-reserve-setup' }` passed to `checkoutSessions.create()` came back verbatim on `payment.succeeded`'s `data.metadata` **and** on `credit.added`'s `data.metadata`. This is the mechanism `fund()` should use to carry `mandate_id` through to settlement — and it means a webhook consumer can tie a credit grant back to its mandate without any extra lookup. Also note both events expose `customer_id` directly (`data.customer.customer_id` on the payment, `data.customer_id` on the credit event), so **the two-hop `checkoutSessions.retrieve → payments.retrieve` chain Agent B documented is only needed on the polling path, not the webhook path.**
+
+Real `credit.added` body (live, abridged to the fields that matter):
+```json
+{ "type": "credit.added", "business_id": "bus_0NidpUR3LLwbZ99t97YEe",
+  "timestamp": "2026-07-28T22:01:36.931280Z",
+  "data": { "payload_type": "CreditLedgerEntry", "transaction_type": "credit_added",
+    "id": "cdl_0NkBwY5qjgbQoKxaoyp8A", "grant_id": "cdg_0NkBwY5lTQz7cE3rJJHPm",
+    "credit_entitlement_id": "cde_0NkBmcWcZ3I79sHr1UZCx",
+    "customer_id": "cus_0NkBwH3N9Ld41wgNzK6ty",
+    "amount": "100000", "balance_before": "0", "balance_after": "100000",
+    "is_credit": true, "overage_before": "0", "overage_after": "0",
+    "description": "Credits granted for OneTime payment",
+    "metadata": { "purpose": "agent-spend-reserve-setup" } } }
+```
+
+**Price reduction, and a scope-boundary note.** The product was first created at ₹1,000.00. The user asked to lower it for repeated testing, worried about spending real money. Clarified that test mode never touches real funds (the checkout page carries Dodo's own "Test Mode" badge), but lowered it anyway since a smaller number is less noisy across many demo runs: ₹1,000.00 → ₹1.00 → finally **₹42.00**, because Dodo enforces a **$0.50 USD minimum** on checkout and rejected anything below it. The real payment confirms the floor: `settlement_amount: 50`, `settlement_currency: "USD"` (i.e. exactly $0.50) against `total_amount: 4956` INR paise (₹49.56, incl. ₹7.56 GST). **Credits granted were deliberately left at 100000 throughout** — `products.update()` leaves `credit_entitlements` unchanged when the field is omitted, so the reserve stayed ₹1,000-sized while the sticker price fell. Sticker price and reserve size are independent here, which is fine for a demo but worth knowing before anyone "fixes" the apparent mismatch.
+
+**Not done this session, and why:** `src/ledger/DodoCreditLedger.ts` itself (the actual `fund()`/`balance()`/`draw()`/`release()` implementation) was not started. The task this session was scoped narrowly to provisioning the entitlement/product/checkout-session and confirming the two API keys — not to writing the ledger code, per the explicit instruction that framed this session's work. B-001 is now unblocked for that follow-up work whenever it's picked up.
 
 ---
 
@@ -470,7 +566,7 @@ No changes made to any of the four files — this phase's job was to *confirm*, 
 | Question | Where it was open | Real answer found | Date |
 |---|---|---|---|
 | Does Dodo's checkout/payment API accept a request-side idempotency key? | `02-DODO-INTEGRATION.md` | **Partially, from real SDK types (not yet a live call — B-001 still blocks that).** `checkoutSessions.create()`'s params (`CheckoutSessionCreateParams`) have no `idempotency_key` field at all — no evidence funding itself is natively idempotent. But the actual spend-deduction operation is a different, real SDK method than the doc guessed (`client.creditEntitlements.balances.createLedgerEntry(customerID, { credit_entitlement_id, entry_type: 'debit', amount, idempotency_key })` — not `creditEntitlements.deduct()`, which doesn't exist), and its params (`BalanceCreateLedgerEntryParams`) DO include a real `idempotency_key?: string \| null` field. So the piece that actually matters for `draw()` (the deduct call) has native idempotency support; the `ledger.jsonl` guard built in Phase 1d (`hasAlreadyDrawn`/`recordDraw`, see ADR-004) stays as defense-in-depth per the spec's "belt and suspenders" instruction, not because native support is absent. | 2026-07-29, Agent B |
-| Exact field name for Credit Entitlement Balance | `02-DODO-INTEGRATION.md` | **From real SDK types (not a live response yet):** the doc's guess of `balance` was correct, but the *shape around it* is not what the sketch assumed. There is no `creditEntitlementBalances.retrieve(reserveRef)` method at all. The real hierarchy is `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })` → `CustomerCreditBalance { id, balance: string, credit_entitlement_id, customer_id, overage, ... }` — keyed by **customer**, not by checkout-session id. `balance` is a `string` (decimal), not a `number`. This means `Ledger.fund()`'s `reserveRef` can't simply be the checkout session's `session_id` (also note: the field is `session_id`, not `.id` as the doc's sketch used) if `balance()`/`draw()` need a customer id — resolving a session to its customer requires `checkoutSessions.retrieve(session_id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`. Recorded here now so whoever picks up Phase 1c (still blocked on B-001) doesn't re-derive this from scratch; the dashboard's `/api/mandate` route (Phase 1h) implements this resolution chain for real, marked unverified-live pending B-001, same as Phase 1d's `execute()`. | 2026-07-29, Agent B |
+| Exact field name for Credit Entitlement Balance | `02-DODO-INTEGRATION.md` | **From real SDK types (not a live response yet):** the doc's guess of `balance` was correct, but the *shape around it* is not what the sketch assumed. There is no `creditEntitlementBalances.retrieve(reserveRef)` method at all. The real hierarchy is `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })` → `CustomerCreditBalance { id, balance: string, credit_entitlement_id, customer_id, overage, ... }` — keyed by **customer**, not by checkout-session id. `balance` is a `string` (decimal), not a `number`. **⚠️ CORRECTED 2026-07-29 by Agent A against a real live call: the SDK's type is WRONG here — the wire actually returns `"balance": 100000` as a JSON *number*, while the ledger object's `amount`/`balance_after` for the same transaction ARE quoted strings. Coerce explicitly; see Phase 1c FINDING A.** This means `Ledger.fund()`'s `reserveRef` can't simply be the checkout session's `session_id` (also note: the field is `session_id`, not `.id` as the doc's sketch used) if `balance()`/`draw()` need a customer id — resolving a session to its customer requires `checkoutSessions.retrieve(session_id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`. Recorded here now so whoever picks up Phase 1c (still blocked on B-001) doesn't re-derive this from scratch; the dashboard's `/api/mandate` route (Phase 1h) implements this resolution chain for real, marked unverified-live pending B-001, same as Phase 1d's `execute()`. | 2026-07-29, Agent B |
 | Is the $1,000 promotional credit visible/real in the dashboard? | vault `_TASKS & STATUS` Q8 | **Resolved, and the answer changes the picture.** The user confirmed a real Dodo test-mode account exists and shared a screenshot of Settings → Promotions: "Promo Name: Replit x Dodo Payments," "Fee waiver still available on $0.00 / $1,000.00," "Transaction Fee and Transaction Fixed Fee are waived until the threshold is reached," expires 7 Oct 2026. **This is a transaction-fee waiver on Dodo's own processing fees, not a spendable credit balance.** It's a completely different Dodo feature from the Credit-Based Billing ("Agent Spend Credits" Product + Credit Entitlement) this project's `Ledger.fund()`/`balance()`/`draw()` are built around. It doesn't provide `DODO_API_KEY`/`DODO_API_KEY_READONLY`/a Product/a Credit Entitlement ID, and doesn't change what B-001 still needs. Likely moot for this build anyway — test-mode transactions already involve no real money and (typically) no real processing fees regardless of any promotion, since nothing here ever enters live mode (`CLAUDE.md` Hard rule 1). Good news it does confirm: the account itself is real and in Test Mode — genuine progress toward clearing B-001, just not the whole thing. | 2026-07-29, Agent A |
 
 ---

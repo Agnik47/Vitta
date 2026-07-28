@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Locally downloaded CLI binaries (e.g. the standalone Dodo CLI) — per-machine tooling, not source.
+/.bin/
+
 # Build output
 dist/
 
