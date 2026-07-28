@@ -4,7 +4,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Mandate, GateEvent, Receipt } from './types';
-import { sha256Hex, CHAIN_HEAD_HASH } from './hash';
+import { sha256Hex, CHAIN_HEAD_HASH, verifySignature } from './hash';
 
 export function getDataDir(): string {
   return path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.MANDATE_GATE_DATA_DIR ?? '../');
@@ -74,24 +74,40 @@ export function readReceipts(): Receipt[] {
 
 export interface ChainVerification {
   receipt_id: string;
-  /** null = not yet checkable — the gate's public key has no defined persistence location yet
-   * (Phase 1f gap, see docs/agent-b/WORKSPACE.md § Notes for Agent A). Chain-link validity below
-   * needs no key at all, so it's real either way. */
+  /** null = gate public key not found yet (keys/gate.public.pem doesn't exist until the CLI has
+   * signed at least one receipt on this machine — src/cli/keys.ts, gitignored, per-machine).
+   * Chain-link validity below needs no key at all, so it's real regardless. */
   signature_valid: boolean | null;
   chain_link_valid: boolean;
 }
 
-/** Re-implementation of src/receipt/chain.ts's verifyChain() hash-link check — see
- * docs/06-DASHBOARD-SPEC.md's duplication note. Must flip to invalid on a real tamper-test file
- * edit (05-DEMO-SCRIPT.md Beat 7), which it does: any field change alters sha256Hex(receipt),
- * breaking the NEXT receipt's prev_receipt_hash match. */
-export function verifyChainLocal(receipts: Receipt[]): ChainVerification[] {
+/** Reads keys/gate.public.pem via the same MANDATE_GATE_DATA_DIR the CLI writes to — per
+ * src/cli/keys.ts's design note, no new configuration surface. Returns null if it doesn't exist
+ * yet (no receipt has ever been signed on this machine) rather than throwing. */
+export function loadGatePublicKeyPem(): string | null {
+  const keyPath = path.join(getDataDir(), 'keys', 'gate.public.pem');
+  if (!existsSync(keyPath)) return null;
+  try {
+    return readFileSync(keyPath, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+/** Re-implementation of src/receipt/chain.ts's verifyChain() — see docs/06-DASHBOARD-SPEC.md's
+ * duplication note. Chain-link check must flip to invalid on a real tamper-test file edit
+ * (05-DEMO-SCRIPT.md Beat 7), which it does: any field change alters sha256Hex(receipt), breaking
+ * the NEXT receipt's prev_receipt_hash match. Signature check needs `gatePublicKeyPem`; pass null
+ * (e.g. from loadGatePublicKeyPem() before the key exists) to get `signature_valid: null` instead
+ * of a false negative. */
+export function verifyChainLocal(receipts: Receipt[], gatePublicKeyPem: string | null): ChainVerification[] {
   const sorted = [...receipts].sort((a, b) => a.signed_at.localeCompare(b.signed_at));
   return sorted.map((receipt, i) => {
     const expectedPrevHash = i === 0 ? CHAIN_HEAD_HASH : sha256Hex(sorted[i - 1]);
+    const { sig, ...unsigned } = receipt;
     return {
       receipt_id: receipt.receipt_id,
-      signature_valid: null,
+      signature_valid: gatePublicKeyPem ? verifySignature(unsigned, sig, gatePublicKeyPem) : null,
       chain_link_valid: receipt.prev_receipt_hash === expectedPrevHash,
     };
   });

@@ -46,8 +46,10 @@ Spec: `docs/06-DASHBOARD-SPEC.md`. Prompt: `docs/PROMPTS.md` § Phase 1h. Depend
 - [x] Pages: `/` (mandate summary + live Dodo balance), `/events` (live feed, 1.8s polling, no WebSockets/SSE), `/receipts` (verify status) — done, all verified against real fixture data in an actual browser tab
 - [x] Verify no route imports `DODO_API_KEY` (write key) — only `DODO_API_KEY_READONLY` — grepped, confirmed clean
 - [x] `npm run build && npm run start` (not `next dev`), confirm all three pages show real data — done for real; data was fixture data generated with the production signing code (Phase 1f/CLI doesn't exist yet to produce it directly, see `docs/OUTCOME.md` for why that's not a mock)
-- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **cannot test yet, no CLI exists.** Revisit once Agent A ships Phase 1f.
+- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **cannot test yet** — Phase 1f's CLI exists now but `gate run` itself needs Phase 1c (B-001). Revisit once that clears.
 - [x] Go through `docs/06-DASHBOARD-SPEC.md` § Acceptance checklist explicitly, log results into `docs/OUTCOME.md` — done, one item pending (above)
+- [x] **Follow-up, same day:** wired up real `signature_valid` in `/api/receipts` using `keys/gate.public.pem` (Phase 1f's `src/cli/keys.ts`) — verified against a bootstrapped real keypair, including a live tamper test distinguishing signature vs. chain-link failure. See `docs/OUTCOME.md`.
+- [x] **Follow-up, same day:** committed the real `manifest.json` (805 commands, 228 write) Agent A requested, so `gate scan` is testable against real data on both machines.
 
 ## Shared / filler work (pick up when blocked on the above)
 

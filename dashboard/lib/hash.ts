@@ -25,3 +25,12 @@ export function sha256Hex(obj: unknown): string {
 }
 
 export const CHAIN_HEAD_HASH = `sha256:${'0'.repeat(64)}`;
+
+/** Duplicated from src/mandate/sign.ts's verify(). Used against the gate's public key
+ * (keys/gate.public.pem, per src/cli/keys.ts) to check a receipt's own signature — separate
+ * from chain-link validity, which needs no key at all. */
+export function verifySignature(obj: unknown, signatureB64: string, publicKeyPem: string): boolean {
+  const publicKey = crypto.createPublicKey(publicKeyPem);
+  const sig = Buffer.from(signatureB64, 'base64');
+  return crypto.verify(null, Buffer.from(canonicalJSON(obj)), publicKey, sig);
+}
