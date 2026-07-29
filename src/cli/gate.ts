@@ -1,13 +1,7 @@
 #!/usr/bin/env node
 // `gate` CLI entrypoint. See docs/05-DEMO-SCRIPT.md for the exact terminal output each
 // subcommand targets, and docs/PROMPTS.md Phase 1f for the subcommand list.
-//
-// `gate run` and `gate fund` are NOT implemented in this phase — both need src/ledger/Ledger.ts
-// to exist as real code, which is Agent B's Phase 1c, currently blocked on B-001 (no real Dodo
-// test-mode account yet — see docs/common/04-BLOCKERS.md). Per CLAUDE.md rule 7 ("never mock what
-// you can call for real"), these print an honest blocked message and exit non-zero rather than
-// faking a Ledger call. Every other subcommand (scan, mandate create/resign, receipt show, verify)
-// is fully real — no mocked output anywhere, per docs/PROMPTS.md Phase 1f's own instruction.
+import { execSync } from 'node:child_process';
 import { loadManifest } from '../webcmd/manifest';
 import { sign, verify } from '../mandate/sign';
 import { renderConsent } from '../mandate/render';
@@ -15,11 +9,16 @@ import { publicKeyToDidKey } from '../mandate/did';
 import { generateId } from '../mandate/id';
 import { formatInr } from '../mandate/currency';
 import type { Mandate } from '../mandate/schema';
-import { verifyChain, CHAIN_HEAD_HASH } from '../receipt/chain';
+import { decide } from '../policy/decide';
+import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '../receipt/chain';
+import type { Receipt } from '../receipt/schema';
+import { DodoCreditLedger } from '../ledger/DodoCreditLedger';
+import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
+import { formatGateEventLine, formatAgentLine } from './ui';
 import { getOrCreateKeyPair } from './keys';
-import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts } from './store';
+import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt } from './store';
 
-function main(): void {
+async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
 
   try {
@@ -33,9 +32,9 @@ function main(): void {
       case 'verify':
         return cmdVerify(rest);
       case 'run':
-        return cmdRun();
+        return await cmdRun(rest);
       case 'fund':
-        return cmdFund();
+        return await cmdFund(rest);
       default:
         console.error(`Unknown command: ${command ?? '(none)'}`);
         console.error('Usage: gate <scan|mandate|receipt|verify|run|fund> ...');
@@ -117,7 +116,7 @@ function cmdMandateCreate(args: string[]): void {
   console.log(`✓ MANDATE ${mandate.mandate_id} signed\n`);
   console.log(`  "${renderConsent(mandate)}"\n`);
   console.log(`  ed25519 · issuer ${issuerDid}`);
-  console.log(`  reserve: not yet funded — run \`gate fund ${mandate.mandate_id} --amount <n>\` once available (blocked on Phase 1c, see docs/common/04-BLOCKERS.md B-001)`);
+  console.log(`  reserve: not yet funded — run \`gate fund ${mandate.mandate_id} --amount <n>\` to fund`);
 }
 
 function cmdMandateResign(args: string[]): void {
@@ -214,22 +213,229 @@ function cmdVerify(args: string[]): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// gate run / gate fund — not implemented this phase, honest blocked messages only
+// gate fund — fund a mandate's reserve via Dodo Payments credit top-up
 // ---------------------------------------------------------------------------------------------
 
-function cmdRun(): void {
-  console.error('✗ gate run is not available yet.');
-  console.error('  It needs src/ledger/Ledger.ts to exist as real code — Phase 1c is blocked on B-001');
-  console.error('  (no real Dodo test-mode account yet). src/webcmd/executor.ts is implemented but');
-  console.error('  unverified against a live command — see B-002. See docs/common/04-BLOCKERS.md.');
-  process.exitCode = 1;
+async function cmdFund(args: string[]): Promise<void> {
+  const { positionals, flags } = parseArgs(args);
+  const mandateId = positionals[0];
+  if (!mandateId) throw new Error('Usage: gate fund <mandate_id> --amount <n>');
+  const amountInr = Number(requireFlag(flags, 'amount'));
+  if (Number.isNaN(amountInr) || amountInr <= 0) throw new Error('--amount must be a positive number');
+
+  const mandate = loadMandate(mandateId);
+  const { sig: existingSig, ...existingUnsigned } = mandate;
+  const { publicKey: issuerPublicKey } = getOrCreateKeyPair('issuer');
+  if (!verify(existingUnsigned, existingSig, issuerPublicKey)) {
+    throw new Error(`Existing mandate ${mandateId}'s signature does not verify — refusing to fund a mandate that may have been tampered with.`);
+  }
+
+  const ledger = new DodoCreditLedger();
+  const amountInrPaise = Math.round(amountInr * 100);
+  const { reserveRef } = await ledger.fund(mandateId, amountInrPaise);
+
+  // Update and re-sign the mandate with the new reserve
+  const { privateKey } = getOrCreateKeyPair('issuer');
+  const funded: Omit<Mandate, 'sig'> = {
+    ...existingUnsigned,
+    reserve: { type: 'dodo_credit_test', blocked_inr: amountInr, ref: reserveRef },
+  };
+  const sig = sign(funded, privateKey);
+  const updatedMandate: Mandate = { ...funded, sig };
+  saveMandate(updatedMandate);
+
+  console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(amountInr)}`);
+  console.log(`  reserve reference ${reserveRef}`);
+  console.log(`  checkout required: open your browser to complete the Dodo Payments purchase before running commands`);
 }
 
-function cmdFund(): void {
-  console.error('✗ gate fund is not available yet.');
-  console.error('  It needs src/ledger/Ledger.ts to exist as real code — Phase 1c is blocked on B-001');
-  console.error('  (no real Dodo test-mode account yet). See docs/common/04-BLOCKERS.md.');
-  process.exitCode = 1;
+// ---------------------------------------------------------------------------------------------
+// gate run — decide, execute, and record a webcmd action under a mandate
+// ---------------------------------------------------------------------------------------------
+
+async function cmdRun(args: string[]): Promise<void> {
+  // Parse: args = ["--", "webcmd", "blinkit", "search", "atta"]
+  const dashDashIndex = args.indexOf('--');
+  if (dashDashIndex < 0) {
+    throw new Error('Usage: gate run -- webcmd <site> <command> [args...]');
+  }
+
+  const webcmdArgs = args.slice(dashDashIndex + 1);
+  if (webcmdArgs[0] !== 'webcmd') {
+    throw new Error('Only webcmd is supported');
+  }
+  if (webcmdArgs.length < 3) {
+    throw new Error('Usage: gate run -- webcmd <site> <command> [args...]');
+  }
+
+  const site = webcmdArgs[1];
+  const command = webcmdArgs[2];
+  const cmdArgs = webcmdArgs.slice(3);
+  const fullCommand = `${site}/${command}`;
+
+  // Load the most recent mandate
+  const allMandates = loadAllMandates();
+  if (!allMandates.length) {
+    throw new Error('No mandates found. Create one first: gate mandate create ...');
+  }
+  const mandate = allMandates[allMandates.length - 1];
+
+  // Get keys and manifest
+  const manifest = loadManifest();
+  const access = manifest.get(fullCommand);
+  const { publicKey: issuerPublicKey } = getOrCreateKeyPair('issuer');
+  const { privateKey: gatePrivateKey } = getOrCreateKeyPair('gate');
+
+  // Render agent action
+  const agentLine = formatAgentLine(`${site} ${command} ${cmdArgs.join(' ')}`);
+  console.log(agentLine);
+
+  // Rule 0: reads are free
+  if (access === 'read') {
+    const eventLine = formatGateEventLine({
+      event_id: generateId('evt'),
+      ts: new Date().toISOString(),
+      mandate_id: mandate.mandate_id,
+      mandate_hash: sha256Hex(mandate),
+      command: fullCommand,
+      access: 'read',
+      verdict: 'ALLOW',
+    });
+    console.log(eventLine);
+    return;
+  }
+
+  // For writes, fetch cart total via a read first
+  if (access !== 'write') {
+    throw new Error(`Unknown command "${fullCommand}" (not in manifest)`);
+  }
+
+  let cartAmountInr: number;
+  try {
+    // Try to fetch cart — if this fails, we can't proceed with a write
+    const cartCmd = `${site} cart -f json`;
+    const cartResult = execSync(`webcmd ${cartCmd}`).toString();
+    const cartData = JSON.parse(cartResult) as { total?: number; total_inr?: number };
+    if (cartData.total_inr === undefined && cartData.total === undefined) {
+      throw new Error('Cart total could not be determined (missing total_inr/total field)');
+    }
+    cartAmountInr = cartData.total_inr ?? cartData.total ?? 0;
+  } catch (err) {
+    throw new Error(`Failed to fetch cart total: ${(err as Error).message}`);
+  }
+
+  // Call decide()
+  const now = new Date();
+  const ledger = new DodoCreditLedger();
+  let ledgerBalanceInr = 0;
+  try {
+    if (mandate.reserve.ref) {
+      const balancePaise = await ledger.balance(mandate.reserve.ref);
+      ledgerBalanceInr = balancePaise / 100;
+    }
+  } catch (err) {
+    // If balance lookup fails, treat as zero balance (fail closed)
+    ledgerBalanceInr = 0;
+  }
+
+  const allReceipts = loadAllReceipts();
+  const txnCountForThisMandate = allReceipts.filter((r) => r.mandate_hash === sha256Hex(mandate)).length;
+
+  const decision = decide(
+    { command: fullCommand, site, access: 'write', amountInr: cartAmountInr },
+    mandate,
+    issuerPublicKey,
+    ledgerBalanceInr,
+    txnCountForThisMandate,
+    now,
+  );
+
+  const eventLine = formatGateEventLine({
+    event_id: generateId('evt'),
+    ts: now.toISOString(),
+    mandate_id: mandate.mandate_id,
+    mandate_hash: sha256Hex(mandate),
+    command: fullCommand,
+    access: 'write',
+    verdict: decision.verdict,
+    code: decision.verdict === 'DENY' ? decision.code : undefined,
+    amount_inr: cartAmountInr,
+  });
+  console.log(eventLine);
+
+  if (decision.verdict === 'DENY') {
+    if (decision.code === 'OVER_TOTAL_CAP') {
+      console.log(`  cart ₹${formatInr(cartAmountInr)} · mandate ₹${formatInr(mandate.scope.cap_inr)}`);
+      if (decision.overBy) {
+        console.log(`  over by ₹${formatInr(decision.overBy)}`);
+      }
+    }
+    if (decision.code === 'OVER_PER_TXN_CAP') {
+      console.log(`  transaction ₹${formatInr(cartAmountInr)} · limit ₹${formatInr(mandate.scope.per_txn_inr)}`);
+      if (decision.overBy) {
+        console.log(`  over by ₹${formatInr(decision.overBy)}`);
+      }
+    }
+    console.log('');
+    console.log('  reserve untouched');
+    console.log('  NO BROWSER ACTION TAKEN');
+    console.log('  → step-up required');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (decision.verdict === 'STEP_UP') {
+    console.log('  reserve unchanged');
+    console.log('  NO BROWSER ACTION TAKEN');
+    console.log('  → mandate re-signature required');
+    process.exitCode = 1;
+    return;
+  }
+
+  // ALLOW: check idempotency and execute
+  const cartAmountPaise = Math.round(cartAmountInr * 100);
+  if (hasAlreadyDrawn(decision.runBinding || 'unknown')) {
+    throw new Error(`This runId has already been executed`);
+  }
+
+  try {
+    const result = await execute(site, command, cmdArgs);
+    const runId = result.runId;
+
+    // Draw from ledger
+    if (mandate.reserve.ref) {
+      await ledger.draw(mandate.reserve.ref, cartAmountPaise, runId);
+    }
+
+    // Record the draw for idempotency
+    const ledgerEntry: LedgerEntry = {
+      runId,
+      reserveRef: mandate.reserve.ref,
+      amountInrPaise: cartAmountPaise,
+      ts: new Date().toISOString(),
+    };
+    recordDraw(ledgerEntry);
+
+    // Build and sign receipt
+    const receipt: Receipt = buildAndSignReceipt(
+      {
+        receipt_id: generateId('rcp'),
+        mandate_hash: sha256Hex(mandate),
+        cart: { merchant: site, items: 0, total_inr: cartAmountInr },
+        payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
+        execution: { command: fullCommand, run_id: runId, profile: '' },
+        evidence: { trace_digest: '', network_order_id: undefined },
+        prev_receipt_hash: allReceipts.length === 0 ? CHAIN_HEAD_HASH : sha256Hex(allReceipts[allReceipts.length - 1]),
+      },
+      gatePrivateKey,
+    );
+    saveReceipt(receipt);
+
+    console.log(`✓ ${fullCommand} executed · runId ${runId}`);
+    console.log(`  receipt ${receipt.receipt_id}`);
+  } catch (err) {
+    throw new Error(`Execution failed: ${(err as Error).message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------

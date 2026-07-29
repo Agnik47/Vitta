@@ -49,10 +49,10 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent A — status
 
-**Current phase:** 1c (Dodo Payments integration) — reassigned here 2026-07-29, ADR-005
-**Current task:** Per direct user instruction, taking over Phase 1c from Agent B (see ADR-005 for the reasoning — B-002 would have kept blocking Agent B even after B-001 clears, while `src/ledger/` has zero webcmd dependency). Asked the user for the concrete Dodo test-mode account/keys needed. Not writing any `src/ledger/` code until they exist, per `CLAUDE.md` § "If you're blocked."
-**Last commit:** Phase 2-4 stub verification (previous task) — all 4 files confirmed correct (see `08-CHANGELOG.md`)
-**Blocked on:** B-001 (real Dodo test-mode account) — now the only thing blocking Agent A's own Phase 1c, not just Agent B's.
+**Current phase:** 1g (full end-to-end run) — Phase 1c's provisioning half is done (own work, B-001 resolved) and its implementation half landed from Agent B (ADR-006, pulled 2026-07-29) while this session was in progress.
+**Current task:** Pulled Agent B's `Ledger.ts`/`DodoCreditLedger.ts` and read it plus ADR-006/08-CHANGELOG.md. Found and fixed a real local gap: this machine's `.env` was missing `DODO_TOPUP_PRODUCT_ID`, which the new code requires — added the real value (`pdt_0NkBmcZQJLSicxFMHlNHX`) from this session's own Phase 1c provisioning. Confirmed `webcmd` is not installed on this machine at all (untested here, separate from Agent B's B-002 connectivity failure on theirs). Next: wire `gate run`/`gate fund` in `src/cli/gate.ts` (own file, currently honest "not available yet" stubs) to the now-real `Ledger`/`execute()`/`hasAlreadyDrawn`/`recordDraw`/`buildAndSignReceipt`, per `docs/05-DEMO-SCRIPT.md` Beats 3-6 and `docs/03-WEBCMD-INTEGRATION.md` § Step 3's "always fetch the authoritative cart total via a read before deciding on a write" rule.
+**Last commit:** Phase 1c: B-001 resolved — Dodo credit reserve provisioned and verified live (`8d14162`)
+**Blocked on:** Nothing for the wiring itself. Live rehearsal of Beats 1-6 needs a working `webcmd` install + passing `doctor` connectivity check on some machine — not yet true on this one, and B-002 says not true on Agent B's either.
 
 ## Agent B — status
 
