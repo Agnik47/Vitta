@@ -75,6 +75,8 @@ No new code is expected to be needed here — `cmdRun`/`cmdFund`/`execute()`/`Do
 
 **Owner: Agent A** (reassigned from Agent B's standing `dashboard/` ownership, presentation-layer only — see § 0 and ADR-010). Pull latest before starting; `dashboard/lib/*` and `dashboard/app/api/**` stay off-limits without flagging Agent B first.
 
+**Design spec written first, per direct user instruction: see `dashboard/DESIGN.md`** (a full "Ledger / Notarial" design system — tokens, shadcn/ui component rules, navbar+sidebar layout, motion rules that explicitly ban hover-scale/translate, page-by-page spec, package list) — read that file before writing any Phase 2 component code, it supersedes the loose bullet points below with a concrete system.
+
 Zero backend/API changes. Same data (`/api/mandate`, `/api/events`, `/api/receipts`), new presentation. Use the `frontend-design` and `dataviz` skills when actually building this for a coherent visual system rather than ad hoc styling.
 
 - [ ] Establish one visual language: dark, high-contrast, security/fintech-trust aesthetic (this is a product about cryptographic guarantees over money — the UI should *feel* like that, not like a generic CRUD admin panel). Pick a real type scale, a restrained accent-color set (e.g., one signal color per verdict, reused everywhere), consistent spacing.
