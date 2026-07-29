@@ -322,8 +322,8 @@ Credited back 10000 paise. Balance restored to: 100000 (expect 100000 )
 
 ## Phase 1d — webcmd integration
 
-**Status:** ⚠️ Done with deviation — `manifest.ts` fully done and verified for real; `executor.ts`'s `execute()` implemented per spec but UNVERIFIED against a live command (browser connectivity blocker, see `docs/common/04-BLOCKERS.md` B-002)
-**Timestamp:** 2026-07-29, Agent B
+**Status:** ✅ Fully done — `manifest.ts` and `executor.ts`'s `execute()` both real and verified against a live browser command. B-002 resolved same day (see addendum below).
+**Timestamp:** 2026-07-29, Agent B (resolution addendum: 2026-07-29, later still)
 
 - [x] `webcmd doctor` passes on the build machine — **actually: FAILS.** Daemon OK, Runtime (Cloak) connected, Connectivity FAIL ("Browser exec command timed out after 8s"). See real output below.
 - [x] `loadManifest()` returns real data, write-command count recorded: **228 write / 577 read / 805 total** (spec's doc guessed "~192" write and "~302" total — both real numbers are notably higher)
@@ -384,6 +384,94 @@ Cleaned up test ledger file.
 
 `npx tsc --noEmit` → exit 0 after every step above. `npm test` → 10/10 passing throughout (unaffected — no unit tests added this phase, `*.manual-check.ts` files are deliberately excluded from `node --test`'s discovery).
 
+### B-002 resolution addendum, 2026-07-29 (later still) — root cause found and fixed, per direct user instruction ("look at the blockage and resolve it")
+
+Full reasoning and alternatives in `docs/common/02-DECISIONS.md` ADR-007 — this section is the real terminal output.
+
+**Root cause:** `webcmd`'s browser automation runs on `cloakbrowser` (`node_modules/@agentrhq/webcmd/node_modules/cloakbrowser`), a stealth-Chromium Playwright wrapper — "Drop-in Playwright/Puppeteer replacement with source-level fingerprint patches," per its own `package.json`. It requires its own separately-downloaded Chromium binary and never touches the system's regular Chrome, regardless of how many Chrome windows are already open (which is exactly why Agent A's own reproduction, with real Chrome windows open, still failed identically). `cloakbrowser info` confirmed it:
+```
+CloakBrowser diagnostics
+Node:      v24.14.0
+OS:        Windows_NT x64
+Platform:  windows-x64
+Version:   146.0.7680.177.5 (free)
+Binary:    C:\Users\dell\.cloakbrowser\chromium-146.0.7680.177.5\chrome.exe
+Installed: false
+Cache:     C:\Users\dell\.cloakbrowser\chromium-146.0.7680.177.5
+Launch:    binary not installed
+```
+
+**Installing it hit a second real bug, twice:** `node .../cloakbrowser/dist/cli.js install` downloaded and verified the full 535MB binary successfully both times (signature + checksum both `OK`), then failed at the very last step:
+```
+[cloakbrowser] Extracting to C:\Users\dell\.cloakbrowser\chromium-146.0.7680.177.5
+Error: spawnSync powershell ENOENT
+```
+This reproduced identically running the installer from Git Bash *and* from inside an actual PowerShell session — `Get-Command powershell` found nothing, and `$env:PATH -split ';' | Select-String System32` matched nothing either. This sandboxed environment's `PATH` genuinely does not include `C:\Windows\System32\...`, even though `powershell.exe` demonstrably exists there (`Test-Path` confirmed `True`). Fixed by prepending the real path before invoking the installer:
+```powershell
+$env:PATH = "C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32;" + $env:PATH
+node "...\cloakbrowser\dist\cli.js" install
+```
+Full success:
+```
+[cloakbrowser] Download complete: 535 MB
+[cloakbrowser] SHA256SUMS signature verified: Ed25519 OK
+[cloakbrowser] Checksum verified: SHA-256 OK
+[cloakbrowser] Extracting to C:\Users\dell\.cloakbrowser\chromium-146.0.7680.177.5
+[cloakbrowser] Binary ready: C:\Users\dell\.cloakbrowser\chromium-146.0.7680.177.5\chrome.exe
+```
+
+**`webcmd doctor` now passes for real:**
+```
+webcmd v0.4.3 doctor (node v24.14.0)
+
+[OK] Daemon: running on port 9777 (v0.4.3)
+[OK] Runtime: cloak connected (v0.4.5)
+
+Profiles:
+  • default: connected v0.4.5
+[OK] Connectivity: connected in 3.1s
+
+Everything looks good!
+```
+
+**A real, live browser command, run directly, returned real data** (`webcmd duckduckgo search "test query" -f json` — 10 real search results, omitted here for length, full JSON array with `rank`/`title`/`url`/`snippet`/`displayUrl`/`icon`/`resultType` fields, matching the real live DuckDuckGo results page).
+
+**Three further real bugs in `src/webcmd/executor.ts`'s `execute()`, found only now that live execution was finally testable:**
+
+1. `spawn('webcmd', args)` → `Error: spawn webcmd ENOENT`. Globally-installed npm binaries are `.cmd` batch-file wrappers on Windows; `spawn()` (unlike `exec`/`execSync`) never goes through a shell, so it can't resolve one.
+2. The tempting fix, `{ shell: true }`, ran successfully but printed Node's own `DEP0190` deprecation warning ("Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated") — a real command-injection risk, not acceptable on the exact code path that executes an AI agent's actions. `spawn('webcmd.cmd', args, { shell: false })` was tried as an alternative and Node itself refuses it outright with `EINVAL` — a deliberate block for a real batch-file argument-injection CVE class, confirmed intentional, not a bug to route around.
+3. **Fixed properly:** read `webcmd.cmd`'s own contents to find its real underlying entry point (`node_modules/@agentrhq/webcmd/dist/src/main.js`, invoked via `node`), resolved that path generically via `npm root -g` (not hardcoded to this machine), and now spawn `node <entry.js> [site, command, ...args, ...]` directly — no shell involved anywhere, so there is no injection surface regardless of argument contents.
+
+**A fourth real finding, not a bug in this code but a spec-vs-reality gap:** the real JSON output of `webcmd <site> <command> -f json` is a bare array matching the command's own `columns` schema — there is no `{runId, columns, tracePath}` wrapper object at all, contradicting `docs/03-WEBCMD-INTEGRATION.md`'s sketch. Confirmed against both a read command (`duckduckgo/search`) and a write-classified one (`github/login`, chosen specifically because it's real, safe, and has zero side effects — it just opens the login page, no credentials entered):
+```
+$ webcmd github login --trace retain-on-failure -f json
+[
+  {
+    "status": "action_required",
+    "logged_in": false,
+    "site": "github",
+    "id": "",
+    "username": "",
+    "name": "",
+    "url": "",
+    "action": "Complete sign-in in the opened Webcmd browser, then tell the agent when you are done.",
+    "verify_command": "webcmd github whoami"
+  }
+]
+```
+Grepped the installed package's own source (`dist/src/execution.js`, `cli.js`) and found `runId` is real and used internally for the daemon's own session-lease bookkeeping, but it's never surfaced to stdout. This matters because `src/cli/gate.ts`'s `cmdRun()` (Agent A, Phase 1f) destructures `result.runId` directly into `Ledger.draw()`, the idempotency ledger entry, and the signed `Receipt.execution.run_id` — before this fix, a real `gate run` would have silently written `undefined` into all three. Fixed: `execute()` now generates its own real, unique `runId` (`crypto.randomUUID()`) before invoking webcmd at all, and returns the actual parsed JSON array as `columns`. `tracePath` is returned as `''`, honestly, not fabricated — nobody has yet located where `--trace retain-on-failure`'s artifact is actually written on disk; this is real follow-up work, not resolved here.
+
+**Real verification of the fix**, via `execute()` itself (not the raw CLI):
+```
+=== execute() against a real live WRITE-classified command (github/login) ===
+runId: 31a8512b-f019-4e0f-a929-9193e187f5d7
+tracePath:
+columns: [{"status":"action_required","logged_in":false,"site":"github", ...}]
+```
+
+`npx tsc --noEmit` → exit 0 (root + `dashboard/`). `npm test` → 45/45 passing (unaffected). `src/webcmd/manifest.manual-check.ts` and `src/webcmd/executor.manual-check.ts` re-run clean. All temporary diagnostic scripts (`_dodo-diag.ts`, `_executor-verify.ts`, `_spawn-test.ts`) deleted after use, not committed — same discipline as every other real-verification pass this build.
+
+**What this unblocks:** Phase 1g (the full Beat 1-6 rehearsal) is no longer blocked by B-002 on this machine. `gate run`/`gate fund` (Agent A's Phase 1f) can now genuinely execute a real webcmd write command with a real, correct `runId` flowing through. A live merchant-site rehearsal still needs a logged-in `webcmd profile` for whichever site is used (per `docs/03-WEBCMD-INTEGRATION.md`'s own setup note) — not attempted here, out of scope for resolving the blocker itself.
 
 ---
 

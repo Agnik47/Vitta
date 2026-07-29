@@ -24,16 +24,17 @@ Reassigned to Agent A earlier the same day (ADR-005), then the user directly ins
 
 Spec: `docs/03-WEBCMD-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1d.
 
-- [x] Confirm `webcmd doctor` succeeds on this machine; install `@agentrhq/webcmd@0.4.3` globally if missing — **doctor does NOT succeed** (Connectivity FAIL) — see `docs/common/04-BLOCKERS.md` B-002. Installed the package itself cleanly.
+- [x] Confirm `webcmd doctor` succeeds on this machine; install `@agentrhq/webcmd@0.4.3` globally if missing — **now succeeds for real** ("Connectivity: connected in 3.1s — Everything looks good!"). B-002 fully resolved 2026-07-29 — see `docs/common/04-BLOCKERS.md` and `02-DECISIONS.md` ADR-007.
 - [x] `src/webcmd/manifest.ts` — `loadManifest()`: live-fetch with disk-cache fallback; a live-fetch failure must never crash the app — done, real-tested, both live and fallback paths confirmed.
-- [x] `src/webcmd/executor.ts` — `execute()`: spawns webcmd for ALLOW decisions, captures `runId`/`columns`/`tracePath` — **implemented per spec, NOT verified against a live command** (blocked by B-002). Idempotency guard (`hasAlreadyDrawn`/`recordDraw` against `ledger.jsonl`) IS implemented and real-tested (pure fs logic, no browser dependency) — see ADR-004.
+- [x] `src/webcmd/executor.ts` — `execute()`: spawns webcmd for ALLOW decisions, captures `runId`/`columns`/`tracePath` — **now real-tested against a live browser command.** Three real bugs found and fixed in the process (unsafe Windows process spawning, a real command-injection risk in the naive fix, and a `runId`/`tracePath` shape that never matched webcmd's actual output) — full record in `docs/OUTCOME.md` and ADR-007. Idempotency guard (`hasAlreadyDrawn`/`recordDraw` against `ledger.jsonl`) real-tested since Phase 1d, unaffected — see ADR-004.
 - [x] Manual test script:
   - [x] Prints count of write-access commands found — real number: **228** (not ~192 as the doc guessed)
   - [x] Looks up `blinkit/place-order`, confirms `access === 'write'` — confirmed
   - [x] Looks up a nonsense command name, confirms `undefined` returned (fail-closed case) — confirmed
 - [x] Run against the real webcmd install, paste actual output into `docs/OUTCOME.md` (Phase 1d section) — done, see that section for full output including the doctor failure and the fallback-to-cache test.
+- [x] **Follow-up, 2026-07-29 (later still):** `execute()` verified against two real live browser commands (a read: `duckduckgo/search`; a write: `github/login`, chosen for zero side effects) via `execute()` itself, not just the raw CLI. Real `runId` (UUID), real `columns` data, honest `tracePath: ''`.
 
-**Not yet done, blocked on B-002:** verifying `execute()` against one real live webcmd write command. Revisit the moment the browser connectivity issue is resolved — don't mark this phase's `execute()` path ✅ until that real run happens.
+Phase 1d is now fully done — no open items.
 
 ## Phase 1h — Dashboard (Next.js, read-only)
 
