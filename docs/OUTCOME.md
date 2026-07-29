@@ -473,6 +473,61 @@ columns: [{"status":"action_required","logged_in":false,"site":"github", ...}]
 
 **What this unblocks:** Phase 1g (the full Beat 1-6 rehearsal) is no longer blocked by B-002 on this machine. `gate run`/`gate fund` (Agent A's Phase 1f) can now genuinely execute a real webcmd write command with a real, correct `runId` flowing through. A live merchant-site rehearsal still needs a logged-in `webcmd profile` for whichever site is used (per `docs/03-WEBCMD-INTEGRATION.md`'s own setup note) — not attempted here, out of scope for resolving the blocker itself.
 
+**Addendum, 2026-07-29 (later still) — `tracePath`/`trace_digest` resolved for real (ADR-009).** `docs/05-DEMO-SCRIPT.md` requires `gate receipt show` to display "the trace digest from webcmd's real `--trace` artifact (sha256 of the file)" as real data, not a placeholder — so this was worth closing properly rather than leaving open indefinitely.
+
+Read the installed package's own source directly (`dist/src/observation/artifact.js`, `dist/src/execution.js`) rather than guessing:
+
+```
+function getTraceDirectory(contextId, traceId, baseDir = baseWebcmdDir()) {
+  return path.join(baseDir, 'profiles', safeSegment(contextId), 'traces', safeSegment(traceId));
+}
+// baseWebcmdDir() = process.env.WEBCMD_CONFIG_DIR || path.join(os.homedir(), '.webcmd')
+```
+
+and, critically, in `execution.js`: a trace artifact is only exported on **success** when `traceMode === 'on'`; under `retain-on-failure` (what `execute()` had always passed), it's only exported on **failure**. Since a `Receipt` is only ever built after `execute()` *succeeds*, `trace_digest` was structurally guaranteed to always be empty under the old mode — confirmed empirically before changing anything:
+
+```
+$ webcmd duckduckgo search "pasta" --trace retain-on-failure -f json
+[ { "rank": 1, "title": "28 Different Types of Pasta...", ... } ]   ← succeeded
+$ find ~/.webcmd/profiles -maxdepth 3 -type d -name traces
+(nothing — no trace directory exists at all)
+
+$ webcmd blinkit add-to-cart 000000000 --quantity 1 --trace retain-on-failure -f json
+ok: false
+error:
+  code: EMPTY_RESULT
+  message: blinkit add-to-cart returned no data
+trace:
+  traceId: 20260729112307-3395c953
+  dir: C:\Users\dell\.webcmd\profiles\default\traces\20260729112307-3395c953
+  status: failure
+```
+
+The failure case's real directory contained `console.jsonl`, `network.jsonl` (1.9MB for one failed attempt), `receipt.json`, `screenshots/`, `state/`, `summary.md`, `trace.jsonl` — matching `artifact.js`'s own `exportObservationSession()` exactly.
+
+**Fix:** switched `execute()` to `--trace on`. Confirmed webcmd prints `Webcmd trace artifact: <dir>` to **stderr** on a real success (stdout stays the unwrapped `columns` array, unaffected):
+
+```
+$ webcmd blinkit add-to-cart 333764 --quantity 1 --trace on -f json
+[stderr] Webcmd trace artifact: C:\Users\dell\.webcmd\profiles\default\traces\20260729112907-1848ad7b
+[stdout] [{"status":"added","productId":"333764","quantity":1,"itemsTotal":238,"payable":238,"message":"Added 1"}]
+exit: 0
+```
+
+`execute()` now captures stderr, parses that line, reads `<dir>/trace.jsonl`, and returns `sha256:<hex>` of its raw bytes as a new `traceDigest` field. Verified directly (temporary script, deleted after use):
+
+```
+$ npx ts-node _verify_trace.ts    (execute('blinkit', 'search', ['atta']))
+runId: d72cbed0-4bf8-4dc7-9658-76a2e7e1a179
+tracePath: C:\Users\dell\.webcmd\profiles\default\traces\20260729113056-c3a22f4b
+traceDigest: sha256:2841a2968eb073eaa33431fe1ae3b4f02c169211b359a0261419501ffe7a70a5
+columns length: 20
+```
+
+`src/cli/gate.ts`'s receipt-building (one line) now reads `result.traceDigest` instead of hardcoding `''`. Not exercised through an actual `place-order`/commit receipt this session — that needs the Beats 5-8 real-purchase decision the user hasn't authorized — verified by direct code inspection and `tsc --noEmit` instead. `npx tsc --noEmit` clean (root + `dashboard/`), `npm test` 45/45, no regressions.
+
+**Real cost, noted not hidden:** every real write command now produces a trace directory of comparable size (~1-2MB), not just failures — `execute()` is never called for reads (`cmdRun()` short-circuits those before it), so the volume during an actual demo (a handful of write commands per rehearsal) stays small, and webcmd's own `pruneTraceArtifacts()` retention logic (also found in this source read) already handles cleanup without any action needed from this project.
+
 ---
 
 ## Phase 1e — Receipts and verify chain
@@ -689,7 +744,7 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹116
 - [x] Confirmed no API route writes anywhere (code-reviewed) — all three routes (`app/api/mandate|events|receipts/route.ts`) export only `GET`, no filesystem writes, no `Ledger` calls, no webcmd invocation anywhere in `dashboard/`
 - [x] Confirmed only `DODO_API_KEY_READONLY` is used in this app, never the write key — grepped `dashboard/` for `DODO_API_KEY` (without `_READONLY`), zero matches
 - [x] `npm run build && npm run start` tested — real production build + start, verified via curl and an actual browser tab, not `next dev`
-- [ ] Dashboard process killed mid-rehearsal, CLI demo path confirmed unaffected — **cannot test yet**, Phase 1f (`gate` CLI) doesn't exist. Revisit once Agent A ships it; nothing about this app's design should make it fail (it's fully read-only, own process, own port), but "should" isn't "confirmed."
+- [x] Dashboard process killed mid-rehearsal, CLI demo path confirmed unaffected — **done for real, 2026-07-29 (later still)**, see addendum below.
 
 **What actually happened / deviations:**
 
@@ -729,6 +784,86 @@ Deleted the fixture data and generator script after verification (`_gen-fixtures
 Deleted the diagnostic scripts (`_dodo-diag.ts`, a second `_gen-fixtures.ts` pass) and both test mandates afterward, same cleanup discipline as before. `.env`/`dashboard/.env.local` now hold real credentials locally (both gitignored, never committed).
 
 **What this does and doesn't mean for the wider build:** the dashboard's Dodo integration is now genuinely end-to-end verified against a live test-mode account — no longer "unverified live." This does **not** mean Phase 1g (the full demo script) can run yet: `src/ledger/DodoCreditLedger.ts` itself still doesn't exist (Agent A's Phase 1c, explicitly out of scope for their provisioning-only session — see the entry above), and `gate run`'s webcmd execution is still blocked on B-002 on this machine. Whoever writes `DodoCreditLedger.ts` should apply the same `environment: 'test_mode'` fix — it's a generic SDK-client gotcha, not something specific to the dashboard's code path.
+
+**Addendum, 2026-07-29 (later still) — the CLI-kill test, and a real demo-blocking bug it surfaced.** Both blockers (B-001, B-002) are resolved and Agent A has already run a live Phase 1g rehearsal (Beats 1-4) on their machine, so this machine's own `webcmd doctor` passing for real (ADR-007) meant Phase 1h's one remaining acceptance item — killing the dashboard mid-run and confirming the CLI is unaffected — was finally testable here too.
+
+Built and started the dashboard for real:
+
+```
+$ npm run build   (inside dashboard/)
+✓ Compiled successfully in 24.1s
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/events
+├ ƒ /api/mandate
+├ ƒ /api/receipts
+├ ○ /events
+└ ○ /receipts
+
+$ npm run start &
+$ curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:3000/
+HTTP 200
+```
+
+Ran real CLI commands against the live stack while the dashboard was up:
+
+```
+$ npx ts-node src/cli/gate.ts scan
+✓ webcmd manifest loaded — 109 sites, 805 commands
+  228 marked access:'write'
+  0 currently governed
+
+$ npx ts-node src/cli/gate.ts mandate create --subject "agent:grocery-runner" \
+    --cap 800 --per-txn 800 --merchants blinkit,zepto,bigbasket --expires "23:59"
+✓ MANDATE mnd_ms5zcsgm4b7908d5f47e signed
+  "agent:grocery-runner may spend up to ₹800 at Blinkit, Zepto or BigBasket, in one transaction, before 11:59 PM today."
+
+$ npx ts-node src/cli/gate.ts run -- webcmd duckduckgo search "rice"
+› duckduckgo search rice
+ALLOW  duckduckgo/search
+
+$ curl -s http://localhost:3000/api/events
+[]
+```
+
+**Real bug found here, not guessed at:** `/api/events` returned `[]` and `events.jsonl` didn't exist on disk at all, despite the CLI printing an `ALLOW` line. `cmdRun()` in `src/cli/gate.ts` (Agent A, Phase 1f/1g) builds a fully valid `GateEvent` at both the read-access short-circuit and the write-decision point, and passes it to `formatGateEventLine()` for the terminal UI — but nothing ever persisted it. This is a real, previously-invisible gap: every prior verification of the dashboard's `/events` page (Phase 1h's own original build, and its later addenda above) used a fixture-generator script producing `events.jsonl` by hand with the production signing code, never a real `gate run` — because a real `gate run` wasn't possible on this machine until just now. Left as-is, `/events` would show an empty feed forever during the actual live demo, silently failing `docs/06-DASHBOARD-SPEC.md`'s own acceptance line ("`/events` updates within ~2 seconds of a real `GateEvent` being written by the CLI").
+
+**Fixed directly in `src/cli/gate.ts`/`src/cli/store.ts`** (Agent A's files — full reasoning for fixing here rather than only flagging is in `docs/common/02-DECISIONS.md` ADR-008): added `appendEvent()` to `store.ts`, called from both event-construction sites in `gate.ts` right alongside the existing `console.log(formatGateEventLine(event))` — the same object is now both printed and persisted. Re-ran the same commands after the fix:
+
+```
+$ npx ts-node src/cli/gate.ts run -- webcmd duckduckgo search "atta"
+› duckduckgo search atta
+ALLOW  duckduckgo/search
+
+$ cat events.jsonl
+{"event_id":"evt_ms5zgsdl6b3a139584d9","ts":"2026-07-29T11:10:16.234Z","mandate_id":"mnd_ms5zcsgm4b7908d5f47e","mandate_hash":"sha256:ed8911f9ad01e129f8f12029d856be5a3175911ca189d56b2e44a68a031e9a00","command":"duckduckgo/search","access":"read","verdict":"ALLOW"}
+
+$ curl -s http://localhost:3000/api/events
+[{"event_id":"evt_ms5zgsdl6b3a139584d9", ... "verdict":"ALLOW"}]
+```
+
+Confirmed live in the browser tab too: `/events` showed the real row without a manual refresh.
+
+**Then the actual CLI-kill test.** Found the dashboard's PID (`Get-NetTCPConnection -LocalPort 3000 -State Listen`), killed it (`Stop-Process -Force`), confirmed it was actually dead (`curl` to port 3000 → connection refused, `HTTP 000`), then ran more real CLI commands with the dashboard fully down:
+
+```
+$ npx ts-node src/cli/gate.ts scan
+✓ webcmd manifest loaded — 109 sites, 805 commands
+  228 marked access:'write'
+  9 currently governed
+
+$ npx ts-node src/cli/gate.ts run -- webcmd duckduckgo search "milk"
+› duckduckgo search milk
+ALLOW  duckduckgo/search
+
+$ npx ts-node src/cli/gate.ts mandate resign mnd_ms5zcsgm4b7908d5f47e --cap 900
+✓ MANDATE mnd_ms5zjr2mc81be74fdfe0 signed — ₹900
+```
+
+All three succeeded identically to before, `events.jsonl` kept growing correctly, and nothing in the CLI's own output or exit codes changed with the dashboard gone — confirming the two processes are genuinely independent, not just "should be" by design. `npx tsc --noEmit` clean (root + `dashboard/`), `npm test` 45/45 passing, no regressions from the `store.ts`/`gate.ts` changes.
+
+**Deliberately not fixed as part of this pass:** the write-path `GateEvent` still never gets `run_id`/`trace_digest` populated, because `execute()` (which produces `runId`) runs *after* `decide()`'s event is already built and persisted — backfilling those would need a second, post-execution event write, which is a real design decision (does it overwrite the first event or append a second one? how does the dashboard distinguish "decided" from "executed"?) left open rather than guessed at under time pressure. See ADR-008.
 
 ---
 

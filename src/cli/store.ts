@@ -6,14 +6,24 @@
 // gate scan's governed-count) but loadAllReceipts() throws loudly on any parse failure — per
 // docs/agent-a/ERROR-HANDLING.md, a silently-dropped receipt could make chain verification pass
 // when it shouldn't, which is a materially worse failure mode than a scan count being off by one.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { isMandate } from '../mandate/schema';
 import type { Mandate } from '../mandate/schema';
 import type { Receipt } from '../receipt/schema';
+import type { GateEvent } from '../events/GateEvent';
 
 const MANDATES_DIR = './mandates';
 const RECEIPTS_DIR = './receipts';
+const EVENTS_PATH = './events.jsonl';
+
+/** Appends one GateEvent as a JSON line — the dashboard's /events page (dashboard/lib/read.ts)
+ * polls this same file. Every `gate run` decision (read or write, allow or deny) must call this,
+ * not just print via formatGateEventLine() — the terminal line and the persisted line are two
+ * separate, both-required outputs of the same event. */
+export function appendEvent(event: GateEvent, filePath = EVENTS_PATH): void {
+  appendFileSync(filePath, JSON.stringify(event) + '\n');
+}
 
 export function saveMandate(mandate: Mandate, dir = MANDATES_DIR): void {
   mkdirSync(dir, { recursive: true });

@@ -33,6 +33,7 @@ Spec: `docs/03-WEBCMD-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1d.
   - [x] Looks up a nonsense command name, confirms `undefined` returned (fail-closed case) — confirmed
 - [x] Run against the real webcmd install, paste actual output into `docs/OUTCOME.md` (Phase 1d section) — done, see that section for full output including the doctor failure and the fallback-to-cache test.
 - [x] **Follow-up, 2026-07-29 (later still):** `execute()` verified against two real live browser commands (a read: `duckduckgo/search`; a write: `github/login`, chosen for zero side effects) via `execute()` itself, not just the raw CLI. Real `runId` (UUID), real `columns` data, honest `tracePath: ''`.
+- [x] **Follow-up, 2026-07-29 (later still): `tracePath`/`traceDigest` resolved for real (ADR-009).** Root cause of the empty `tracePath` wasn't a missing lookup — `execute()` used `--trace retain-on-failure`, which webcmd only exports an artifact for on failure, while a `Receipt` is only ever built after `execute()` succeeds. Switched to `--trace on`; `execute()` now parses webcmd's own `Webcmd trace artifact: <dir>` stderr line and returns a real `sha256:<hex>` of that directory's `trace.jsonl` as a new `traceDigest` field. `src/cli/gate.ts`'s receipt-building now uses it instead of hardcoding `''`.
 
 Phase 1d is now fully done — no open items.
 
@@ -46,7 +47,7 @@ Spec: `docs/06-DASHBOARD-SPEC.md`. Prompt: `docs/PROMPTS.md` § Phase 1h. Depend
 - [x] Pages: `/` (mandate summary + live Dodo balance), `/events` (live feed, 1.8s polling, no WebSockets/SSE), `/receipts` (verify status) — done, all verified against real fixture data in an actual browser tab
 - [x] Verify no route imports `DODO_API_KEY` (write key) — only `DODO_API_KEY_READONLY` — grepped, confirmed clean
 - [x] `npm run build && npm run start` (not `next dev`), confirm all three pages show real data — done for real; data was fixture data generated with the production signing code (Phase 1f/CLI doesn't exist yet to produce it directly, see `docs/OUTCOME.md` for why that's not a mock)
-- [ ] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **cannot test yet** — needs Phase 1g (full `gate run`) to exist. The only remaining open item in this phase.
+- [x] Kill the dashboard process mid-run, confirm the CLI demo sequence is completely unaffected — **done for real, 2026-07-29 (later still)**. Built+started the dashboard, ran real `gate` CLI commands, killed the dashboard process, confirmed the CLI kept working identically. Found+fixed a real bug along the way: `gate run` never wrote `events.jsonl` (see ADR-008, `docs/OUTCOME.md` Phase 1h addendum). Phase 1h now has zero open items.
 - [x] Go through `docs/06-DASHBOARD-SPEC.md` § Acceptance checklist explicitly, log results into `docs/OUTCOME.md` — done, one item pending (above)
 - [x] **Follow-up, same day:** wired up real `signature_valid` in `/api/receipts` using `keys/gate.public.pem` (Phase 1f's `src/cli/keys.ts`) — verified against a bootstrapped real keypair, including a live tamper test distinguishing signature vs. chain-link failure. See `docs/OUTCOME.md`.
 - [x] **Follow-up, same day:** committed the real `manifest.json` (805 commands, 228 write) Agent A requested, so `gate scan` is testable against real data on both machines.
