@@ -54,15 +54,19 @@ Spec: `docs/06-DASHBOARD-SPEC.md`. Prompt: `docs/PROMPTS.md` § Phase 1h. Depend
 
 ## Shared / filler work (pick up when blocked on the above)
 
-- [ ] Phase 2-4 stub verification (`docs/PROMPTS.md` § Phase 2-4) — either agent, whoever is idle
-- [ ] Phase 5 rehearsal — joint, live session with Agent A, not solo
+- [x] Phase 2-4 stub verification (`docs/PROMPTS.md` § Phase 2-4) — done by Agent A, 2026-07-29, don't duplicate
+- [ ] Phase 5 rehearsal — joint, live session with Agent A, not solo. Blocked on the user's decision about Beats 5-8 (a real merchant purchase, real money) — see `docs/agent-b/ROADMAP.md` "Where we actually are" for the current state of Agent A's solo Phase 1g rehearsal (Beats 1-4 done for real).
+
+## Watching, not owning — Phase 1g (Agent A's phase)
+
+- [x] Pulled Agent A's Phase 1g commits (`5f906b2`, `79d9451`) — Beats 1-4 real, 4 bugs fixed, `Ledger.fund()`'s return type additively widened (`checkoutUrl?`). Re-verified `tsc --noEmit`/`npm test` clean against it on this machine.
+- [x] Fixed a stale row in `docs/common/03-INTERFACES.md` (the `Ledger` row hadn't been updated for the `checkoutUrl` addition or "wired" status)
+- [ ] Beats 5-8 (real `place-order`, receipt, verify, idempotency-retry) — not this track's to run solo even if unblocked; needs the user's explicit go-ahead given it's real money on a real merchant site
 
 ---
 
 ## Current blockers against this list
 
-See `docs/common/04-BLOCKERS.md` for the live, shared version of this.
-- Phase 1d's `execute()` still needs the webcmd browser bridge (B-002) fixed on this machine — `webcmd doctor` fails its Connectivity check.
-- Phase 1c is no longer this track's blocker to track (reassigned, ADR-005) — B-001 itself is resolved as of 2026-07-29.
+See `docs/common/04-BLOCKERS.md` for the live, shared version of this — currently empty (B-001 and B-002 both resolved).
 
-Not a reason to pick up Agent A's phases instead — see the scope note at the top of this file.
+Not a reason to pick up Agent A's Phase 1g/5 work solo — see the scope note at the top of this file. Beats 5-8 specifically require the user's explicit authorization (real spend), not just an unblocked code path.
