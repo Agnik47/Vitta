@@ -1283,6 +1283,30 @@ ALLOW  blinkit/place-order · ₹295
 
 Reproducing the exact ADR-013 fee-bearing shape live (small cart, fees actually applied by Blinkit, and either (a) webcmd correctly reports the fee fields — in which case the resolver picks them up automatically, or (b) webcmd under-reports uniformly like the original discovery — in which case we've reproduced the outside-our-scope webcmd bug) would require: emptying the current cart via a browser interaction (Blinkit adapter has no CLI-level "remove" — `add-to-cart` only supports quantities 1-12), then adding a small ~₹20-50 item, then re-reading `checkout` to see whether Blinkit shows non-zero delivery/handling fields THIS session or the same under-reporting shape as the Windows session. Not done in this pass — flagging as ADR-014 follow-up 2 rather than doing it without user re-authorization, since it involves opening the browser and manually clearing the cart.
 
+**Follow-up, same session: the ADR-013 fee-bearing scenario reproduced LIVE on macOS — bug is in webcmd itself, not Windows-specific.** User asked to also test hidden charges, then manually cleared the Pillsbury from the cart in the browser. Added `Aashirvaad Iodized Natural Salt 1 kg` (`productId: 104`, ₹27) — well below Blinkit's free-delivery threshold, so real fees SHOULD apply on the merchant side. Real live payloads:
+
+```
+LIVE cart: [{"status":"ok","productId":"104","name":"Aashirvaad Iodized Natural Salt 1 kg","variant":"1 kg","price":27,"quantity":1,"total":27,"itemCount":1,"payable":27,"cartState":"valid"}]
+
+LIVE checkout: [{"status":"ok","itemCount":1,"itemsTotal":27,"deliveryCharge":0,"handlingCharge":0,"payable":27,"cartState":"valid","checkoutBlocked":false,"validations":""}]
+
+Resolver result: { amountInr: 27, itemCount: 1, sources: ['checkout.payable', 'checkout.itemsTotal+fees', 'cart.line-sum'], merchantBlocked: false }
+```
+
+**This is the exact ADR-013 shape, reproduced live**: `payable: 27, deliveryCharge: 0, handlingCharge: 0` for a ₹27 cart that Blinkit's own UI will charge ~₹55 for (₹27 + ~₹25 delivery + ~₹3 handling per the original ADR-013 measurements). **The bug is in webcmd itself, not Windows-specific** — same uniform under-reporting on macOS. Our MAX-of-all resolver still returns the correct value FOR THE JSON IT'S GIVEN (all three sources agree at 27 because none of the fee fields are non-zero), but the JSON itself is lying.
+
+**Live DENY test at cap ₹20 (webcmd's number 27 > 20):** `gate run -- webcmd blinkit place-order --confirm` → `DENY OVER_PER_TXN_CAP · ₹27 · over by ₹7 · NO BROWSER ACTION TAKEN`. Balance ₹1,324 unchanged post-run. Confirms the cap check trips against the webcmd-reported number.
+
+**Deliberately not attempted:** the DANGEROUS test — a cap of ₹50 with this same ₹27-per-webcmd / ₹55-per-Blinkit cart. That would have decide() return ALLOW (27 < 50), and the real merchant charge could then exceed the cap silently. ADR-013's fail-closed check on missing `orderId` would still refuse to sign a receipt if the order didn't actually complete, but the ledger would draw ₹27 before that check runs (and if the browser has address+payment ready, ₹27 might actually get charged, mismatching the merchant's ~₹55). Not testing this live because it's the *unfixed* case the ADR-014 follow-up is FOR — the fix genuinely doesn't cover uniform under-reporting, and running it live would just cost real money to prove what we already know from the payload comparison above.
+
+**Mitigations to weigh (moved to ADR-014 follow-up 2, not implemented in this pass — genuine design decision required):**
+1. **Merchant-specific free-delivery threshold, hardcoded as a safety belt.** If `checkout.itemsTotal < BLINKIT_FREE_DELIVERY_THRESHOLD` (a real number Blinkit publishes; varies by location/promo/user segment), require STEP_UP. Rejected once already in ADR-014 as too aggressive; that judgment was made assuming webcmd was mostly reliable. It isn't. Reconsidering it now against the LIVE proof is a real design call, not a rubber-stamp.
+2. **Absolute-minimum safety buffer.** For any commit-path total below, say, ₹100, add a fixed ₹50 buffer before decide() — costs a few legitimate small orders their ALLOW; probably too crude.
+3. **Ask Blinkit adapter maintainers to fix `checkout` for below-threshold carts.** Correct fix but slow, and not under our control (`docs/03-WEBCMD-INTEGRATION.md § Do not: Modify webcmd`).
+4. **Refuse `place-order --confirm` outright for below-threshold carts.** Simplest, most-fail-closed, doesn't require merchant-specific knowledge — just require operators to bring the cart above a minimum before the commit path runs. Trade-off: legitimate small orders can't be automated at all.
+
+Cleanup: deleted temp mandates `mnd_ms6gzbre901c6da0707b.json` and `mnd_ms6gn2bo3f7a0fa97ecc.json` (leftover from the ALLOW-blocked test above). Real ₹27 salt still in the cart — user's decision whether to actually order it or leave it.
+
 **What this fix DOES and DOES NOT guarantee:**
 - **DOES**: If any subset of webcmd's price-shaped fields under-report, the others still guard the cap check.
 - **DOES**: If `checkout` itself is completely unavailable but `cart` succeeds, the resolver still returns a lower-bound total.

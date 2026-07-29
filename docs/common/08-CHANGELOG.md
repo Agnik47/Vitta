@@ -589,3 +589,52 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹295
 **Interface changes:** None.
 
 **Blockers introduced/resolved:** None new. Both ADR-013 (fail-closed on missing order id) and ADR-014 (cart-total resolver) now proven live end-to-end.
+
+---
+
+## [2026-07-30 later same day, "hidden charges" test] — Agent B — ADR-013 fee-bearing bug REPRODUCED LIVE on macOS; confirmed as a webcmd bug, not Windows-specific
+
+**What changed:** No code changes. Live reproduction of the exact ADR-013 fee-under-reporting scenario against Blinkit on macOS.
+
+**Why:** User's reminder: "Please do keep a track on hidden charges also." The ₹295 cart tested earlier was above Blinkit's free-delivery threshold so fees were genuinely 0; the "hidden charges" case needed a small cart.
+
+**Setup:** User manually cleared the Pillsbury from the cart in the Chromium window (Blinkit adapter has no CLI-level "remove"). I then ran `webcmd blinkit add-to-cart 104 --quantity 1` (Aashirvaad Iodized Salt 1kg, ₹27) — cart total genuinely small, well below Blinkit's free-delivery threshold, so real fees should apply on the merchant side.
+
+**Real webcmd payloads:**
+
+```
+LIVE cart: [{status:"ok", productId:"104", name:"Aashirvaad Iodized Natural Salt 1 kg",
+             variant:"1 kg", price:27, quantity:1, total:27, itemCount:1, payable:27,
+             cartState:"valid"}]
+
+LIVE checkout: [{status:"ok", itemCount:1, itemsTotal:27, deliveryCharge:0, handlingCharge:0,
+                 payable:27, cartState:"valid", checkoutBlocked:false, validations:""}]
+
+Resolver: {amountInr: 27, itemCount: 1,
+           sources: ['checkout.payable', 'checkout.itemsTotal+fees', 'cart.line-sum'],
+           merchantBlocked: false}
+```
+
+**This is the exact ADR-013 shape.** `payable: 27, deliveryCharge: 0, handlingCharge: 0` for a ₹27 cart that Blinkit's own UI will charge ~₹55 for (₹27 items + ~₹25 delivery + ~₹3 handling per the original ADR-013 measurements). Reproduced identically on macOS — **the bug is in webcmd itself, not Windows-specific**.
+
+**Live DENY test at cap ₹20:** `DENY OVER_PER_TXN_CAP · ₹27 · over by ₹7 · NO BROWSER ACTION TAKEN`. Balance ₹1,324 unchanged post-run. The cap check trips against webcmd's number correctly.
+
+**Deliberately not attempted:** the DANGEROUS test (cap ₹50, resolver returns 27, decide() says ALLOW at 27, real merchant charge is ~₹55) — that's the unfixed case ADR-014 follow-up 2 is FOR, running it live would just cost real money to prove what the payload comparison already shows.
+
+**Four mitigations flagged in ADR-014 follow-up 2 (not implemented — real design decision needed):**
+1. Merchant-specific free-delivery threshold as a safety belt.
+2. Absolute-minimum safety buffer for small carts.
+3. Ask Blinkit adapter maintainers to fix `checkout` for below-threshold carts (correct fix, upstream, not under our control).
+4. Refuse `place-order --confirm` outright for below-threshold carts.
+
+**Files touched:** `docs/OUTCOME.md` (Phase 1g addendum 3 final section), `docs/agent-b/WORKSPACE.md`, this file. Runtime data: temp mandates cleaned up; real ₹27 salt still in cart (user's decision to order or leave).
+
+**Testing status:** Live reproduction IS the test. Balance-unchanged invariant verified live. `npm test` unchanged at 65/65.
+
+**Known issues:** ADR-014 follow-up 2 (the four mitigation options above) is real design work, not touched here.
+
+**Other agent needs to:** Nothing blocking. **Worth Agent A's input on ADR-014 follow-up 2** — if any mitigation reaches into `decide()`, that's their code, not mine. But most of the candidates live in `src/webcmd/` or `src/cli/gate.ts`.
+
+**Interface changes:** None.
+
+**Blockers introduced/resolved:** None new. The ADR-013 fee-under-reporting is now genuinely confirmed as an outside-our-scope webcmd bug on both platforms, not just Windows.
