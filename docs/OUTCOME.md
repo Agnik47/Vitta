@@ -1138,6 +1138,77 @@ No changes made to any of the four files — this phase's job was to *confirm*, 
 
 ---
 
+### Phase 1g addendum 3 — Cart-total under-reporting bug fixed (ADR-014); resolver extracted + 20 unit tests
+
+**Status:** ✅ Code + unit tests + doc: all done and passing. ⚠️ **Live end-to-end run against a real Blinkit cart at ₹300 not yet executed** — requires the Windows machine with webcmd/cloakbrowser/`.env`/a real login (this session ran on a Mac with none of those).
+**Timestamp:** 2026-07-30, Agent B
+
+**Why this happened:** Direct user instruction — "Please make cart value to 300. Do a rigorous testing to change the blocker & work as agent b." The blocker referred to is ADR-013 follow-up 1: the cart total fed to `decide()` was not always the merchant's true payable, and it was the last correctness item blocking honestly calling Phase 1 done.
+
+**What was built:**
+
+1. **`src/webcmd/cart-total.ts` (new file)** — `resolveCartTotalInr(checkoutRow, cartLines)`: a pure function over already-parsed JSON. Returns `{amountInr, itemCount, sources, merchantBlocked, blockedReason}`. Contract: `amountInr` is the MAX of every price-shaped field either payload exposes (`checkout.payable`, `checkout.itemsTotal + deliveryCharge + handlingCharge`, `cart.line-sum`). Fails closed on all-zero / all-missing input by throwing (which then propagates up to `decide()` as `AMOUNT_UNPARSEABLE`). Surfaces `merchantBlocked=true` when the merchant itself signals `checkoutBlocked` or non-empty `validations` — a signal the caller must act on before invoking `decide()`.
+
+2. **`src/webcmd/cart-total.test.ts` (new file)** — 20 unit tests, all passing. Includes:
+   - **The ADR-013 exact shape as a named regression test.** `checkout.payable=20, deliveryCharge=30, handlingCharge=5, itemsTotal=20` + `cartLines[{payable:20}]` → resolver returns `55` from source `checkout.itemsTotal+fees`. Explicit assertion that this trips a ₹50 cap check (`> 50`).
+   - **The ₹300 cart scenario the user asked for**, across 3 sub-cases: free-delivery threshold (all agree at 300); ₹300 vs a ₹250 cap (would DENY); ₹300 vs a ₹500 cap (would ALLOW). Plus the fee-inclusive variant (₹300 items + ₹25 delivery + ₹5 handling = ₹330).
+   - Merchant-blocked / step-up paths (`checkoutBlocked: true`; non-empty `validations`; empty-array `validations` is not blocking).
+   - Source-precedence tests (only cart, only checkout, disagreements in both directions).
+   - Failure paths (empty inputs throw; all-zero throws).
+   - `itemCount` resolution precedence.
+
+3. **`src/cli/gate.ts` — commit-path cart-fetch rewritten.** Previously called only `webcmd <site> cart -f json` and summed per-line `payable`. Now calls BOTH `checkout -f json` AND `cart -f json`, passes both to `resolveCartTotalInr()`. If the merchant signals `checkoutBlocked` or `validations` are non-empty, the CLI refuses (emits a `STEP_UP` `GateEvent`, prints an explicit "merchant blocked checkout: <reason>" line, exits 1) before `decide()` even fires.
+
+**Real terminal output — ts-node live sanity check on the exact ADR-013 payload:**
+
+```
+$ node --require ts-node/register -e "const {resolveCartTotalInr} = require('./src/webcmd/cart-total'); ..."
+ADR-013 shape: {
+  amountInr: 55,
+  itemCount: 1,
+  sources: [ 'checkout.itemsTotal+fees' ],
+  merchantBlocked: false,
+  blockedReason: ''
+}
+₹300 shape: {
+  amountInr: 300,
+  itemCount: 3,
+  sources: [ 'checkout.payable', 'checkout.itemsTotal+fees' ],
+  merchantBlocked: false,
+  blockedReason: ''
+}
+```
+
+**Real test-run output:**
+
+```
+$ rm -rf dist && npm test
+...
+1..65
+# tests 65
+# suites 0
+# pass 65
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3810.39875
+```
+
+Was 45/45 before this session; now 65/65 (the 20 new tests are all in `cart-total.test.ts`). `npx tsc --noEmit` clean on both root and `dashboard/`; full `tsc` build clean; `node dist/cli/gate.js` starts cleanly.
+
+**What was NOT done, and why (honesty about the boundary of this session):** No live end-to-end run against a real Blinkit cart at ₹300. This session is on a Mac (`darwin`); `webcmd` is not installed (`which webcmd` → not found), `cloakbrowser` is not installed, `.env`/`dashboard/.env.local` don't exist here, and there is no logged-in Blinkit session. Installing 535MB of Cloak's Chromium binary and re-doing OTP-based Blinkit login solely to run this on a different OS than the prior rehearsals was judged out of scope for what a bug-fix session should do without user direction. The specific live tests are laid out step-by-step in `docs/agent-b/LIVE-TEST-RECIPE-CART-300.md` for the same Windows machine that ran Beats 5-8 originally.
+
+**What this fix DOES and DOES NOT guarantee:**
+- **DOES**: If any subset of webcmd's price-shaped fields under-report, the others still guard the cap check.
+- **DOES**: If `checkout` itself is completely unavailable but `cart` succeeds, the resolver still returns a lower-bound total.
+- **DOES**: If `checkout` returns `checkoutBlocked: true` or non-empty `validations`, the CLI refuses categorically before any policy decision.
+- **DOES NOT**: If webcmd's ENTIRE payload uniformly under-reports (payable=20 AND itemsTotal=20 AND all fees=0, when the real merchant charge is ₹55), we cannot detect that at this layer. That's a webcmd bug, out of scope per `CLAUDE.md` rule 7 ("Never mock what you can call for real") and `docs/03-WEBCMD-INTEGRATION.md § Do not` ("Modify webcmd's source"). Documenting this limit explicitly rather than pretending it's fixed.
+
+**Follow-up:** ADR-014 § Required follow-up work — update `docs/03-WEBCMD-INTEGRATION.md § Step 4` to point at the resolver; run the live end-to-end tests per `docs/agent-b/LIVE-TEST-RECIPE-CART-300.md`; add any new payload shapes discovered live as named regression tests.
+
+---
+
 ## Phase 5 — Rehearsal results
 
 **Status:** ⏳ Not started

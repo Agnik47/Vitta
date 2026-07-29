@@ -14,6 +14,7 @@ import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '..
 import type { Receipt } from '../receipt/schema';
 import { DodoCreditLedger } from '../ledger/DodoCreditLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
+import { resolveCartTotalInr, type CheckoutRow, type CartLineRow } from '../webcmd/cart-total';
 import { formatGateEventLine, formatAgentLine } from './ui';
 import { getOrCreateKeyPair } from './keys';
 import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, appendEvent } from './store';
@@ -382,30 +383,80 @@ async function cmdRun(args: string[]): Promise<void> {
 
   let cartAmountInr: number;
   let cartItemCount = 0;
+  let cartMerchantBlocked = false;
+  let cartBlockedReason = '';
   if (!isCommitCommand) {
     cartAmountInr = 0;
   } else {
+    // ADR-014: for commit commands, ask webcmd for BOTH the cart (per-line) and the checkout
+    // (grand-total with fees). `blinkit/checkout` is the read command whose manifest description is
+    // literally "Review Blinkit checkout totals and blockers without placing an order" — this is
+    // exactly the number decide() needs, not the cart-line subtotal that ADR-013 discovered was
+    // silently under-reporting for small orders. Both reads are `access: 'read'` in the manifest,
+    // so this costs a browser round-trip but no gate work or ledger touch. The resolver
+    // (`resolveCartTotalInr`) then returns MAX of every price-shaped field either payload exposes,
+    // matching the fail-closed invariant (CLAUDE.md rule 3).
+    let checkoutPayload: CheckoutRow | undefined;
+    let cartLines: CartLineRow[] | undefined;
     try {
-      const cartCmd = `${site} cart -f json`;
-      const cartResult = execSync(`webcmd ${cartCmd}`).toString();
-      const parsed: unknown = JSON.parse(cartResult);
-      // Real shape (found live, not the spec's guess): a bare array of line items, each with its
-      // own `payable`/`total` — there is no cart-wide object with a single total_inr field. The
-      // authoritative total is the sum across all lines, not any one line's own value.
-      if (Array.isArray(parsed)) {
-        const lines = parsed as Array<{ payable?: number; total?: number; quantity?: number }>;
-        cartAmountInr = lines.reduce((sum, line) => sum + (line.payable ?? line.total ?? 0), 0);
-        cartItemCount = lines.reduce((sum, line) => sum + (line.quantity ?? 1), 0);
-      } else {
-        const cartData = parsed as { total?: number; total_inr?: number };
-        if (cartData.total_inr === undefined && cartData.total === undefined) {
-          throw new Error('Cart total could not be determined (missing total_inr/total field)');
-        }
-        cartAmountInr = cartData.total_inr ?? cartData.total ?? 0;
+      const checkoutResult = execSync(`webcmd ${site} checkout -f json`).toString();
+      const parsedCheckout: unknown = JSON.parse(checkoutResult);
+      // The `checkout` command returns a single-row array (per its columns schema) — take row 0.
+      if (Array.isArray(parsedCheckout) && parsedCheckout.length > 0) {
+        checkoutPayload = parsedCheckout[0] as CheckoutRow;
+      } else if (parsedCheckout && typeof parsedCheckout === 'object' && !Array.isArray(parsedCheckout)) {
+        checkoutPayload = parsedCheckout as CheckoutRow;
       }
     } catch (err) {
-      throw new Error(`Failed to fetch cart total: ${(err as Error).message}`);
+      // A checkout-read failure is not fatal on its own — the cart-line fallback below still
+      // provides a lower-bound total. Surface the reason on stderr so a demo operator can see it.
+      console.error(`  (checkout read failed, falling back to cart lines: ${(err as Error).message})`);
     }
+    try {
+      const cartResult = execSync(`webcmd ${site} cart -f json`).toString();
+      const parsedCart: unknown = JSON.parse(cartResult);
+      if (Array.isArray(parsedCart)) {
+        cartLines = parsedCart as CartLineRow[];
+      }
+    } catch (err) {
+      // Same reasoning as checkout: if `cart` fails but `checkout` succeeded, checkoutPayload
+      // alone is enough to resolve a total. If BOTH failed, resolveCartTotalInr() will throw.
+      console.error(`  (cart read failed: ${(err as Error).message})`);
+    }
+    try {
+      const resolution = resolveCartTotalInr(checkoutPayload, cartLines);
+      cartAmountInr = resolution.amountInr;
+      cartItemCount = resolution.itemCount;
+      cartMerchantBlocked = resolution.merchantBlocked;
+      cartBlockedReason = resolution.blockedReason;
+    } catch (err) {
+      throw new Error(`Failed to resolve cart total: ${(err as Error).message}`);
+    }
+  }
+
+  // If the merchant itself says checkout can't proceed, refuse before decide() even fires. This is
+  // categorically a step-up situation (missing address, slot unavailable, cart validation error) —
+  // an ALLOW here would attest to an order the merchant would have refused to place. See ADR-014.
+  if (cartMerchantBlocked) {
+    const event: GateEvent = {
+      event_id: generateId('evt'),
+      ts: new Date().toISOString(),
+      mandate_id: mandate.mandate_id,
+      mandate_hash: sha256Hex(mandate),
+      command: fullCommand,
+      access: 'write',
+      verdict: 'STEP_UP',
+      amount_inr: cartAmountInr,
+      reserve_ref: mandate.reserve.ref || undefined,
+    };
+    appendEvent(event);
+    console.log(formatGateEventLine(event));
+    console.log(`  merchant blocked checkout: ${cartBlockedReason}`);
+    console.log('  reserve unchanged');
+    console.log('  NO BROWSER ACTION TAKEN');
+    console.log('  → resolve the merchant-side issue and retry');
+    process.exitCode = 1;
+    return;
   }
 
   // Call decide()

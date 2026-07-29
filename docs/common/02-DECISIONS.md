@@ -346,3 +346,51 @@ This is the worst possible failure mode for this specific product: a cryptograph
 1. **The fee under-reporting is still open** and is the more dangerous of the two for policy correctness. Options to weigh: prefer the *larger* of cart/checkout payable, parse the real grand total from the checkout page, or treat a fee-bearing checkout as a step-up trigger. Needs a real decision, not a guess.
 2. The ₹476 receipt's order was confirmed only indirectly (its cart emptied); its `network_order_id` is empty because it predates ADR-011. It is almost certainly a real completed order, but it is not *proven* by an order id, and shouldn't be described as if it were.
 3. Worth re-testing the commit path against a cart above the free-delivery threshold to confirm the fixed path still writes a receipt on a genuine success.
+
+---
+
+## ADR-014 — Cart total fed to `decide()` is now MAX of every price-shaped field webcmd exposes (checkout.payable, checkout.itemsTotal+fees, cart.line-sum), read via a new `resolveCartTotalInr()` in `src/webcmd/cart-total.ts`
+
+**Date:** 2026-07-30
+**Author:** Agent B, closing ADR-013 follow-up 1
+**Status:** Accepted
+
+**What changed:**
+- Added `src/webcmd/cart-total.ts` — a new module containing `resolveCartTotalInr(checkoutRow, cartLines)`, a **pure function** over already-parsed JSON. It returns `{amountInr, itemCount, sources, merchantBlocked, blockedReason}`.
+- Added `src/webcmd/cart-total.test.ts` — 20 unit tests covering: the exact ADR-013 shape (₹20 reported / ₹55 actually charged); the ₹300 happy path; per-txn/total-cap regression checks; `checkoutBlocked`/`validations` step-up detection; source-precedence disagreements; every unresolvable-input path throws.
+- Rewrote the commit-path cart-fetch block in `src/cli/gate.ts` (`cmdRun()`): now runs BOTH `webcmd <site> checkout -f json` AND `webcmd <site> cart -f json`, passes both payloads to `resolveCartTotalInr()`, and refuses (STEP_UP + explicit reason + exit 1) if the merchant itself signals `checkoutBlocked` or non-empty `validations` — before `decide()` even fires.
+
+**What the fix ACTUALLY guarantees:** the number handed to `decide()` is the MAX of every price-shaped field webcmd surfaces for the cart. If any single field under-reports (the ADR-013 failure mode), the others still guard the cap. If webcmd's ENTIRE JSON uniformly under-reports (payable AND fees all wrong), we cannot detect that at this layer — that's a webcmd bug, out of scope per `CLAUDE.md` rule 7 and `docs/03-WEBCMD-INTEGRATION.md § Do not`.
+
+**Why:** ADR-013 left three candidate fixes explicitly unchosen ("prefer larger", "parse grand total off checkout page", "treat fee-bearing checkout as step-up"). Investigating further pinned down the specific real-payload shape that made this decision less abstract:
+- `blinkit/checkout`'s manifest columns are `[status, itemCount, itemsTotal, deliveryCharge, handlingCharge, payable, cartState, checkoutBlocked, validations]` — every fee component is a separate field, plus a `payable` grand total, plus explicit merchant-blocking signals. Its own description in `manifest.json` is literally *"Review Blinkit checkout totals and blockers without placing an order."* This IS the right command to ask for the commit-path total; the previous `cart` sum wasn't wrong so much as not-the-authoritative-view-of-the-order.
+- `blinkit/cart`'s per-line `payable`/`total` is still useful as a lower-bound cross-check — if a stale checkout read gave a smaller number than fresh cart lines, taking the larger fails closed.
+- The MAX-of-everything reconciliation subsumes candidate (a) "prefer larger of cart/checkout" cleanly and also catches the intra-checkout case where `payable` ≠ `itemsTotal + fees`.
+
+Ended up NOT picking candidate (c) "treat any fee-bearing checkout as step-up" because that would deny legitimate ALLOWs the moment Blinkit charges any delivery fee (a routine, expected cost) — the cap check itself is the appropriate gate for that, not a categorical refusal.
+
+Ended up NOT picking candidate (b) "parse the real grand total off the checkout page" because it requires bypassing webcmd's JSON contract to read the DOM directly, which is explicitly disallowed (`docs/03-WEBCMD-INTEGRATION.md § Do not`).
+
+**Alternatives considered:**
+- *Bake the resolver into `decide()` directly.* Rejected — `decide()` MUST stay pure and fee-agnostic (`CLAUDE.md` rule 2). Composing multiple read commands and reconciling their fields is I/O-shaped resolution, categorically on the webcmd side of the seam.
+- *Inline the resolver in `cmdRun()` without a separate module.* Rejected — pulling it out makes it unit-testable against the exact ADR-013 payload with zero webcmd runtime, and gives the fix a home outside a 500-line CLI dispatcher.
+- *Simply switch from `cart` to `checkout`, no MAX.* Rejected — `checkout` was also part of the ADR-013 under-report (`payable: 20`), so picking one command over the other doesn't fix the underlying "one field lied" case. MAX-of-all subsumes both.
+- *Add a categorical "if payable < some_threshold require step-up" safety belt.* Rejected — inventing a magic threshold makes the tool worse on every legitimately small cart, and would still miss cases where webcmd under-reports at any total (nothing forces the bug to only appear below some threshold).
+
+**Testing:**
+- **20 new unit tests, all passing** (`src/webcmd/cart-total.test.ts`) — including the ADR-013 exact shape as a named regression test, and the ₹300 cart across ALLOW/DENY/OVER_PER_TXN_CAP scenarios. Total suite now 65/65 (was 45/45).
+- **Live runtime sanity via ts-node**: called `resolveCartTotalInr()` directly against the ADR-013 payload (returned `55`, source `checkout.itemsTotal+fees`) and the ₹300 payload (returned `300`, sources `checkout.payable`+`checkout.itemsTotal+fees`). Not just "the types compile" — the actual pure logic on both real-shaped payloads produces the right numbers.
+- **`tsc --noEmit` clean** on both root and `dashboard/`; **full build (`tsc`) clean**; **`node dist/cli/gate.js` starts cleanly**.
+- **Not yet re-run against a live Blinkit session end to end.** This session is on a Mac without webcmd/cloakbrowser/`.env`/a Blinkit login — the live end-to-end verification requires the same Windows machine that ran Beats 5-8 originally. A concrete step-by-step recipe for that live test is in `docs/agent-b/LIVE-TEST-RECIPE-CART-300.md` (created this session). The four scenarios it covers are: ₹300 ALLOW under ₹500 cap; ₹300 DENY under ₹250 per-txn; ₹300 DENY under insufficient reserve; the ADR-013 regression (small cart with real fees under a ₹50 cap). Flagging explicitly rather than pretending unit tests are the same as a live run.
+
+**Impact on other modules:**
+- `decide()` — unchanged. Still pure, still fee-agnostic; the reconciled number just arrives cleaner.
+- `docs/03-WEBCMD-INTEGRATION.md` — Step 4 ("Extract the real amount") is currently written as `const { total } = JSON.parse(cartResult)` against `blinkit cart`. That sketch was always guessed (there is no `total` field on the real cart response — see ADR-013's predecessor context), and now it also under-specifies which command to call. Should be updated to point at `resolveCartTotalInr()` and note that `checkout` (not `cart`) is the canonical grand-total source. Not done in this ADR — kept scope tight; flagging as follow-up 1 below.
+- No interface contract changed (`docs/common/03-INTERFACES.md` unchanged) — `Decision`, `SpendRequest`, `Mandate`, `Receipt`, `GateEvent` all still have their frozen shapes.
+- `src/cli/gate.ts`'s commit path now emits a new terminal message when the merchant itself blocks checkout ("merchant blocked checkout: <reason>") + a STEP_UP event. Additive; no existing event codes changed.
+
+**Required follow-up work:**
+1. **Update `docs/03-WEBCMD-INTEGRATION.md` § Step 4** to point at the resolver and describe the MAX-of-everything reconciliation.
+2. **Live end-to-end test at ₹300** on the machine with webcmd/Blinkit — recipe in `docs/agent-b/LIVE-TEST-RECIPE-CART-300.md`. Not doing this here would be dishonest about what's proven; the resolver is proven exhaustively at the unit level and its wiring compiles, but nothing in this repo has exercised the fix against a real merchant response yet.
+3. If the live test uncovers a webcmd payload shape not yet covered (e.g. a totally-different-per-line schema on another merchant), add it to `cart-total.test.ts` as a named regression — the whole point of extracting the resolver is that each real-world discovery becomes one more fast test, not a manual rehearsal note.
+
