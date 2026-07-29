@@ -135,10 +135,12 @@ Re-submitting a known `runId` must check `ledger.jsonl` and refuse to call `Ledg
 
 ## Acceptance checklist — Phase 1 is done only when every line below is true
 
-- [ ] Beats 1–6 run end-to-end against a real webcmd session on a real merchant site, with a real Dodo test-mode Checkout Session and Credit Entitlement Balance
-- [ ] The DENY in Beat 4 is produced by `decide()`, and no `webcmd` subprocess is spawned on that path
-- [ ] `gate verify` (Beats 6 and 7) reflects real signature verification, not a hardcoded pass/fail
-- [ ] The whole run, timed, completes within 4 minutes
-- [ ] A fallback recording of this exact sequence exists on disk, dated, before 31 Jul night
+- [x] Beats 1–6 run end-to-end against a real webcmd session on a real merchant site, with a real Dodo test-mode Checkout Session and Credit Entitlement Balance — **done 2026-07-29, Agent B.** Real ₹476 Blinkit order (2× Aashirvaad Atta 5kg), real Dodo test-mode draw (₹1,800 → ₹1,324), real signed receipt `rcp_ms66xl2ef9771fa00056`. See `docs/OUTCOME.md` Phase 1g addendum.
+- [x] The DENY in Beat 4 is produced by `decide()`, and no `webcmd` subprocess is spawned on that path — confirmed prior session (Beats 1-4 rehearsal) and by code inspection (`execute()` unreachable from the DENY branch).
+- [x] `gate verify` (Beats 6 and 7) reflects real signature verification, not a hardcoded pass/fail — confirmed 2026-07-29 against the real receipt above, both directions (valid → tampered `total_inr` → invalid → restored → valid again), CLI and dashboard `/api/receipts` both checked.
+- [ ] The whole run, timed, completes within 4 minutes — not yet measured; this rehearsal was interactive/exploratory with a live human confirmation step (Dodo checkout, OTP login) in the middle. Time it during Phase 4's rehearsal, which can skip those one-time setup steps.
+- [ ] A fallback recording of this exact sequence exists on disk, dated, before 31 Jul night — **not yet done.** No screen/terminal recording was set up before this run. Re-recording it exactly would need either a second real purchase or a narrated replay over the already-produced real output — a decision for the user, not something to guess at silently.
 
-This is not a suggestion list — every box must be checked against a real run, with real pasted output, before Phase 1 is considered complete. Log the result in `docs/OUTCOME.md`.
+Beat 8 (idempotency retry) real result: `DENY TXN_LIMIT_REACHED`, not `DENY ALREADY_EXECUTED` as this file's own sketch shows above — this mandate's `max_txns: 1` was already consumed by the real Beat 5 receipt, so `decide()`'s transaction-count rule denies the retry before the idempotency guard is ever reached. The actual security property (no double-charge) holds either way, confirmed via `ledger.jsonl` and the real Dodo balance both staying unchanged after the retry. The `ALREADY_EXECUTED`-specific guard function (`hasAlreadyDrawn()`) was verified directly and separately, real run_id in, `true` out. Full writeup: `docs/OUTCOME.md` Phase 1g addendum.
+
+This is not a suggestion list — every box must be checked against a real run, with real pasted output, before Phase 1 is considered complete. Log the result in `docs/OUTCOME.md`. **Two boxes remain open** (timing, fallback video) — Phase 1's core acceptance evidence is real and complete, but not yet fully closed out.

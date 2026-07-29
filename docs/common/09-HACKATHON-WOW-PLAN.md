@@ -50,9 +50,9 @@ You already have more real, working, end-to-end proof than most hackathon teams 
 ## Phase 0 — Decisions (today, ~30 min, no code)
 
 - [x] Authorize Beats 5-8 real purchase — **done, 2026-07-29.**
-- [ ] Pick the exact SKU/merchant for the real order — cheapest plausible real item on Blinkit (the already-tested merchant), ideally something already in a cart from the Beats 1-4 rehearsal so the amount is known ahead of time.
-- [ ] Pick which physical machine runs the *live* demo on 1 Aug (needs: `webcmd doctor` fully green, `cloakbrowser info` → `Installed: true`, dashboard `npm run build` tested there at least once — per `06-DASHBOARD-SPEC.md`'s own acceptance item, "tested on the actual demo machine, not for the first time on stage").
-- [ ] Lock which 2-3 `PRODUCT_FEATURE.md` concepts get real design effort (recommendation below, Phase 3) rather than trying to storyboard all ten sections.
+- [x] Pick the exact SKU/merchant for the real order — **done, 2026-07-29 (Agent B).** Blinkit, the already-tested merchant. Reused the exact cart surviving from the Beats 1-4 rehearsal (2× Aashirvaad Shudh Chakki Atta 5kg, product id `333764`, ₹476 payable) rather than adding a new item — the amount was already known ahead of time, per this item's own recommendation.
+- [x] Pick which physical machine runs the *live* demo on 1 Aug — **done, 2026-07-29 (Agent B), this machine.** `webcmd doctor` green (daemon/Cloak runtime/connectivity all OK), `cloakbrowser info` → `Installed: true` (resolved under B-002). Dashboard `npm run build`/`npm run start` tested here previously (Phase 1h). Real Beats 5-8 rehearsal is also running on this machine, which is itself a stronger test than a bare build check.
+- [ ] Lock which 2-3 `PRODUCT_FEATURE.md` concepts get real design effort (recommendation below, Phase 3) rather than trying to storyboard all ten sections. **Left for Agent A** — this is their Phase 3 call, not Agent B's file/track.
 
 ## Phase 1 — Close the real acceptance checklist (Beats 5-8) — **highest priority, do this first**
 

@@ -475,6 +475,15 @@ async function cmdRun(args: string[]): Promise<void> {
     };
     recordDraw(ledgerEntry);
 
+    // Real webcmd output for a commit command (found live, docs/03-WEBCMD-INTEGRATION.md never
+    // specified this): `result.columns` is a bare array of row objects matching that command's own
+    // `columns` schema — blinkit/place-order's schema includes a real `orderId` field, but nothing
+    // ever read it before this fix, so every receipt's `network_order_id` was hardcoded `undefined`
+    // regardless of whether the order actually succeeded. Extract it defensively — some sites/commands
+    // may not have an orderId field at all, so this stays optional exactly like the schema says.
+    const resultRows = Array.isArray(result.columns) ? (result.columns as Array<{ orderId?: string }>) : [];
+    const networkOrderId = resultRows[0]?.orderId;
+
     // Build and sign receipt
     const receipt: Receipt = buildAndSignReceipt(
       {
@@ -483,7 +492,7 @@ async function cmdRun(args: string[]): Promise<void> {
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
         payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
         execution: { command: fullCommand, run_id: runId, profile: '' },
-        evidence: { trace_digest: result.traceDigest, network_order_id: undefined },
+        evidence: { trace_digest: result.traceDigest, network_order_id: networkOrderId },
         prev_receipt_hash: allReceipts.length === 0 ? CHAIN_HEAD_HASH : sha256Hex(allReceipts[allReceipts.length - 1]),
       },
       gatePrivateKey,

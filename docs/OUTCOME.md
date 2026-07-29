@@ -734,6 +734,141 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹116
 
 ---
 
+### Phase 1g addendum — Beats 5-8 run for real, 2026-07-29 (later still), Agent B
+
+**Status:** Beats 5-7 done for real. Beat 8 done with a real, documented deviation from the demo script's illustrative scenario (see below) — the actual security property (no double-charge) is confirmed either way. Fallback video not yet recorded — see "Still open" at the end.
+
+**Pre-flight (real, this session):** `webcmd doctor` green, `webcmd blinkit whoami` confirmed a live login (had gone stale since the Beats 1-4 rehearsal — user completed a fresh real phone+OTP login), `webcmd blinkit checkout` confirmed the surviving Beats 1-4 cart (2× Aashirvaad Shudh Chakki Atta 5kg, `payable: 476`, `cartState: valid`, `checkoutBlocked: false`). Both mandates from the Beats 1-4 rehearsal were expired and unfunded, so created a fresh one and funded it for real:
+
+```
+$ gate mandate create --subject "agent:grocery-runner" --cap 600 --per-txn 600 \
+    --merchants blinkit --expires "23:55"
+✓ MANDATE mnd_ms65y5egd7e7229c47a6 signed
+  "agent:grocery-runner may spend up to ₹600 at Blinkit, in one transaction, before 11:55 PM today."
+  ed25519 · issuer did:key:z6Mkjq6bom2snEvBiywt9fXs2QehsW6ecfHe8PyhWvEUFLtd
+  reserve: not yet funded — run `gate fund mnd_ms65y5egd7e7229c47a6 --amount <n>` to fund
+
+$ gate fund mnd_ms65y5egd7e7229c47a6 --amount 600
+✓ MANDATE mnd_ms65y5egd7e7229c47a6 funded — ₹600
+  reserve reference cks_0NkEvKofSCvb33CvbrQVl
+  checkout required: complete the Dodo Payments purchase at
+  https://test.checkout.dodopayments.com/session/cks_0NkEvKofSCvb33CvbrQVl
+
+[human completed the real Dodo test-mode checkout — Dodo's own test Visa 4576238912771450 —
+ verified balance afterward via a temp script calling DodoCreditLedger.balance() directly:
+ 180000 paise (₹1,800), up from the pre-existing ₹1,200]
+```
+
+Dry-checked `decide()` directly (temp script, deleted after use) with 100% real inputs — real cart total via a live `webcmd blinkit cart -f json` read (₹476), real ledger balance via a live `DodoCreditLedger.balance()` call (₹1,800), real txn count from `receipts/` (0) — without calling `execute()`, since `gate run`'s ALLOW branch has no dry-run flag and would immediately place the real order:
+
+```
+{
+  "verdict": "ALLOW"
+}
+```
+
+**Beat 5 — real `place-order`:**
+
+```
+$ gate run -- webcmd blinkit place-order --confirm
+› blinkit place-order --confirm
+ALLOW  blinkit/place-order · ₹476
+✓ blinkit/place-order executed · runId 61a80013-9591-4f90-a4d2-8a39dd904fef
+  receipt rcp_ms66xl2ef9771fa00056
+```
+
+Real money moved: Dodo test-mode balance dropped from ₹1,800 to ₹1,324 (confirmed via a temp script calling `balance()` directly), matching the ₹476 draw exactly. `ledger.jsonl` gained one real entry: `{"runId":"61a80013-9591-4f90-a4d2-8a39dd904fef","reserveRef":"cks_0NkEvKofSCvb33CvbrQVl","amountInrPaise":47600,"ts":"2026-07-29T14:39:17.217Z"}`.
+
+**Real bug found while inspecting the receipt: `network_order_id` was hardcoded `undefined`, even though webcmd's real `place-order` output includes a real `orderId` field.** `docs/03-WEBCMD-INTEGRATION.md`'s manifest schema for `blinkit/place-order` declares columns `["status","confirmed","itemCount","payable","orderId","url","message"]` — `execute()`'s `ExecuteResult.columns` carries this real data back, but `src/cli/gate.ts`'s receipt-building code never read it, unconditionally passing `network_order_id: undefined`. This is a real, previously-invisible gap: nobody had inspected a receipt produced by an actual commit-path command until this run (Beats 1-4 never reached `place-order`). Fixed in `src/cli/gate.ts`: extract `result.columns[0]?.orderId` defensively (some commands have no `orderId` field at all, so this stays optional exactly as the schema declares) and pass it through as `network_order_id`. Full reasoning: `docs/common/02-DECISIONS.md` ADR-011.
+
+**This specific receipt (`rcp_ms66xl2ef9771fa00056`) predates the fix and is missing `network_order_id` — deliberately not retroactively edited.** Editing an already-signed receipt to backfill a field would be indistinguishable from the exact tampering this system is built to detect, and would break its own signature. The fix applies to every receipt produced from this point forward. The real order itself did succeed (`status`/`confirmed` fields in the raw webcmd output, not captured verbatim since the CLI didn't print raw JSON — only `cmdRun()`'s summary line — but the receipt's `payment.status: "captured"` and the real ₹476 ledger draw are independent confirmation the order went through for real).
+
+**Beat 6 — `gate receipt show` / `gate verify`:**
+
+```
+$ gate receipt show rcp_ms66xl2ef9771fa00056
+✓ RECEIPT rcp_ms66xl2ef9771fa00056 signed
+
+  mandate  sha256:b37663afab312514baf9c9e894e390bd1db486286f2f24d6b7e33ce02482872f        cart     blinkit · 2 items · ₹476
+  payment  dodo_test · captured
+  run      blinkit/place-order · 61a80013-9591-4f90-a4d2-8a39dd904fef
+  evidence trace sha256:384772d343c5ba676e0a08674c9f5819ccd69d2c48a5630991e7257816cc0320
+  prev     sha256:0000000000000000000000000000000000000000000000000000000000000000        (chain head)
+
+$ gate verify rcp_ms66xl2ef9771fa00056
+✓ signature valid · chain intact
+```
+
+`trace_digest` is real and non-empty here for the first time on an actual commit-path receipt — this was the item ADR-009 left explicitly unverified ("not yet exercised through an actual commit (`place-order`) receipt"). Confirmed now: real, non-empty `sha256:...`.
+
+**Beat 7 — tamper test, both CLI and dashboard:**
+
+```
+$ cp receipts/rcp_ms66xl2ef9771fa00056.json /tmp/rcp_backup.json   # backup before tampering
+$ sed -i 's/"total_inr": 476/"total_inr": 1/' receipts/rcp_ms66xl2ef9771fa00056.json
+$ gate verify rcp_ms66xl2ef9771fa00056
+✗ signature invalid — receipt tampered
+[exit code 1]
+```
+
+Dashboard, built+started fresh (`npm run build && npm run start`) with the receipt still tampered:
+
+```
+$ curl http://localhost:3000/api/receipts
+[{"receipt":{...,"cart":{"merchant":"blinkit","items":2,"total_inr":1},...},
+  "verification":{"receipt_id":"rcp_ms66xl2ef9771fa00056","signature_valid":false,"chain_link_valid":true}}]
+```
+
+Restored the original file (`cp /tmp/rcp_backup.json receipts/rcp_ms66xl2ef9771fa00056.json`, `diff` confirmed byte-identical), re-checked both ways — no manual refresh needed:
+
+```
+$ gate verify rcp_ms66xl2ef9771fa00056
+✓ signature valid · chain intact
+
+$ curl http://localhost:3000/api/receipts
+[{"receipt":{...,"total_inr":476,...},
+  "verification":{"receipt_id":"rcp_ms66xl2ef9771fa00056","signature_valid":true,"chain_link_valid":true}}]
+```
+
+**Beat 8 — idempotency retry test. Real result diverges from the demo script's illustrative sketch, in a way worth documenting rather than working around:**
+
+```
+$ gate run -- webcmd blinkit place-order --confirm --run-id 61a80013-9591-4f90-a4d2-8a39dd904fef
+› blinkit place-order --confirm
+DENY  blinkit/place-order · TXN_LIMIT_REACHED · ₹0
+
+  reserve untouched
+  NO BROWSER ACTION TAKEN
+  → step-up required
+[exit code 1]
+```
+
+Not `DENY ALREADY_EXECUTED` as `docs/05-DEMO-SCRIPT.md`'s Beat 8 sketch shows. Root cause, found by reading `cmdRun()`: the `hasAlreadyDrawn()` idempotency check (ADR-004) only runs *after* `decide()` has already returned `ALLOW` — this mandate has `max_txns: 1`, already consumed by the real Beat 5 receipt, so `decide()`'s Rule 8 (`TXN_LIMIT_REACHED`) denies the retry before the idempotency check is ever reached. The demo script's own sketch implicitly assumes a mandate with room for another transaction (its illustrative `run_4821_...` example is a standalone snippet, not tied to a specific `--max-txns` value). **The actual security property — no double-charge — holds regardless of which guard fires:** confirmed `ledger.jsonl` still has exactly one entry (the original real draw) and the real Dodo balance is unchanged at ₹1,324 after the retry attempt.
+
+To verify the `ALREADY_EXECUTED`-specific guard itself (not just "some guard denies it"), tried constructing a scenario where `decide()` would reach `ALLOW` — a fresh, unfunded mandate with `--max-txns 2` (0 receipts against its hash, and the real cart is now empty post-order, so `amountInr: 0` clears every remaining rule) — then retried the same real `run_id` against it. **This second `gate run -- ... place-order --confirm` attempt was blocked by Claude Code's own auto-mode safety classifier**, which flagged the repeated `place-order --confirm` invocation regardless of the reasoning that the idempotency guard should catch it before any webcmd call — a reasonable safety behavior, not a bug, since the classifier has no way to verify that reasoning in advance and the downside of being wrong is a second real charge. Rather than route around it, verified the actual guard function directly instead (a pure, non-webcmd, non-money call):
+
+```
+$ npx ts-node check_idempotency.temp.ts   # imports hasAlreadyDrawn from src/webcmd/executor.ts directly
+hasAlreadyDrawn('61a80013-9591-4f90-a4d2-8a39dd904fef'): true
+hasAlreadyDrawn('not-a-real-run-id'): false
+```
+
+This is the exact function `cmdRun()` calls at its idempotency check site — confirms it correctly recognizes the real, already-drawn `run_id` and would have denied `ALREADY_EXECUTED` had `decide()` reached `ALLOW`. Temp script deleted after use, along with the extra test mandate created for this (unfunded, no real money involved, deleted rather than left lying around).
+
+**Acceptance checklist from `05-DEMO-SCRIPT.md`, updated against this real run:**
+
+- [x] Beats 1–6 run end-to-end against a real webcmd session on a real merchant site, with a real Dodo test-mode Checkout Session and Credit Entitlement Balance
+- [x] The DENY in Beat 4 is produced by `decide()`, and no `webcmd` subprocess is spawned on that path (Beats 1-4 rehearsal, prior session)
+- [x] `gate verify` (Beats 6 and 7) reflects real signature verification, not a hardcoded pass/fail — confirmed against a receipt this exact live rehearsal produced, both directions (valid → tampered → restored → valid)
+- [ ] The whole run, timed, completes within 4 minutes (not measured this session — run was interactive/exploratory with a live user confirmation step in the middle; time it during Phase 4's rehearsal)
+- [ ] A fallback recording of this exact sequence exists on disk, dated — **still open, see below**
+
+**Still open:** the fallback video. This run happened without screen/terminal recording set up in advance (no screen-capture tooling was invoked this session). Re-recording it exactly would mean either a full independent re-run (a second real purchase — not something to do without asking first) or a narrated screen-capture over already-produced real output (real data, but not a live capture). Left for the user to decide how to proceed — noted directly in the session, not silently skipped.
+
+Full suite re-verified throughout: `npx tsc --noEmit` → exit 0 (root). `npm test` → 45/45 passing, no regressions.
+
+---
+
 ## Phase 1h — Dashboard (Next.js, read-only)
 
 **Status:** ⚠️ Done with deviations (see below) — core acceptance checklist passes for real; one item can't be tested until Phase 1f (CLI) exists
