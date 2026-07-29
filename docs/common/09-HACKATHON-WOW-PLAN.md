@@ -60,16 +60,19 @@ You already have more real, working, end-to-end proof than most hackathon teams 
 
 No new code is expected to be needed here — `cmdRun`/`cmdFund`/`execute()`/`DodoCreditLedger`/receipt chain are all already real and already type-check. This phase is *execution*, not development.
 
-- [ ] Re-run `webcmd doctor` and `cloakbrowser info` on whichever machine will do this — confirm still green (browser binaries/sessions can go stale between sessions).
-- [ ] `gate mandate resign` to step up the cap enough to cover the real cart (Beat 5).
-- [ ] Run `gate run -- webcmd blinkit place-order --confirm` for real — capture the full terminal output.
-- [ ] `gate receipt show <id>` — confirm every field is real (mandate hash, cart total, run_id, order id, `trace_digest`).
-- [ ] `gate verify <id>` — confirm signature + chain valid.
-- [ ] Beat 7 tamper test: edit the receipt file on disk, re-run `gate verify`, confirm it now fails, confirm the *dashboard's* `/receipts` page (if up) flips within one poll cycle too.
-- [ ] Beat 8 idempotency test: re-submit the same `run_id`, confirm `DENY ALREADY_EXECUTED`, confirm no second draw happened (`ledger.jsonl` + Dodo balance both checked).
-- [ ] Paste all real terminal output into `docs/OUTCOME.md` (Phase 1g section) — do not paraphrase, per that file's own rules.
-- [ ] Update `docs/05-DEMO-SCRIPT.md`'s acceptance checklist boxes and `docs/common/01-PROJECT-STATUS.md`.
-- [ ] **Record a video of this exact run, dated** — `docs/05-DEMO-SCRIPT.md`'s own acceptance checklist requires a fallback recording to exist on disk before 31 Jul night. This is not optional polish; it's the thing that saves the live demo if venue wifi or a live site both misbehave on 1 Aug.
+**STATUS 2026-07-29: this phase is done, bar one item (a timed run).** Full record in `docs/OUTCOME.md`'s Phase 1g addendum.
+
+- [x] Re-run `webcmd doctor` and `cloakbrowser info` — confirmed green. Also found the Blinkit session *had* gone stale (`whoami` → `AUTH_REQUIRED`) exactly as this item warned; user completed a fresh real OTP login.
+- [x] Step up the cap to cover the real cart (Beat 5) — did this via a fresh `gate mandate create` rather than `resign`, since both existing mandates were expired *and* unfunded (resigning an expired mandate carries the expiry forward). New mandate `mnd_ms65y5egd7e7229c47a6`, ₹600 cap, funded for real via Dodo test-mode checkout.
+- [x] Run `gate run -- webcmd blinkit place-order --confirm` for real — real `ALLOW`, real ₹476 order, real ledger draw (₹1,800 → ₹1,324), receipt `rcp_ms66xl2ef9771fa00056`. Full output captured.
+- [x] `gate receipt show <id>` — every field real, including `trace_digest` non-empty on a commit-path receipt for the first time (closes ADR-009's open item). **Found a real bug here:** `network_order_id` was hardcoded `undefined` despite webcmd's real output carrying an `orderId` — fixed (ADR-011); the already-signed receipt was deliberately *not* retroactively edited.
+- [x] `gate verify <id>` — signature valid, chain intact.
+- [x] Beat 7 tamper test — real edit on disk, `gate verify` correctly failed, dashboard `/api/receipts` flipped to `signature_valid: false` too; both restored correctly afterward.
+- [x] Beat 8 idempotency test — **real result was `DENY TXN_LIMIT_REACHED`, not `ALREADY_EXECUTED`** (this mandate's `max_txns: 1` was already consumed, so `decide()` denies before the idempotency guard is reached). No second draw confirmed via both `ledger.jsonl` and the real Dodo balance. The `ALREADY_EXECUTED` guard itself verified directly (`hasAlreadyDrawn()` → `true`), after Claude Code's own safety classifier correctly blocked a second `place-order --confirm` attempt.
+- [x] Paste all real terminal output into `docs/OUTCOME.md` (Phase 1g addendum) — done, verbatim.
+- [x] Update `docs/05-DEMO-SCRIPT.md`'s acceptance checklist boxes and `docs/common/01-PROJECT-STATUS.md` — done.
+- [x] **Record a video, dated** — `demo/mandate-gate-fallback-2026-07-29.mp4` (4m32s, 1080p, committed). Per the user's explicit choice, a **narrated replay** of this run's real captured output rather than a live capture of a *second* real purchase. Honestly labeled as a replay on its own title card and in `demo/README.md`.
+- [ ] **Still open: a timed run under 4 minutes.** This rehearsal had one-time human steps (OTP login, Dodo checkout) mid-flow, so it wasn't representative to time. Do it in Phase 4, where those steps are already done. (Note: the fallback video's 4m32s runtime is *not* this metric — narration is slower than execution.)
 
 ## Phase 2 — Dashboard visual overhaul (the actual "wow" ask)
 

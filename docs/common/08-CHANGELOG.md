@@ -433,3 +433,21 @@ Reorganized `components/` into domain folders (`layout/`, `mandate/`, `events/`,
 **Other agent needs to:** Nothing blocking Agent A's dashboard visual work. Worth knowing: the dashboard was built+started+killed once this session (for the Beat 7 dashboard-flip check) — confirmed clean, no interference with anything Agent A has in progress on `dashboard/lib`/`api` (untouched this session).
 **Interface changes:** `Receipt.evidence.network_order_id`'s type is unchanged (still optional) — this is a bug fix, not a contract change. `03-INTERFACES.md` doesn't need updating for this one.
 **Blockers introduced/resolved:** none. No open blockers. The two open checklist boxes (timing, video) are logistics, not blockers.
+
+---
+
+## [2026-07-29 15:34 UTC] — Agent B — Fallback recording built and committed (`demo/`)
+
+**What changed:** Closed `docs/05-DEMO-SCRIPT.md`'s fallback-recording acceptance item. Offered the user the real choice — a second real purchase captured live, versus a narrated replay of the run already captured — and they chose the replay, so no second order was placed. Built `demo/mandate-gate-fallback-2026-07-29.mp4`: 10 scenes (title, Beats 1-8, closing card), 4m32s, 1920×1080 H.264/AAC, 7.5MB. Each scene renders **this run's real, verbatim terminal output** (the same text in `docs/OUTCOME.md`'s Phase 1g addendum) as a terminal-styled frame, with synthesized narration explaining what each beat proves.
+
+**Committed the binary to the repo** rather than leaving it only on this machine — the entire purpose of a fallback is redundancy, and a fallback that dies with one laptop isn't one. 7.5MB is well within reason for a project shipping 1 Aug.
+
+**Honesty framing, built into the artifact itself, not just the docs:** the video's own title card reads "FALLBACK RECORDING — replay of a real run" and "This is a narrated replay, not a live screen capture." This project's whole pitch is that it doesn't fake the money-moving parts — a reconstructed video presenting itself as a live capture would undercut exactly that, and a judge asking "is this live?" deserves the answer to already be on screen. `demo/README.md` documents the same, plus two things a viewer needs to know: the 4m32s runtime is **not** the demo script's "under 4 minutes" metric (that measures a live run — narration is slower than execution), and Beat 8's on-screen `TXN_LIMIT_REACHED` is the real result, explained in narration rather than glossed.
+
+**Why:** Direct continuation of the user-authorized Plan Phase 1, and its last remaining item other than the timed run.
+**Files touched:** `demo/mandate-gate-fallback-2026-07-29.mp4` (new), `demo/README.md` (new), `docs/05-DEMO-SCRIPT.md` (checklist box), `docs/OUTCOME.md` (Phase 1g addendum), `docs/common/09-HACKATHON-WOW-PLAN.md` (Phase 1 checklist marked up with real results), `docs/common/01-PROJECT-STATUS.md`, `docs/agent-b/WORKSPACE.md`. **No `src/` changes** — nothing about the application code was touched to make this.
+**Testing status:** Video verified after build, not assumed: `ffprobe` confirmed both streams span the full 4m32s (H.264 1920×1080 + AAC 48kHz stereo), and a frame extracted from mid-video (t=155s, inside the Beat 6 scene) was visually checked to confirm the concat didn't corrupt anything. No project tests affected (no `src/` change); `tsc --noEmit` and `npm test` (45/45) still clean from the prior entry.
+**Known issues:** The build tooling (scene definitions, SVG renderer, TTS script, ffmpeg assembly) lived in the session scratchpad and was **not** committed — one-shot and machine-specific (depends on this machine's ffmpeg, Chrome, and Windows `System.Speech`). `demo/README.md` records that `docs/OUTCOME.md`'s Phase 1g section is the source of truth if it ever needs rebuilding. No new project dependencies were added (CLAUDE.md rule 5) — all three tools were already on this machine.
+**Other agent needs to:** Nothing. Agent A: the new `demo/` directory is unrelated to your Phase 2/3 dashboard work, no conflict. Worth watching it once before demo day so you know what the fallback actually shows if it ever has to be played.
+**Interface changes:** None.
+**Blockers introduced/resolved:** none. One acceptance-checklist box still open (the timed run) — logistics, not a blocker, and a natural fit for Plan Phase 4.
