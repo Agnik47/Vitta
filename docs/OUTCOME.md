@@ -599,27 +599,83 @@ Full suite: `npm test` → 45/45 passing (24 from Phases 1a/1b/1e + 21 new: `id`
 
 ## Phase 1g — End-to-end run (the real acceptance test)
 
-**Status:** ⏳ Not started
-**Timestamp:**
+**Status:** 🔨 In progress — Beats 1–4 run for real and verified; Beats 5–8 deliberately not run this session (see below), not a code gap
+**Timestamp:** 2026-07-29 (later still), Agent A
 
-**Full pasted terminal output of the complete Beat 1–8 run:**
+**What was actually run, for real, against the live stack (webcmd + real blinkit.com + real Dodo test mode):**
 
 ```
-(paste here)
+$ gate scan
+✓ webcmd manifest loaded — 109 sites, 805 commands
+  228 marked access:'write'
+  0 currently governed
+
+$ gate mandate create --subject "agent:grocery-runner" --cap 50 --per-txn 50 \
+    --merchants blinkit --expires "23:00"
+✓ MANDATE mnd_ms5wgmdw41918f187092 signed
+  "agent:grocery-runner may spend up to ₹50 at Blinkit, in one transaction, before 11:00 PM today."
+  ed25519 · issuer did:key:z6MktLJ3CLa8rezn5W57AbhQnxboegqRFe5kd2dtK8Rnn6cS
+  reserve: not yet funded
+
+$ gate fund mnd_ms5wgmdw41918f187092 --amount 200
+✓ MANDATE mnd_ms5wgmdw41918f187092 funded — ₹200
+  reserve reference cks_0NkEBgFsQ4J9Zk1Zxs4cE
+  checkout required: complete the Dodo Payments purchase at
+  https://test.checkout.dodopayments.com/session/cks_0NkEBgFsQ4J9Zk1Zxs4cE
+
+[human completed the real Dodo test-mode checkout — real test Visa 4576238912771450 —
+ verified balance afterward: 120000 paise (₹1,200), up from the pre-existing ₹1,000]
+
+$ webcmd blinkit login --window foreground   [human completed real phone+OTP login]
+$ webcmd blinkit whoami -f json
+[{ "logged_in": true, "user_id": 54109658, ... }]
+
+$ gate run -- webcmd blinkit search "atta"
+› blinkit search atta
+ALLOW  blinkit/search
+
+$ gate run -- webcmd blinkit add-to-cart 656865 --quantity 1
+› blinkit add-to-cart 656865 --quantity 1
+ALLOW  blinkit/add-to-cart · ₹0
+  ₹0 committed
+
+$ gate run -- webcmd blinkit cart
+› blinkit cart
+ALLOW  blinkit/cart
+
+$ gate run -- webcmd blinkit place-order --confirm
+› blinkit place-order --confirm
+DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹116
+  transaction ₹116 · limit ₹50
+  over by ₹66
+
+  reserve untouched
+  NO BROWSER ACTION TAKEN
+  → step-up required
 ```
 
-**Elapsed time of the run:**
+**Why OVER_PER_TXN_CAP and not OVER_TOTAL_CAP:** this rehearsal's mandate was created with `--cap 50 --per-txn 50` (both equal, deliberately low, chosen to guarantee *some* real DENY without needing to know the exact cart total in advance) — Rule 6 (per-txn) fires before Rule 7 (total cap) ever gets evaluated, per `decide()`'s real rule order. This is still a fully real, live DENY — decide() genuinely refused a real ₹116 cart, and no `webcmd` subprocess was spawned on that path (confirmed by code inspection: `execute()` is only ever called inside the two ALLOW branches in `cmdRun()`, never reachable from the DENY branch). The demo script's own OVER_TOTAL_CAP scenario is just as reachable — set `--per-txn` higher than the cart and `--cap` lower — not re-run separately since the refusal mechanism (decide() denies, no execute() call) is identical either way.
+
+**Beats 5–8 (real place-order, receipt, verify, idempotency-retry): deliberately not run this session.** Beat 5 requires actually completing a real order on the live blinkit.com site — real delivery, real payment (COD or a saved card), not simulated by Dodo test mode (which only covers the mandate's own reserve accounting). The user made an explicit, informed choice not to spend real money on this rehearsal pass. This is **not a code gap** — see the 4 real bugs found and fixed below, all of which were found and fixed by actually running the live stack up through Beat 4, and the commit-path code (execute → draw → recordDraw → sign receipt) is implemented and type-checked but only exercised in the ALLOW branch of `cmdRun()` for a non-commit write (`add-to-cart`) so far, not for an actual `place-order`. Recommend running Beats 5–8 for real once during actual hackathon rehearsal (Phase 5, joint session) when a small real purchase is acceptable, or the user should tell us if there's a truly-free test path we haven't found (blinkit sandbox account, COD order that can be cancelled before dispatch, etc.).
+
+**4 real bugs found and fixed while running this (all from actually executing against the live stack, not from reasoning about the code):**
+
+1. **`DodoCreditLedger.fund()` discarded `checkout_url`.** The real `checkoutSessions.create()` response is `{ session_id, checkout_url }` — `fund()` only ever extracted `session_id`, so the CLI's "open your browser to complete the purchase" message had no URL to open. `Ledger.fund()`'s return type widened to `{ reserveRef, checkoutUrl? }`; `gate fund` now prints the real URL.
+2. **`cmdRun()` fetched the cart total for every write command**, including `add-to-cart` — but `docs/03-WEBCMD-INTEGRATION.md`'s own command table calls `add-to-cart` "gated, but ₹0 committed until checkout." Fixed: only `place-order`/`checkout` (the actual commit action) fetches the real cart; other writes execute with `amountInr = 0` and skip the ledger draw/receipt entirely (there's nothing to draw against or receipt for a ₹0 action).
+3. **Cart JSON's real shape is a bare array of line items** (`[{ productId, name, price, quantity, total, payable, ... }]`), not an object with a top-level `total_inr`/`total` field as the original code assumed. Fixed to sum `payable`/`total` across all lines for the authoritative cart total, and derive a real item count for the receipt from the same data.
+4. **Beat 8's `--run-id <id>` retry flag was being passed straight through to `webcmd`** (which doesn't understand it and would error) instead of being intercepted by the gate CLI for the idempotency check. Fixed: `cmdRun()` now strips `--run-id` out of the args before they ever reach webcmd, and if present, checks `hasAlreadyDrawn(runId)` before any webcmd/Ledger call — denying with `ALREADY_EXECUTED` if it's already in `ledger.jsonl`, exactly as ADR-004 specifies. Not yet exercised end-to-end (needs a real Beat 5 run first to generate a real runId to retry).
+
+**Also found and fixed during payment testing (not a code bug, a process/documentation gap):** the generic Stripe test card `4242 4242 4242 4242` does **not** work on Dodo's test-mode checkout — it was rejected with a misleading-sounding "card not supported" message. Dodo's own confirmed-working test Visa for this account is `4576238912771450` (already used successfully once before, in the original Phase 1c provisioning — see that section above). Worth remembering for any future checkout in this project: **use Dodo's own test card, not a generic one from another processor.** A related near-miss: on the first checkout attempt, the human accidentally entered their own real RuPay debit card instead of the test card — it was declined (RuPay isn't in Dodo test mode's simulated network list: Visa/MasterCard/Amex/Discover/Diners/JCB/UnionPay/Link), so nothing was actually charged, but this is a reminder to always double-check which card number is being typed into a real-looking checkout form even when the URL is `test.checkout.dodopayments.com`.
 
 **Acceptance checklist from `05-DEMO-SCRIPT.md`, checked against this real run:**
 
-- [ ] Beats 1–6 ran against real webcmd + real Dodo, end to end
-- [ ] Beat 4's DENY confirmed to NOT spawn a webcmd subprocess
-- [ ] `gate verify` reflected real signature checks, not hardcoded output
-- [ ] Full run completed within 4 minutes
-- [ ] Fallback recording exists, dated
+- [x] Beats 1–4 ran against real webcmd + real Dodo, end to end (Beats 5-6 not yet — real purchase pending a later decision)
+- [x] Beat 4's DENY confirmed to NOT spawn a webcmd subprocess (verified by code inspection: `execute()` unreachable from the DENY branch)
+- [ ] `gate verify` reflected real signature checks against a receipt produced by a real `gate run` (verified previously against bootstrapped fixture receipts, not yet against a receipt this exact live rehearsal produced — needs Beat 5)
+- [ ] Full run completed within 4 minutes (not measured — run was interactive/exploratory, not timed; time it during the actual Phase 5 rehearsal)
+- [ ] Fallback recording exists, dated (not yet — needs a full Beat 1-8 run to record)
 
-**Gaps found and how they were fixed:**
-
+**Next session should:** decide how to handle Beats 5-8 (real purchase now vs. wait for Phase 5's rehearsal), then run the remaining beats for real and complete this checklist.
 
 ---
 
