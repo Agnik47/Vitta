@@ -161,7 +161,7 @@ Install via `npx shadcn@latest init`, **"new-york" style preset** as the startin
 - `shadcn/ui` (+ Radix primitives, `class-variance-authority`, `tailwind-merge`, `clsx`, `lucide-react`) — direct user instruction; also explicitly allowed as "optional polish" by `docs/06-DASHBOARD-SPEC.md`.
 - `lucide-react` — shadcn's default icon set; plain line icons, satisfies the "no emoji as icons" rule.
 - `sonner` — the one toast (new-DENY signal); small, shadcn-recommended, avoids hand-rolling a toast stack.
-- `recharts` — **Phase 3 only**, for the sample savings/timeline chart; Phase 2 needs no charting library at all. Deferred, not installed yet.
+- `recharts` (`^3.10.1`) — **Phase 3**, for `/concept/timeline`'s checkout-activity chart. Installed as v3 (not v2) since v1/v2 are no longer actively maintained upstream and this is a fresh install with no v2 code to preserve; confirmed clean against React 19 (no peer-dependency errors, only unrelated transitive `wasm-runtime` warnings already present before this install).
 - **Deliberately not adding:** `framer-motion`. Every motion spec above is achievable with Tailwind's `transition-*`/`animate-*` utilities and a handful of custom `@keyframes`; skipping it keeps the bundle light and keeps motion tied to real state changes rather than inviting decorative use.
 
 ---

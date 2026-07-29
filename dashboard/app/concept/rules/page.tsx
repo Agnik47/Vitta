@@ -1,13 +1,16 @@
-import { SlidersHorizontal } from "lucide-react";
-import { ConceptPlaceholder } from "@/components/shared/concept-placeholder";
+import { PageHeader } from "@/components/layout/page-header";
+import { ConceptPreviewBadge } from "@/components/shared/concept-preview-badge";
+import { RuleBuilderForm } from "@/components/concept/rule-builder-form";
 
 export default function RuleBuilderPage() {
   return (
-    <ConceptPlaceholder
-      icon={SlidersHorizontal}
-      title="Shopping rule builder"
-      description="Product, target price, budget, merchants, and expiry — the concept that eventually becomes a real signed mandate."
-      hint="A local-state mock only — this app never creates a mandate; that stays exclusively a `gate` CLI action."
-    />
+    <div>
+      <PageHeader
+        title="Shopping rule builder"
+        description="Product, target price, budget, merchants, and expiry — the concept that eventually becomes a real signed mandate."
+        action={<ConceptPreviewBadge />}
+      />
+      <RuleBuilderForm />
+    </div>
   );
 }
