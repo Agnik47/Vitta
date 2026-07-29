@@ -3,7 +3,7 @@
 // plain arguments, which is what makes a future different-rail implementation non-breaking.
 
 export interface Ledger {
-  fund(mandateId: string, amountInrPaise: number): Promise<{ reserveRef: string }>;
+  fund(mandateId: string, amountInrPaise: number): Promise<{ reserveRef: string; checkoutUrl?: string }>;
   balance(reserveRef: string): Promise<number>;
   draw(reserveRef: string, amountInrPaise: number, runId: string): Promise<void>;
   release(reserveRef: string): Promise<void>;

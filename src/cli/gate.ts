@@ -232,7 +232,7 @@ async function cmdFund(args: string[]): Promise<void> {
 
   const ledger = new DodoCreditLedger();
   const amountInrPaise = Math.round(amountInr * 100);
-  const { reserveRef } = await ledger.fund(mandateId, amountInrPaise);
+  const { reserveRef, checkoutUrl } = await ledger.fund(mandateId, amountInrPaise);
 
   // Update and re-sign the mandate with the new reserve
   const { privateKey } = getOrCreateKeyPair('issuer');
@@ -246,7 +246,11 @@ async function cmdFund(args: string[]): Promise<void> {
 
   console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(amountInr)}`);
   console.log(`  reserve reference ${reserveRef}`);
-  console.log(`  checkout required: open your browser to complete the Dodo Payments purchase before running commands`);
+  if (checkoutUrl) {
+    console.log(`  checkout required: complete the Dodo Payments purchase at ${checkoutUrl}`);
+  } else {
+    console.log(`  checkout required: open your browser to complete the Dodo Payments purchase before running commands`);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -270,7 +274,19 @@ async function cmdRun(args: string[]): Promise<void> {
 
   const site = webcmdArgs[1];
   const command = webcmdArgs[2];
-  const cmdArgs = webcmdArgs.slice(3);
+  const rawCmdArgs = webcmdArgs.slice(3);
+  // --run-id is a gate-CLI-level flag (Beat 8's idempotency-retry test), not a webcmd argument —
+  // strip it out before anything is passed through to the real webcmd process.
+  let explicitRunId: string | undefined;
+  const cmdArgs: string[] = [];
+  for (let i = 0; i < rawCmdArgs.length; i++) {
+    if (rawCmdArgs[i] === '--run-id') {
+      explicitRunId = rawCmdArgs[i + 1];
+      i++;
+    } else {
+      cmdArgs.push(rawCmdArgs[i]);
+    }
+  }
   const fullCommand = `${site}/${command}`;
 
   // Load the most recent mandate
@@ -310,18 +326,39 @@ async function cmdRun(args: string[]): Promise<void> {
     throw new Error(`Unknown command "${fullCommand}" (not in manifest)`);
   }
 
+  // Only the actual commit action (place-order/checkout) represents real spend — per
+  // docs/03-WEBCMD-INTEGRATION.md's command table, other write commands like add-to-cart are
+  // "gated, but ₹0 committed until checkout." Fetching the cart for those would be an unnecessary
+  // browser round-trip and, worse, would incorrectly deny them if the cart total exceeds the cap
+  // before the agent ever tries to actually spend anything.
+  const isCommitCommand = command === 'place-order' || command === 'checkout';
+
   let cartAmountInr: number;
-  try {
-    // Try to fetch cart — if this fails, we can't proceed with a write
-    const cartCmd = `${site} cart -f json`;
-    const cartResult = execSync(`webcmd ${cartCmd}`).toString();
-    const cartData = JSON.parse(cartResult) as { total?: number; total_inr?: number };
-    if (cartData.total_inr === undefined && cartData.total === undefined) {
-      throw new Error('Cart total could not be determined (missing total_inr/total field)');
+  let cartItemCount = 0;
+  if (!isCommitCommand) {
+    cartAmountInr = 0;
+  } else {
+    try {
+      const cartCmd = `${site} cart -f json`;
+      const cartResult = execSync(`webcmd ${cartCmd}`).toString();
+      const parsed: unknown = JSON.parse(cartResult);
+      // Real shape (found live, not the spec's guess): a bare array of line items, each with its
+      // own `payable`/`total` — there is no cart-wide object with a single total_inr field. The
+      // authoritative total is the sum across all lines, not any one line's own value.
+      if (Array.isArray(parsed)) {
+        const lines = parsed as Array<{ payable?: number; total?: number; quantity?: number }>;
+        cartAmountInr = lines.reduce((sum, line) => sum + (line.payable ?? line.total ?? 0), 0);
+        cartItemCount = lines.reduce((sum, line) => sum + (line.quantity ?? 1), 0);
+      } else {
+        const cartData = parsed as { total?: number; total_inr?: number };
+        if (cartData.total_inr === undefined && cartData.total === undefined) {
+          throw new Error('Cart total could not be determined (missing total_inr/total field)');
+        }
+        cartAmountInr = cartData.total_inr ?? cartData.total ?? 0;
+      }
+    } catch (err) {
+      throw new Error(`Failed to fetch cart total: ${(err as Error).message}`);
     }
-    cartAmountInr = cartData.total_inr ?? cartData.total ?? 0;
-  } catch (err) {
-    throw new Error(`Failed to fetch cart total: ${(err as Error).message}`);
   }
 
   // Call decide()
@@ -392,10 +429,28 @@ async function cmdRun(args: string[]): Promise<void> {
     return;
   }
 
-  // ALLOW: check idempotency and execute
+  // ALLOW, non-commit write (e.g. add-to-cart): execute the browser action, no ledger/receipt —
+  // "gated, but ₹0 committed until checkout" per docs/03-WEBCMD-INTEGRATION.md.
+  if (!isCommitCommand) {
+    try {
+      await execute(site, command, cmdArgs);
+      console.log(`  ₹0 committed`);
+    } catch (err) {
+      throw new Error(`Execution failed: ${(err as Error).message}`);
+    }
+    return;
+  }
+
+  // ALLOW, commit command: Beat 8's idempotency-retry check — a caller-supplied --run-id that's
+  // already in ledger.jsonl is refused before any webcmd/Ledger call, even though decide() alone
+  // would return ALLOW (it has no notion of runId). Belt-and-suspenders per ADR-004.
   const cartAmountPaise = Math.round(cartAmountInr * 100);
-  if (hasAlreadyDrawn(decision.runBinding || 'unknown')) {
-    throw new Error(`This runId has already been executed`);
+  if (explicitRunId && hasAlreadyDrawn(explicitRunId)) {
+    console.log(`✗ DENY  ${fullCommand}`);
+    console.log(`  ALREADY_EXECUTED`);
+    console.log(`  runId ${explicitRunId} already drawn ₹${formatInr(cartAmountInr)} — refusing to double-charge`);
+    process.exitCode = 1;
+    return;
   }
 
   try {
@@ -421,7 +476,7 @@ async function cmdRun(args: string[]): Promise<void> {
       {
         receipt_id: generateId('rcp'),
         mandate_hash: sha256Hex(mandate),
-        cart: { merchant: site, items: 0, total_inr: cartAmountInr },
+        cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
         payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
         execution: { command: fullCommand, run_id: runId, profile: '' },
         evidence: { trace_digest: '', network_order_id: undefined },

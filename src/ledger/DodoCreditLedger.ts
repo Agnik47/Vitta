@@ -60,7 +60,7 @@ async function resolveCustomerId(reserveRef: string): Promise<string> {
 }
 
 export class DodoCreditLedger implements Ledger {
-  async fund(mandateId: string, amountInrPaise: number): Promise<{ reserveRef: string }> {
+  async fund(mandateId: string, amountInrPaise: number): Promise<{ reserveRef: string; checkoutUrl?: string }> {
     const session = await writeClient().checkoutSessions.create({
       product_cart: [
         {
@@ -79,7 +79,14 @@ export class DodoCreditLedger implements Ledger {
       return_url: 'https://mandategate.local/funded',
       metadata: { mandate_id: mandateId },
     });
-    return { reserveRef: session.session_id };
+    // checkoutSessions.create()'s real response is { session_id, checkout_url } — the SDK's own
+    // type also declares payment_link (older field name), so read both defensively. A human needs
+    // this URL to actually complete the purchase; fund() previously discarded it, leaving the CLI's
+    // "open your browser to complete the purchase" message with no URL to open. Found live while
+    // running the Phase 1g demo rehearsal — see docs/OUTCOME.md.
+    const checkoutUrl = (session as unknown as { checkout_url?: string; payment_link?: string }).checkout_url
+      ?? (session as unknown as { checkout_url?: string; payment_link?: string }).payment_link;
+    return { reserveRef: session.session_id, checkoutUrl };
   }
 
   async balance(reserveRef: string): Promise<number> {
