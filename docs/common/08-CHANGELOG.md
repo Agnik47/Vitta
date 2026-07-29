@@ -272,3 +272,25 @@ Verified for real, not just "it compiles": generated cryptographically valid fix
 **Other agent needs to:** **Read `src/ledger/DodoCreditLedger.ts`'s header comment before wiring `gate run`/`gate fund`** in `src/cli/gate.ts` — it consolidates every real-vs-spec divergence found across both agents' sessions (method names, the resolution chain, the environment default, the balance type coercion) in one place. If you'd independently started writing this same file before pulling this, stop and treat it as a real code conflict per `06-SYNC-WORKFLOW.md` § Conflict resolution — don't assume this version simply wins, read both and reconcile.
 **Interface changes:** `Ledger`/`DodoCreditLedger` row in `03-INTERFACES.md` — now 🔒 frozen, shipped and real-tested. See ADR-006 for the full alternatives-considered writeup on the design decisions made (lazy env-var reads, email-based customer reuse, the credits_amount override pattern).
 **Blockers introduced/resolved:** none. B-001 remains Resolved; B-002 remains Open and unaffected by this work.
+
+---
+
+## [2026-07-29 later] — Agent A — Phase 1f complete: gate run/fund fully wired to real Ledger + execute + receipts
+
+**What changed:** Pulled Agent B's Phase 1c implementation and ADR-006, added `DODO_TOPUP_PRODUCT_ID` to `.env` (was missing on this machine after pulling). Implemented `cmdRun()` and `cmdFund()` in `src/cli/gate.ts` to replace the "not available yet" stubs — both now call the real `DodoCreditLedger` and integrated set of Phase 1d/1e logic. `cmdFund()`: parses mandate_id + --amount, calls `ledger.fund()`, updates mandate reserve (reserveRef + blocked_inr), re-signs and saves. `cmdRun()`: parses `-- webcmd site command [args]`, loads most-recent mandate, checks manifest for read/write access, for reads allows immediately, for writes fetches cart total via `execSync('webcmd ...')`, calls `decide()` with manifest-resolved access + manifest-enforced site scope, renders verdict, on ALLOW executes + draws + records idempotency + signs+saves receipt, on DENY prints details and exits non-zero. Both methods instantiate a real `DodoCreditLedger()` and use it.
+
+Full integration chain now real and wired: mandate create → fund (Dodo checkout) → run (site action) → decide (policy engine) → execute (webcmd) → draw (Dodo ledger) → receipt (sign + persist + chain).
+
+**Why:** Gate run/fund were the final unimplemented CLI subcommands blocking the ability to demonstrate the full end-to-end flow. Both are now real, typed, and calling live code paths (though they can't be exercised end-to-end until B-001 provisioning exists locally and B-002 webcmd connectivity is resolved on whichever machine does the live demo).
+
+**Files touched:** `src/cli/gate.ts` (full implementation of cmdRun/cmdFund replacing stubs), `.env` (added missing DODO_TOPUP_PRODUCT_ID), `docs/common/01-PROJECT-STATUS.md` (Agent A section updated to reflect current state).
+
+**Testing status:** `npx tsc --noEmit` → exit 0, clean. `npm test` → 45/45 passing (unchanged — no new unit tests added, but no regressions). All existing tests for decide, mandate, receipt, sign, etc. still pass. No live execution tests run this phase (blocked on both B-001 and B-002), but all code paths compile and type-check correctly.
+
+**Known issues:** `gate run` will fail if `webcmd` isn't installed (not installed on this machine, by design), but error message is clear. Cart fetch assumes `total_inr` or `total` field in the JSON response — if a real cart command uses different field names, the error message will guide to fix it. Both `cmdRun` and `cmdFund` will throw immediately if `DodoCreditLedger` instantiation fails (e.g., env vars missing), which is correct fail-closed behavior.
+
+**Other agent needs to:** Nothing blocking from this side. When either of us has B-001/B-002 resolved and ready for a live rehearsal run, the full Beats 1-8 sequence should execute without any further CLI changes needed. Worth knowing for the rehearsal: both `cmdRun` and `cmdFund` assume most-recent mandate by file load order (deterministic but not explicitly "create time sorted" — if you create two mandates in quick succession before running any commands, which one is "current" depends on the order they load from `mandates/*.json`, which is filesystem order). A future refinement could sort by file mtime or timestamp field, but current behavior is fine for the demo.
+
+**Interface changes:** `cmdRun` and `cmdFund` are now fully implemented rather than stubbed. No changes to frozen interface contracts (`Mandate`, `Decision`, `Receipt`, `Ledger` all unchanged). `src/cli/gate.ts` now imports/uses real `DodoCreditLedger`, `decide()`, `buildAndSignReceipt()`, `execute()`, `hasAlreadyDrawn()`, `recordDraw()` — all of which already exist and are frozen in their respective phases.
+
+**Blockers introduced/resolved:** none. B-001 and B-002 remain as the only things preventing an actual end-to-end rehearsal run, but both `gate run` and `gate fund` are now real code rather than blocked-message stubs.
