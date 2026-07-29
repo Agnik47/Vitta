@@ -220,9 +220,12 @@ function cmdVerify(args: string[]): void {
 async function cmdFund(args: string[]): Promise<void> {
   const { positionals, flags } = parseArgs(args);
   const mandateId = positionals[0];
-  if (!mandateId) throw new Error('Usage: gate fund <mandate_id> --amount <n>');
-  const amountInr = Number(requireFlag(flags, 'amount'));
-  if (Number.isNaN(amountInr) || amountInr <= 0) throw new Error('--amount must be a positive number');
+  if (!mandateId) throw new Error('Usage: gate fund <mandate_id> --amount <n> | gate fund <mandate_id> --reserve-ref <ref>');
+  // --reserve-ref attaches an ALREADY-FUNDED real reserve instead of creating a new checkout
+  // session. Needed because ledger.fund() can only ever create a session a human must then pay
+  // in a browser — impossible mid-demo, and the reason a full end-to-end run couldn't be repeated
+  // without a fresh out-of-band payment every time. See docs/common/02-DECISIONS.md ADR-012.
+  const existingReserveRef = flags['reserve-ref'];
 
   const mandate = loadMandate(mandateId);
   const { sig: existingSig, ...existingUnsigned } = mandate;
@@ -232,11 +235,44 @@ async function cmdFund(args: string[]): Promise<void> {
   }
 
   const ledger = new DodoCreditLedger();
+  const { privateKey } = getOrCreateKeyPair('issuer');
+
+  if (existingReserveRef) {
+    if (flags.amount) {
+      throw new Error('--amount and --reserve-ref are mutually exclusive: --reserve-ref attaches an already-funded reserve, whose real balance is read from Dodo rather than asserted locally.');
+    }
+    // Read the REAL balance rather than trusting the ref. This is what makes attaching an existing
+    // reserve safe: a typo'd, unpaid, or wrong-customer ref fails loudly here instead of producing
+    // a mandate that claims to be funded and only fails later, mid-spend.
+    let balanceInr: number;
+    try {
+      balanceInr = (await ledger.balance(existingReserveRef)) / 100;
+    } catch (err) {
+      throw new Error(`Could not read a real balance for reserve ${existingReserveRef}: ${(err as Error).message}. Not attaching a reserve this CLI can't verify.`);
+    }
+    if (balanceInr <= 0) {
+      throw new Error(`Reserve ${existingReserveRef} has a real balance of ₹0 — refusing to attach an unfunded reserve.`);
+    }
+
+    const funded: Omit<Mandate, 'sig'> = {
+      ...existingUnsigned,
+      reserve: { type: 'dodo_credit_test', blocked_inr: balanceInr, ref: existingReserveRef },
+    };
+    const updatedMandate: Mandate = { ...funded, sig: sign(funded, privateKey) };
+    saveMandate(updatedMandate);
+
+    console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(balanceInr)} (existing reserve)`);
+    console.log(`  reserve reference ${existingReserveRef}`);
+    console.log(`  real balance read from Dodo — no new checkout needed`);
+    return;
+  }
+
+  const amountInr = Number(requireFlag(flags, 'amount'));
+  if (Number.isNaN(amountInr) || amountInr <= 0) throw new Error('--amount must be a positive number');
   const amountInrPaise = Math.round(amountInr * 100);
   const { reserveRef, checkoutUrl } = await ledger.fund(mandateId, amountInrPaise);
 
   // Update and re-sign the mandate with the new reserve
-  const { privateKey } = getOrCreateKeyPair('issuer');
   const funded: Omit<Mandate, 'sig'> = {
     ...existingUnsigned,
     reserve: { type: 'dodo_credit_test', blocked_inr: amountInr, ref: reserveRef },
@@ -257,6 +293,15 @@ async function cmdFund(args: string[]): Promise<void> {
 // ---------------------------------------------------------------------------------------------
 // gate run — decide, execute, and record a webcmd action under a mandate
 // ---------------------------------------------------------------------------------------------
+
+/** The first row webcmd returns for a commit command (`place-order`/`checkout`). Only the fields
+ * this CLI actually consumes are typed — the real payload carries the command's full `columns`
+ * schema. `orderId` empty/absent means the merchant never confirmed an order (see cmdRun). */
+interface CommitResultRow {
+  orderId?: string;
+  status?: string;
+  message?: string;
+}
 
 async function cmdRun(args: string[]): Promise<void> {
   // Parse: args = ["--", "webcmd", "blinkit", "search", "atta"]
@@ -461,6 +506,33 @@ async function cmdRun(args: string[]): Promise<void> {
     const result = await execute(site, command, cmdArgs);
     const runId = result.runId;
 
+    // Real webcmd output for a commit command (found live, docs/03-WEBCMD-INTEGRATION.md never
+    // specified this): `result.columns` is a bare array of row objects matching that command's own
+    // `columns` schema — blinkit/place-order's schema includes a real `orderId` field.
+    const resultRows = Array.isArray(result.columns) ? (result.columns as Array<CommitResultRow>) : [];
+    const commitRow = resultRows[0];
+    const networkOrderId = commitRow?.orderId;
+
+    // FAIL CLOSED: webcmd exiting 0 does NOT mean the order was actually placed. Found live —
+    // a real `blinkit place-order --confirm` returned exit 0, `status: "success"` in its own trace,
+    // and no error, while the browser had merely stopped at Blinkit's "Proceed To Pay" step: no
+    // order was created, the cart still held the item, and `orderId` came back empty. Before this
+    // check, that path still drew real money from the reserve and signed a receipt attesting to a
+    // purchase that never happened — the single worst failure mode for a product whose entire claim
+    // is that a receipt proves what the agent did. Nothing is drawn, recorded, or signed unless the
+    // merchant actually gave us an order id. See docs/common/02-DECISIONS.md ADR-013.
+    if (!networkOrderId) {
+      console.log(`✗ ${fullCommand} did NOT complete — no order id returned by ${site}`);
+      if (commitRow?.status) console.log(`  merchant status: ${commitRow.status}`);
+      if (commitRow?.message) console.log(`  merchant message: ${commitRow.message}`);
+      console.log('');
+      console.log('  reserve untouched — nothing drawn');
+      console.log('  NO RECEIPT WRITTEN — refusing to attest to an order the merchant never confirmed');
+      if (result.tracePath) console.log(`  evidence: ${result.tracePath}`);
+      process.exitCode = 1;
+      return;
+    }
+
     // Draw from ledger
     if (mandate.reserve.ref) {
       await ledger.draw(mandate.reserve.ref, cartAmountPaise, runId);
@@ -474,15 +546,6 @@ async function cmdRun(args: string[]): Promise<void> {
       ts: new Date().toISOString(),
     };
     recordDraw(ledgerEntry);
-
-    // Real webcmd output for a commit command (found live, docs/03-WEBCMD-INTEGRATION.md never
-    // specified this): `result.columns` is a bare array of row objects matching that command's own
-    // `columns` schema — blinkit/place-order's schema includes a real `orderId` field, but nothing
-    // ever read it before this fix, so every receipt's `network_order_id` was hardcoded `undefined`
-    // regardless of whether the order actually succeeded. Extract it defensively — some sites/commands
-    // may not have an orderId field at all, so this stays optional exactly like the schema says.
-    const resultRows = Array.isArray(result.columns) ? (result.columns as Array<{ orderId?: string }>) : [];
-    const networkOrderId = resultRows[0]?.orderId;
 
     // Build and sign receipt
     const receipt: Receipt = buildAndSignReceipt(

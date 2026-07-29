@@ -869,6 +869,91 @@ This is the exact function `cmdRun()` calls at its idempotency check site — co
 
 Tooling used (all pre-existing on this machine, no new project dependencies added per CLAUDE.md rule 5): `ffmpeg` for assembly, headless Chrome for SVG→PNG frame rendering (ffmpeg has no SVG decoder), Windows' built-in `System.Speech` for narration. Build scripts were scratch tooling, not committed — one-shot and machine-specific; this section plus `demo/README.md` are the source of truth for rebuilding.
 
+---
+
+### Phase 1g addendum 2 — first COMPLETE timed end-to-end run, and the two real bugs it exposed
+
+**Status:** ⚠️ Timing target met (84s, well under 4 min) and Beat 8 finally demonstrated correctly — **but the run exposed a critical bug that invalidates its own Beat 5.** Read this whole section before treating Phase 1 as closed.
+**Timestamp:** 2026-07-29 (later still), Agent B
+
+**Why this run happened:** the only acceptance box left was "the whole run, timed, under 4 minutes." The user authorized a second, deliberately tiny real order (₹20 salt, vs ₹476 previously) so the full Beats 1-8 sequence could be executed continuously and measured, and approved adding `gate fund --reserve-ref` (ADR-012) so the run wouldn't need a human browser checkout in the middle of the timer.
+
+**Real, measured result — 84 seconds, all 8 beats, run as one continuous script:**
+
+```
+BEAT 1 — gate scan                                              [t+4s]
+✓ webcmd manifest loaded — 109 sites, 805 commands
+  228 marked access:'write'
+  9 currently governed
+
+BEAT 2 — gate mandate create --cap 10 --per-txn 10 --max-txns 2 [t+5s]
+✓ MANDATE mnd_ms69f71r0a6d108f6070 signed
+  "agent:grocery-runner may spend up to ₹10 at Blinkit, in one transaction, before 11:59 PM today."
+
+BEAT 2b — gate fund --reserve-ref cks_0NkEvKofSCvb33CvbrQVl     [t+7s]
+✓ MANDATE mnd_ms69f71r0a6d108f6070 funded — ₹1,324 (existing reserve)
+  real balance read from Dodo — no new checkout needed
+
+BEAT 3 — free reads                                             [t+10s, t+11s]
+› blinkit search salt      ALLOW  blinkit/search
+› blinkit cart             ALLOW  blinkit/cart
+
+BEAT 4 — the refusal                                            [t+28s]
+› blinkit place-order --confirm
+DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹20
+  transaction ₹20 · limit ₹10
+  over by ₹10
+  reserve untouched
+  NO BROWSER ACTION TAKEN
+  → step-up required
+
+BEAT 5 — step-up, then the order                                [t+29s, t+63s]
+✓ MANDATE mnd_ms69fpjy6dc9753b245c signed — ₹100
+› blinkit place-order --confirm
+ALLOW  blinkit/place-order · ₹20
+✓ blinkit/place-order executed · runId 51d04cd3-54e9-4c74-870c-0d0452b6d67b
+  receipt rcp_ms69gfwkfcf268d4832f
+
+BEAT 6 — the receipt                                            [t+66s, t+68s]
+✓ RECEIPT rcp_ms69gfwkfcf268d4832f signed
+  mandate  sha256:db0e6b0b259ce5866bc852b8f9a419ac5ca7f9a0cde62aa638ac7071d402cbd0
+  cart     blinkit · 1 items · ₹20
+  payment  dodo_test · captured
+  run      blinkit/place-order · 51d04cd3-54e9-4c74-870c-0d0452b6d67b
+  evidence trace sha256:279d6331c2946308cad6fccdfe9caf4a596888d2decb71cd874c13c650525553
+  prev     sha256:6ff9eb597b3c1e884d04bfb3101ad544c2a2c86003fcd0cb394accec4b46e2f0
+✓ signature valid · chain intact
+
+BEAT 7 — tamper test                                            [t+69s, t+70s]
+✗ signature invalid — receipt tampered
+[restored]
+✓ signature valid · chain intact
+
+BEAT 8 — idempotency                                            [t+84s]
+$ gate run -- webcmd blinkit place-order --confirm --run-id 51d04cd3-...
+✗ DENY  blinkit/place-order
+  ALREADY_EXECUTED
+  runId 51d04cd3-... already drawn ₹20 — refusing to double-charge
+
+ELAPSED: 84s
+```
+
+**Two genuinely good outcomes worth keeping:**
+1. **84 seconds, versus a 4-minute budget** — the timing box is comfortably met. Achieved by running the compiled build (`node dist/cli/gate.js`) rather than `ts-node`, which alone accounted for roughly a minute of pure startup overhead across 12 invocations. **The demo must be run from a build, not `ts-node`.**
+2. **Beat 8 produced a real `DENY ALREADY_EXECUTED`** — exactly what `docs/05-DEMO-SCRIPT.md` specifies, resolving the deviation from the previous run. The fix was simply creating the mandate with `--max-txns 2`, so `decide()` still returns ALLOW on the retry and the idempotency guard is actually the thing that refuses. **Prior runs' `TXN_LIMIT_REACHED` was an artifact of `--max-txns 1`, not a limitation of the guard.** Also note the receipt chain was genuinely 2-deep here (`prev` is a real prior receipt hash, not the chain-head zero hash).
+
+**🚨 But Beat 5 is invalid, and the bug behind it is the most serious of the build.** The order was **never placed.** The cart still held the salt afterward, and `orderId` came back empty. webcmd reported exit 0, its own trace `receipt.json` said `"status": "success"`, and `summary.md` said `## Error - none` — while its own final screenshot showed the browser parked on Blinkit's **"Proceed To Pay ₹55"** button. The adapter drives the flow to the payment step and stops, which it counts as success.
+
+The gate then drew a real ₹20, wrote a `ledger.jsonl` entry, and signed a receipt with `payment.status: "captured"` for a purchase that did not happen. `gate verify` confirmed that receipt as valid — correctly, because it *was* validly signed. **Signature validity proves a record wasn't altered; it proves nothing about whether the record was true when written**, and nothing in the pipeline was checking that. Full analysis and the fix: `docs/common/02-DECISIONS.md` **ADR-013**. Fixed by failing closed — no order id from the merchant means no draw, no ledger entry, no receipt, non-zero exit.
+
+**🚨 Second, separate real bug, still open:** webcmd's `blinkit checkout`/`cart` **under-report the real payable**. Both reported `payable: 20, deliveryCharge: 0, handlingCharge: 0`; Blinkit's own UI in the same session showed ₹20 items + ₹30 delivery + ₹5 handling = **₹55**. `decide()` therefore evaluated ₹20 when the merchant would have charged ₹55 — a ₹20 cart that is really ₹55 could clear a ₹50 cap. This contradicts `docs/03-WEBCMD-INTEGRATION.md` § Step 3's premise that the cart total fed to `decide()` is authoritative. Not fixed — the right remedy (prefer the larger of cart/checkout, parse the real grand total, or treat fee-bearing checkouts as step-up) is a real design decision, not something to guess at. Invisible on the earlier ₹476 run because that cart cleared the free-delivery threshold, so the fees genuinely were ₹0.
+
+**Real side effects of the bad run, all cleaned up:** the ₹20 draw was reversed against the live Dodo account with a real `credit` ledger entry (balance read back to confirm: ₹1,304 → ₹1,324), and the false receipt `rcp_ms69gfwkfcf268d4832f` plus its `ledger.jsonl` line were deleted rather than left in place — a signed attestation to a non-existent order is precisely what this system exists to make impossible, and keeping one as demo data would be indefensible. The genuine ₹476 receipt remains and still verifies (`✓ signature valid · chain intact`).
+
+**Also found (minor):** running `npm run build` leaves `dist/`, which `npm test` then also globs (the test script has no path argument, by Phase 0's own workaround) — the suite silently reports 90 tests instead of 45, running everything twice. Harmless but misleading; `dist/` was removed afterward to restore honest counts. Worth knowing before reading a test count that looks unexpectedly high.
+
+`npx tsc --noEmit` → exit 0. `npm test` → 45/45. Both re-verified after the fix and cleanup.
+
 Full suite re-verified throughout: `npx tsc --noEmit` → exit 0 (root). `npm test` → 45/45 passing, no regressions.
 
 ---

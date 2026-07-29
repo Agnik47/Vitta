@@ -287,3 +287,62 @@ _(Originally written as ADR-003; renumbered to ADR-004 on merge — Agent A's AD
 **Impact on other modules:** `Receipt.evidence.network_order_id`'s type is unchanged (still optional) — this is a bug fix inside `gate.ts`, not an interface change. Every future commit-path receipt (any site/command whose manifest declares an `orderId` column) will now carry the real value.
 
 **Required follow-up work:** None outstanding on this specific fix. Worth a quick real check the first time a *different* merchant's `place-order`-equivalent command is exercised (if the demo ever expands beyond Blinkit) — confirm that merchant's manifest also declares an `orderId` column, or the field will correctly stay absent rather than error.
+
+---
+
+## ADR-012 — `gate fund --reserve-ref`: attach an already-funded real reserve instead of always creating a new checkout
+
+**Date:** 2026-07-29 (later still)
+**Author:** Agent B
+**Status:** Accepted
+
+**What was found:** `gate fund` could only ever call `DodoCreditLedger.fund()`, which creates a *new* Dodo checkout session that a human must then pay in a browser. That's correct and necessary the first time, but it meant **a full end-to-end demo run could never be repeated without an out-of-band human payment first** — and, more seriously, that a live on-stage demo could not fund a mandate at all inside its own runtime (a browser checkout mid-demo is neither fast nor something the agent may do — entering payment details is a prohibited agent action). Meanwhile the real, already-paid reserve retains an unspent balance across runs (₹1,324 at the time of this change), sitting unusable by any new mandate.
+
+**What changed:** `gate fund <mandate_id> --reserve-ref <ref>` attaches an existing reserve to a mandate and re-signs it, with **no new checkout session**. `--amount` and `--reserve-ref` are mutually exclusive (erroring if both are given, rather than silently preferring one).
+
+**The safety property that makes this acceptable:** the attached balance is **read live from Dodo**, never asserted locally. `blocked_inr` is set from the real `ledger.balance(ref)` response, and the command refuses outright if the balance can't be read (bad/unknown ref → real 404 surfaced) or reads as ₹0. So a typo'd or unpaid ref fails loudly at fund time instead of producing a mandate that *claims* to be funded and only fails later, mid-spend. This keeps the fail-closed posture of `CLAUDE.md` rule 3 — the CLI never attaches a reserve it cannot verify against the real API.
+
+**Alternatives considered:**
+- *Hand-edit the mandate JSON to point at the existing reserve.* Rejected outright — that breaks the mandate's own Ed25519 signature, which is the entire artifact the product is built around. Any legitimate reserve change must go through a re-sign, which is precisely what this command does.
+- *Let `--amount` optionally skip payment when the customer already has credit.* Rejected — conflates two genuinely different operations ("add funds" vs "point at existing funds") behind one flag, and would make `--amount`'s meaning depend on invisible remote state.
+- *Leave it, and require a fresh human checkout before every full rehearsal.* Rejected — it makes repeated end-to-end verification expensive enough that it won't get done, which is exactly how the ADR-013 bug below survived unnoticed until the second full run.
+
+**Testing:** Real, all three paths, against the live account: attaching the real paid session `cks_0NkEvKofSCvb33CvbrQVl` correctly read ₹1,324 from Dodo and re-signed the mandate; passing `--amount` alongside `--reserve-ref` errored as intended; a bogus ref (`cks_totallyfakeref123`) produced a real Dodo 404, surfaced verbatim, and attached nothing. Then exercised end-to-end as Beat 2b of the full timed run. `tsc --noEmit` clean, `npm test` 45/45.
+
+**Impact on other modules:** None. Additive CLI flag; `Ledger`/`DodoCreditLedger` untouched; `Mandate`'s shape unchanged (the reserve is populated exactly as `--amount` would populate it, just from a verified existing ref).
+
+**Required follow-up work:** None. Worth knowing for the live demo: fund with `--reserve-ref` ahead of time (or as Beat 2b) so no browser checkout is ever needed during the run itself.
+
+---
+
+## ADR-013 — `gate run` drew real money and signed a receipt for an order that was never placed; now fails closed on a missing order id
+
+**Date:** 2026-07-29 (later still)
+**Author:** Agent B, found during the first complete end-to-end timed run
+**Status:** Accepted
+
+**What was found — the most serious bug of the build.** A real `gate run -- webcmd blinkit place-order --confirm` printed `ALLOW`, reported `✓ blinkit/place-order executed`, drew a real ₹20 from the Dodo reserve, wrote a `ledger.jsonl` entry, and signed a receipt with `payment.status: "captured"` — **and no order existed.** The cart still held the item afterward, and `orderId` came back empty.
+
+webcmd gave every outward sign of success: exit code 0, its own trace `receipt.json` recording `"status": "success"`, and `summary.md` reporting `## Error - none`. The only truthful signal anywhere was the empty `orderId` field, plus webcmd's own final screenshot — which showed the browser sitting on Blinkit's cart panel at the **"Proceed To Pay ₹55"** button. The adapter had driven the flow up to the payment step and stopped there, which it reports as success because *the command it was asked to run* completed without error.
+
+This is the worst possible failure mode for this specific product: a cryptographically signed receipt is the artifact the entire pitch rests on, and it was attesting to a purchase that never happened. Every layer downstream — the receipt chain, the dashboard, `gate verify` — would have faithfully confirmed that false receipt as valid, because it *was* validly signed. Signature validity says the record wasn't tampered with; it says nothing about whether the record was true when written. Nothing in the pipeline was checking the latter.
+
+**Why it survived until now:** the earlier real run (₹476) was above Blinkit's free-delivery threshold, completed for real, and emptied the cart — so the happy path looked fine. The failure only appears on an order small enough to attract delivery/handling fees, which routes the UI into a payment step the adapter doesn't complete. A single successful run had been treated as proof the commit path worked.
+
+**What changed:** in `cmdRun()`'s commit path, `execute()`'s returned rows are now inspected **before** anything is drawn, recorded, or signed. If the merchant returned no `orderId`, the CLI prints an explicit failure (surfacing webcmd's own `status`/`message` and the trace path), touches neither the ledger nor `ledger.jsonl`, writes **no receipt**, and exits non-zero. Ordering matters: the draw/record/sign block was moved to *after* this check, not merely guarded around.
+
+**Alternatives considered:**
+- *Trust webcmd's exit code and `status: "success"`.* This is what the code did, and it is exactly the bug. A third-party adapter's notion of "the command ran" is not the same claim as "the merchant created an order," and money must only move on the latter.
+- *Also require `status === 'placed'` or similar.* Rejected as the primary check — the real status string vocabulary isn't documented anywhere and varies per adapter; a non-empty merchant-issued order id is the strongest, most portable evidence that the merchant actually committed. `status`/`message` are surfaced in the failure output for the operator rather than being load-bearing.
+- *Write the receipt anyway but mark it unconfirmed.* Rejected — an unconfirmed receipt is not a weaker receipt, it's a different thing entirely, and emitting one would invite exactly the misreading this ADR exists to prevent. No order, no receipt.
+
+**Cleanup of the bad run's real side effects:** the ₹20 draw was reversed against the live Dodo account (real `credit` ledger entry, balance restored ₹1,304 → ₹1,324, verified by reading it back), and the false receipt plus its `ledger.jsonl` line were deleted. The remaining ₹476 receipt still verifies (`✓ signature valid · chain intact`).
+
+**Second, separate real bug found at the same time (not fixed here — see follow-up):** webcmd's `blinkit checkout`/`cart` **under-report the real payable.** For this cart they reported `payable: 20, deliveryCharge: 0, handlingCharge: 0`, while Blinkit's own UI in the same session showed items ₹20 + delivery ₹30 + handling ₹5 = **₹55 grand total.** The gate therefore made its decision against ₹20 when the merchant would have charged ₹55. That is a policy-correctness issue, not a cosmetic one: a ₹20 cart that is really ₹55 could pass a ₹50 cap. `docs/03-WEBCMD-INTEGRATION.md` § Step 3's whole premise is that the cart total used for `decide()` is *authoritative*, and for small orders it currently isn't.
+
+**Impact on other modules:** No interface changes. `decide()` untouched. The dashboard is unaffected (it reads receipts; there will simply be no receipt for a non-order). Behaviour change: a `place-order` that doesn't produce an order id now exits 1 with no receipt, where it previously exited 0 with one.
+
+**Required follow-up work:**
+1. **The fee under-reporting is still open** and is the more dangerous of the two for policy correctness. Options to weigh: prefer the *larger* of cart/checkout payable, parse the real grand total from the checkout page, or treat a fee-bearing checkout as a step-up trigger. Needs a real decision, not a guess.
+2. The ₹476 receipt's order was confirmed only indirectly (its cart emptied); its `network_order_id` is empty because it predates ADR-011. It is almost certainly a real completed order, but it is not *proven* by an order id, and shouldn't be described as if it were.
+3. Worth re-testing the commit path against a cart above the free-delivery threshold to confirm the fixed path still writes a receipt on a genuine success.
