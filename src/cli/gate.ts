@@ -16,7 +16,8 @@ import { DodoCreditLedger } from '../ledger/DodoCreditLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
 import { formatGateEventLine, formatAgentLine } from './ui';
 import { getOrCreateKeyPair } from './keys';
-import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt } from './store';
+import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, appendEvent } from './store';
+import type { GateEvent } from '../events/GateEvent';
 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
@@ -308,7 +309,7 @@ async function cmdRun(args: string[]): Promise<void> {
 
   // Rule 0: reads are free
   if (access === 'read') {
-    const eventLine = formatGateEventLine({
+    const event: GateEvent = {
       event_id: generateId('evt'),
       ts: new Date().toISOString(),
       mandate_id: mandate.mandate_id,
@@ -316,8 +317,9 @@ async function cmdRun(args: string[]): Promise<void> {
       command: fullCommand,
       access: 'read',
       verdict: 'ALLOW',
-    });
-    console.log(eventLine);
+    };
+    appendEvent(event);
+    console.log(formatGateEventLine(event));
     return;
   }
 
@@ -387,7 +389,7 @@ async function cmdRun(args: string[]): Promise<void> {
     now,
   );
 
-  const eventLine = formatGateEventLine({
+  const event: GateEvent = {
     event_id: generateId('evt'),
     ts: now.toISOString(),
     mandate_id: mandate.mandate_id,
@@ -397,8 +399,10 @@ async function cmdRun(args: string[]): Promise<void> {
     verdict: decision.verdict,
     code: decision.verdict === 'DENY' ? decision.code : undefined,
     amount_inr: cartAmountInr,
-  });
-  console.log(eventLine);
+    reserve_ref: mandate.reserve.ref || undefined,
+  };
+  appendEvent(event);
+  console.log(formatGateEventLine(event));
 
   if (decision.verdict === 'DENY') {
     if (decision.code === 'OVER_TOTAL_CAP') {
