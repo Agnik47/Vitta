@@ -561,3 +561,31 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹295
 **Interface changes:** None.
 
 **Blockers introduced/resolved:** ADR-013 follow-up 1 now genuinely closed (LIVE, not just unit-tested).
+
+---
+
+## [2026-07-30 later same day, next iteration] — Agent B — Live ALLOW at ₹295 → real merchant block → ADR-013 fail-closed check protected us for real
+
+**What changed:** No code changes. Live verification of the ADR-013 fail-closed check (added 2026-07-29) — now proven in production on a real ₹295 order attempt at Blinkit.
+
+**What happened:** User authorized proceeding with a real ₹295 order to close the ALLOW-execute branch. Created fresh mandate `mnd_ms6gn2bo3f7a0fa97ecc` with `--cap 500 --per-txn 500`, funded via `--reserve-ref cks_0NkEvKofSCvb33CvbrQVl`. Ran `gate run -- webcmd blinkit place-order --confirm` → **real ALLOW at ₹295** (decide correctly permitted, cart well within cap), **real webcmd browser action attempted**. Blinkit itself refused: `status: blocked, message: "No final place-order/payment button is visible. Complete address/payment selection in the browser checkout first."` — returned no `orderId`. **ADR-013's fail-closed check refused to sign a receipt** for the non-existent order.
+
+**Why this outcome is arguably better than a successful order:** the happy path (successful merchant order → real signed receipt) is already covered by prior Beat 5-8 rehearsal (`rcp_ms66xl2ef9771fa00056`, ₹476). This new failure path is the critical safety property this project exists to enforce — before ADR-013 (2026-07-29), this exact scenario would have signed a false "captured" receipt for ₹295 and drawn ₹295 from Dodo. Now: nothing signed, nothing drawn, non-zero exit, honest error to the operator.
+
+**All invariants verified live post-blocked-ALLOW:** Dodo balance still `132400 paise = ₹1324.00` (unchanged, no draw); `ledger.jsonl` does not exist; `receipts/` directory does not exist; real trace evidence retained at `~/.webcmd/profiles/default/traces/20260729191138-839951f1`.
+
+**Hidden-charges question (user reminder):** current live cart is above Blinkit's free-delivery threshold so `checkout` genuinely reports `deliveryCharge: 0, handlingCharge: 0` — the resolver's MAX picks 295 from all three sources, correctly. Reproducing the exact ADR-013 fee-bearing scenario live would need browser-based cart-clearing (Blinkit adapter has no CLI-level "remove") + a small ~₹20-50 item. Flagged as ADR-014 follow-up 2.
+
+**Why:** User asked to also verify the ALLOW branch live; then asked to "keep a track on hidden charges also." First request done (with the fail-closed outcome, which is more valuable than a happy-path completion); second discussed with the browser-interaction limit noted.
+
+**Files touched:** `docs/OUTCOME.md` (Phase 1g addendum 3 follow-up), `docs/agent-b/WORKSPACE.md`, this file. Runtime data (gitignored): `events.jsonl` gained one ALLOW event; temp mandate file `mnd_ms6gn2bo3f7a0fa97ecc.json` kept (linked to a real if-blocked ALLOW event for audit); Dodo balance untouched (₹1,324 still).
+
+**Testing status:** Live test is the test. Balance-unchanged, no-ledger, no-receipt invariants all verified live post-run. `npm test` unchanged at 65/65.
+
+**Known issues:** ADR-013's exact fee-bearing scenario not reproduced live in this session (current cart above threshold; would need browser-based cart clearing). Flagged as ADR-014 follow-up 2.
+
+**Other agent needs to:** Nothing blocking. `dashboard/` untouched.
+
+**Interface changes:** None.
+
+**Blockers introduced/resolved:** None new. Both ADR-013 (fail-closed on missing order id) and ADR-014 (cart-total resolver) now proven live end-to-end.

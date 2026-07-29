@@ -1251,6 +1251,38 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹295
 
 **Cleanup:** deleted the temp mandate file (`mandates/mnd_ms6gdmj2c54a44b009e1.json`); left the Pillsbury item in the cart (user's decision whether to actually order it). `events.jsonl` intentionally kept — it's the real evidence of this test having happened.
 
+**Follow-up, same session: real ALLOW attempted at ₹295 — and ADR-013's fail-closed check kicked in for real.** User authorized proceeding with a real ₹295 order to verify the ALLOW-then-execute branch. Created a fresh mandate `mnd_ms6gn2bo3f7a0fa97ecc` with `--cap 500 --per-txn 500`, funded via `--reserve-ref cks_0NkEvKofSCvb33CvbrQVl` (₹1,324 live read). Ran `gate run -- webcmd blinkit place-order --confirm`:
+
+```
+› blinkit place-order --confirm
+ALLOW  blinkit/place-order · ₹295
+✗ blinkit/place-order did NOT complete — no order id returned by blinkit
+  merchant status: blocked
+  merchant message: No final place-order/payment button is visible. Complete address/payment selection in the browser checkout first.
+
+  reserve untouched — nothing drawn
+  NO RECEIPT WRITTEN — refusing to attest to an order the merchant never confirmed
+  evidence: /Users/vidipghosh/.webcmd/profiles/default/traces/20260729191138-839951f1
+```
+
+**This is exactly the failure mode ADR-013 was written to prevent, now observed live and correctly handled:**
+- decide() correctly returned ALLOW (₹295 well within a ₹500 cap).
+- `execute()` genuinely called Blinkit through webcmd — this is a real merchant interaction, not a mock.
+- Blinkit itself refused to complete the transaction (address/payment selection not done in the browser), returning `status: blocked` and no `orderId`.
+- **The ADR-013 fail-closed check (introduced in this codebase 2026-07-29) refused to sign a receipt for the non-existent order.** Before ADR-013 this exact scenario would have signed a "captured" receipt for a ₹295 order that was never placed and drawn ₹295 from Dodo — precisely the worst-case failure the earlier session found. Now: nothing signed, nothing drawn, non-zero exit, honest error to the operator.
+
+**Post-blocked-ALLOW invariants (all verified live):**
+- Dodo reserve balance read back live: `132400 paise = ₹1324.00` (unchanged, no draw).
+- `ledger.jsonl` on disk: does not exist (no idempotency entry written).
+- `receipts/` directory on disk: does not exist (no false receipt signed).
+- Real trace evidence retained by webcmd: `/Users/vidipghosh/.webcmd/profiles/default/traces/20260729191138-839951f1` (for audit).
+
+**What this ADR-013 protection covers for real:** any case where webcmd's browser adapter successfully drives up to but not through the merchant's payment step and reports success anyway. Both this specific "address/payment not selected" case and the earlier "Proceed To Pay button visible but not clicked" case (the exact ADR-013 discovery) now yield the same fail-closed outcome: no receipt, no draw.
+
+**"Please do keep a track on hidden charges also" — status on the fee-tracking question, live:** The current live cart is above Blinkit's free-delivery threshold (₹295 > ~₹200), so `checkout` genuinely reports `deliveryCharge: 0, handlingCharge: 0`. The resolver's MAX-of-all logic still runs — it picks `checkout.payable=295` and `checkout.itemsTotal+fees=295+0+0=295` and `cart.line-sum=295`, all agreeing, `merchantBlocked: false`. This is the "fees genuinely absent" path, not the "fees hidden" path.
+
+Reproducing the exact ADR-013 fee-bearing shape live (small cart, fees actually applied by Blinkit, and either (a) webcmd correctly reports the fee fields — in which case the resolver picks them up automatically, or (b) webcmd under-reports uniformly like the original discovery — in which case we've reproduced the outside-our-scope webcmd bug) would require: emptying the current cart via a browser interaction (Blinkit adapter has no CLI-level "remove" — `add-to-cart` only supports quantities 1-12), then adding a small ~₹20-50 item, then re-reading `checkout` to see whether Blinkit shows non-zero delivery/handling fields THIS session or the same under-reporting shape as the Windows session. Not done in this pass — flagging as ADR-014 follow-up 2 rather than doing it without user re-authorization, since it involves opening the browser and manually clearing the cart.
+
 **What this fix DOES and DOES NOT guarantee:**
 - **DOES**: If any subset of webcmd's price-shaped fields under-report, the others still guard the cap check.
 - **DOES**: If `checkout` itself is completely unavailable but `cart` succeeds, the resolver still returns a lower-bound total.
