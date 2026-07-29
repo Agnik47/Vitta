@@ -50,9 +50,12 @@ _(Append new entries at the bottom, most recent last. Include date, what you did
 
 ## Next steps
 
-1. All three owned phases (1c, 1d, 1h) are fully done with no open blockers or open items on any of them. Phase 1g Beats 1-4 are real (Agent A's machine) — Beats 5-8 are waiting on the user's go-ahead to spend real money on a real merchant purchase, not on either agent's code. Don't run that step without an explicit "yes, do it" in chat.
-2. Once a real receipt exists from an actual Beats 5-8 run (whenever the user authorizes it), worth re-testing `/api/receipts` and `/api/mandate` against that real file/`reserve.ref`, and confirming `trace_digest` shows up real and non-empty on that receipt too (this session only verified `execute()`'s own output and the non-commit write path, not an actual commit-path receipt).
-3. Nothing else is currently a known open item on this track. If genuinely idle, the next highest-value thing is likely supporting Agent A/the user through the Phase 5 rehearsal itself rather than inventing new solo work.
+**2026-07-29, later still: the user has now authorized the real Beats 5-8 purchase and directly assigned you to run it — see `docs/common/09-HACKATHON-WOW-PLAN.md` Plan Phase 1 and ADR-010 in `02-DECISIONS.md`.** This is now your active task, ahead of anything else below:
+
+1. **Run Plan Phase 1's checklist for real** (`09-HACKATHON-WOW-PLAN.md`): re-confirm `webcmd doctor`/`cloakbrowser info` still green, `gate mandate resign` to cover the real cart, real `place-order`, `gate receipt show`/`gate verify`, the Beat 7 tamper test (including confirming the dashboard's `/receipts` page flips if it's up), the Beat 8 idempotency-retry test. Paste all real output into `docs/OUTCOME.md`, update `docs/05-DEMO-SCRIPT.md`'s checklist boxes, **record a dated fallback video** — all explicit items in the plan, don't skip the recording.
+2. Once that real receipt exists, re-test `/api/receipts` and `/api/mandate` against it and confirm `trace_digest` shows up real and non-empty (this was previously only verified against `execute()`'s own output and the non-commit path).
+3. **Note for this stretch only:** Agent A has been temporarily reassigned the dashboard's presentation layer (`app/**/page.tsx`, `components/**`, `globals.css`) for a visual overhaul — see ADR-010. You keep `dashboard/lib/*` and `dashboard/app/api/**`; if Agent A's visual work needs a new field from an API route, that request comes to you, not a same-agent edit on their side. Pull before continuing any dashboard work to avoid stepping on their in-progress presentation changes.
+4. After Phase 1 is closed out, the next joint work is Plan Phase 4 (timed full rehearsal with Agent A's redesigned dashboard) — not solo work.
 
 ## Known issues / rough edges
 

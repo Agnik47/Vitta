@@ -4,6 +4,23 @@ Not part of the Tier 1/Tier 2 reading split in `00-START-HERE.md` — this is a 
 
 **User decision, 2026-07-29: authorized a small real place-order (Beats 5-8) to close the acceptance checklist for real.** This is the plan's single biggest assumption — see Phase 1.
 
+**User decision, 2026-07-29 (later): task split assigned directly — see ADR-010 in `02-DECISIONS.md`.**
+
+---
+
+## 0. Task division — who does what
+
+| Plan phase | Owner | Files | Notes |
+|---|---|---|---|
+| Phase 0 (decisions) | Both / user | none | SKU pick, demo-machine pick — whoever's session picks these up first writes the answer into this file (checkboxes below), the other reads it, don't duplicate the decision. |
+| **Phase 1 — real Beats 5-8 rehearsal** | **Agent B** | `src/webcmd/`, `src/ledger/`, `src/cli/`, runtime data (`mandates/`, `receipts/`, `ledger.jsonl`, `events.jsonl`) | Squarely inside Agent B's standing ownership (I/O rails) — no reassignment, just the priority call. |
+| **Phase 2 — dashboard visual overhaul** | **Agent A** | `dashboard/app/**/page.tsx`, `dashboard/components/**`, `dashboard/app/globals.css`, new presentational components only | **Reassigned from Agent B's standing `dashboard/` ownership, scoped to presentation only — see ADR-010.** Do not touch `dashboard/lib/*` or `dashboard/app/api/**` (Agent B's real data-reading/Dodo logic) without flagging first, same rule as always, just pointed the other way for this stretch. |
+| Phase 3 — concept preview layer | **Agent A** (continuation of Phase 2, same files/carve-out) | same as Phase 2, plus new route(s) for the concept pages (e.g. `dashboard/app/concept/page.tsx`) — still presentation-only, still no writes, still no edits to `lib/`/`api/` | If a concept page genuinely needs new sample data, hardcode it in the new page/component itself — don't add a new API route for it (that would blur "real" vs. "concept" data-fetching, and any new API route is Agent B's file). |
+| Phase 4 — rehearsal, timing, fallback | Both, jointly | n/a | Mirrors the project's existing Sync Point 7 (Phase 5 rehearsal) — needs both the CLI (Agent B's Phase 1 output) and the redesigned dashboard (Agent A's Phase 2/3 output) running together. |
+| Phase 5 — demo-day polish | Both, jointly | n/a | No new code either day. |
+
+Each agent should still follow `00-START-HERE.md`'s normal sync discipline (pull before starting, update `WORKSPACE.md`/`01-PROJECT-STATUS.md`/`08-CHANGELOG.md` at natural checkpoints, not just at the end) — this table assigns *what*, not an exemption from *how* this project stays in sync.
+
 ---
 
 ## 1. Where things actually stand (the understanding pass)
@@ -39,6 +56,8 @@ You already have more real, working, end-to-end proof than most hackathon teams 
 
 ## Phase 1 — Close the real acceptance checklist (Beats 5-8) — **highest priority, do this first**
 
+**Owner: Agent B** (see § 0 and ADR-010).
+
 No new code is expected to be needed here — `cmdRun`/`cmdFund`/`execute()`/`DodoCreditLedger`/receipt chain are all already real and already type-check. This phase is *execution*, not development.
 
 - [ ] Re-run `webcmd doctor` and `cloakbrowser info` on whichever machine will do this — confirm still green (browser binaries/sessions can go stale between sessions).
@@ -54,6 +73,8 @@ No new code is expected to be needed here — `cmdRun`/`cmdFund`/`execute()`/`Do
 
 ## Phase 2 — Dashboard visual overhaul (the actual "wow" ask)
 
+**Owner: Agent A** (reassigned from Agent B's standing `dashboard/` ownership, presentation-layer only — see § 0 and ADR-010). Pull latest before starting; `dashboard/lib/*` and `dashboard/app/api/**` stay off-limits without flagging Agent B first.
+
 Zero backend/API changes. Same data (`/api/mandate`, `/api/events`, `/api/receipts`), new presentation. Use the `frontend-design` and `dataviz` skills when actually building this for a coherent visual system rather than ad hoc styling.
 
 - [ ] Establish one visual language: dark, high-contrast, security/fintech-trust aesthetic (this is a product about cryptographic guarantees over money — the UI should *feel* like that, not like a generic CRUD admin panel). Pick a real type scale, a restrained accent-color set (e.g., one signal color per verdict, reused everywhere), consistent spacing.
@@ -65,6 +86,8 @@ Zero backend/API changes. Same data (`/api/mandate`, `/api/events`, `/api/receip
 - [ ] Re-run the existing acceptance items after the redesign: `/events` still updates within ~2s of a real event, `/receipts` still flips to invalid on a real tamper edit, dashboard still survives being killed mid-`gate run` (re-verify — a visual rewrite is exactly the kind of change that can quietly reintroduce a regression here).
 
 ## Phase 3 — The "fake it visually" concept layer (`PRODUCT_FEATURE.md`'s vision)
+
+**Owner: Agent A** (continuation of Phase 2, same file carve-out — see § 0 and ADR-010).
 
 Purely additive, clearly labeled, static/sample data only, never wired to a write path, never mixed into the real Mandate/Events/Receipts pages. Recommendation — pick 2-3, not all 10 `PRODUCT_FEATURE.md` sections, given the time left:
 

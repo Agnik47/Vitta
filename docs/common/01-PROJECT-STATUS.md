@@ -2,7 +2,7 @@
 
 The current state of the world, at a glance. Update your own section every time you sync (see `00-START-HERE.md`). Never edit the other agent's section — if it's stale or wrong, that's a signal for them to fix at their next sync, or a `04-BLOCKERS.md` entry if it's actively blocking you.
 
-**Last updated:** 2026-07-29 (later still), Agent B (`tracePath`/`trace_digest` resolved for real — ADR-009 — closing out the last genuinely open item from ADR-007/008)
+**Last updated:** 2026-07-29 (later still), task split for the final hackathon stretch — see `09-HACKATHON-WOW-PLAN.md` and ADR-010. **Agent B → real Beats 5-8 rehearsal (Plan Phase 1). Agent A → dashboard visual overhaul + concept layer, presentation-only (Plan Phase 2/3, reassigned from Agent B's standing `dashboard/` ownership for this stretch).**
 
 ---
 
@@ -51,14 +51,14 @@ One row per Sync Point from `05-PHASE-OWNERSHIP.md` / `07-INTEGRATION.md`. This 
 
 ## Agent A — status
 
-**Current phase:** 1g (full end-to-end run) — 1f is now fully done; only a live webcmd rehearsal remains.
+**Current phase:** **Plan Phase 2/3 — dashboard visual overhaul + concept-preview layer** (`docs/common/09-HACKATHON-WOW-PLAN.md`, ADR-010), presentation-layer only. All original phases (0, 1a, 1b, 1e, 1c, 1f, and 1g Beats 1-4) are done.
 **Current task:** Pulled Agent B's `Ledger.ts`/`DodoCreditLedger.ts` (ADR-006) and found this machine's `.env` was missing `DODO_TOPUP_PRODUCT_ID`, which the new code requires — added it. Implemented `cmdRun()`/`cmdFund()` in `src/cli/gate.ts`, replacing the "not available yet" stubs: `cmdFund()` calls `ledger.fund()`, updates and re-signs the mandate's reserve; `cmdRun()` parses `-- webcmd <site> <command>`, allows reads immediately, for writes fetches the authoritative cart total via a read first (per `docs/03-WEBCMD-INTEGRATION.md` § Step 3 — never guessed from prior state), calls `decide()`, and on ALLOW runs `execute()` → `Ledger.draw()` → `recordDraw()` → signs and saves a `Receipt`. `tsc --noEmit` clean, 45/45 tests still pass. Confirmed `webcmd` is not installed on this machine at all — separate from Agent B's B-002 connectivity failure, so a live Beat 1-6 rehearsal isn't possible on either machine as of this update.
 **Last commit:** Phase 1f: wire gate run/fund to real Ledger, execute, and receipts (`1262bc1`)
 **Blocked on:** Nothing for the code itself — it's done and type-checks/tests clean. Live rehearsal of Beats 1-6 needs a working `webcmd` install + passing `doctor` connectivity check on some machine — not yet true on this one, and B-002 says not true on Agent B's either.
 
 ## Agent B — status
 
-**Current phase:** All three owned phases (1c implementation, 1d, 1h) fully done, zero open items on any of them. Phase 1g/5 are not mine, but touched Agent A's `src/cli/gate.ts` directly this session (see below) since it blocked my own Phase 1h acceptance item.
+**Current phase:** **Plan Phase 1 — run the real Beats 5-8 rehearsal for real** (`docs/common/09-HACKATHON-WOW-PLAN.md`, ADR-010) — user-authorized 2026-07-29. All three originally-owned phases (1c implementation, 1d, 1h) are fully done, zero open items on any of them.
 **Current task:** Closed out the two remaining open items on this track. (1) Ran Phase 1h's last acceptance item for real — built+started the dashboard, ran real `gate` CLI commands, killed the dashboard process mid-flight, confirmed the CLI kept working identically. Surfaced a real bug doing it: `cmdRun()` builds a `GateEvent` and prints it, but never persisted it — `events.jsonl` was never written by a real CLI run. Fixed directly in Agent A's `gate.ts`/`store.ts` (new `appendEvent()` export) — full reasoning in ADR-008. (2) Resolved `tracePath`/`trace_digest`, open since ADR-007: root cause was `execute()` using `--trace retain-on-failure`, which webcmd only exports on failure, while a `Receipt` is only built after success — structurally guaranteed to always be empty. Switched to `--trace on`, `execute()` now parses webcmd's real `Webcmd trace artifact: <dir>` stderr line and computes a real `sha256` digest of `trace.jsonl` — ADR-009. `tsc --noEmit` clean, `npm test` 45/45 throughout both fixes. Phase 1d and 1h both now have zero open items.
 **Last commit:** Fix: gate run never wrote events.jsonl (`89987fa`). This session's `tracePath`/`traceDigest` fix not yet committed as of this line.
 **Blocked on:** Nothing. No open blockers anywhere on this track. Waiting on the user's call for whether/when Beats 5-8 (real purchase) should be run, and whether that happens solo or as part of the joint Phase 5 rehearsal.

@@ -237,3 +237,26 @@ _(Originally written as ADR-003; renumbered to ADR-004 on merge — Agent A's AD
 **Impact on other modules:** `ExecuteResult` gained an additive field (`traceDigest: string`) — no existing consumer breaks; `gate.ts`'s only use of the old `tracePath`/hardcoded `''` is the one line changed here. `docs/common/03-INTERFACES.md`'s `ExecuteResult`/`execute()` row updated.
 
 **Required follow-up work:** None outstanding on this specific question — `tracePath`/`trace_digest` are both real now. Still open, unrelated: the write-path `GateEvent` (not `Receipt`) still doesn't carry `run_id`/`trace_digest` either (ADR-008's own follow-up item) — that's a separate design decision about a second event write, not touched by this ADR.
+
+---
+
+## ADR-010 — Final-stretch task split: Agent B runs the real Beats 5-8 rehearsal, Agent A takes the dashboard's presentation layer
+
+**Date:** 2026-07-29 (later still)
+**Author:** Restructuring session, per direct user instruction
+**Status:** Accepted
+
+**What changed:** For the remainder of the build (`docs/common/09-HACKATHON-WOW-PLAN.md`), ownership diverges from the standing split in `05-PHASE-OWNERSHIP.md` in one specific, scoped way:
+
+- **Agent B** takes Plan Phase 1 — running the real Beats 5-8 rehearsal (`place-order` → signed receipt → `gate verify` → tamper test → idempotency-retry) to close `docs/05-DEMO-SCRIPT.md`'s acceptance checklist for real, plus recording the required fallback video. This is squarely inside Agent B's existing ownership (`src/webcmd/`, and the I/O-rails track generally) — no reassignment needed here, just a priority call.
+- **Agent A** takes Plan Phase 2 (and, following on from it, Phase 3) — the dashboard's **visual/presentation layer only**: `dashboard/app/**/page.tsx`, `dashboard/components/**/*.tsx`, `dashboard/app/globals.css` and any new presentational components. This *is* a reassignment — `dashboard/` (the entire app) is listed as Agent B's in `05-PHASE-OWNERSHIP.md`'s table and Agent A's own `WORKSPACE.md` explicitly says "never edit `dashboard/` without flagging it first." Per direct user instruction, that boundary is redrawn for this stretch only.
+
+**Why:** Direct user instruction — the user split the remaining work this way explicitly, not a judgment call either agent or this session made unilaterally. The scoping (presentation-only, not the whole app) is this entry's own addition, to keep the reassignment from re-creating the exact file-conflict risk `05-PHASE-OWNERSHIP.md` was designed to avoid.
+
+**Alternatives considered:**
+- *Reassign all of `dashboard/` to Agent A, mirroring how ADR-005 reassigned the whole of `src/ledger/`.* Rejected — unlike Phase 1c's ledger (which nobody had started), `dashboard/lib/*` and `dashboard/app/api/**` are real, already-verified data-reading/Dodo-balance/chain-verification logic Agent B built and tested end-to-end (including a live tamper test). Handing the whole app over would mean Agent A re-deriving working code instead of restyling it, and would risk the real logic regressing under a visual rewrite. Splitting by layer (presentation vs. data) avoids both.
+- *Have Agent B do the visual work too, since they already own `dashboard/`.* Rejected by the user's explicit instruction — also, running Beats 5-8 (Phase 1) and a full visual rewrite (Phase 2) back-to-back on one agent serializes two large, independent tasks that can otherwise run in parallel on two machines, which is the entire point of the two-agent setup (ADR-002).
+
+**Impact on other modules:** None to frozen interfaces — this is a task/ownership change, not a code contract change. `dashboard/lib/*` (types, `read.ts`, `hash.ts`, `dodo.ts`) and `dashboard/app/api/**` (the three GET routes) stay Agent B's; Agent A must not edit those without flagging first, same rule as before, just for the reverse direction now. If Phase 2's visual work needs a *new* field surfaced from an API route that doesn't exist yet (e.g., a running ALLOW/DENY counter for the `/events` redesign), that's a request to Agent B, not a same-agent edit.
+
+**Required follow-up work:** `docs/common/05-PHASE-OWNERSHIP.md`, `docs/common/01-PROJECT-STATUS.md`, and both agents' `WORKSPACE.md` files updated to point here and to `09-HACKATHON-WOW-PLAN.md`. Revert to the standing split automatically once Phase 2/3 of the wow-plan are done — this ADR does not change `dashboard/`'s ownership for anything beyond the current hackathon stretch.

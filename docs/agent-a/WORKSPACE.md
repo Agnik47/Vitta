@@ -34,11 +34,13 @@ Never edit `src/webcmd/` or `dashboard/` without flagging it first per `docs/com
 
 ## Current task
 
-Phase 1c (Dodo Payments integration) reassigned to you 2026-07-29 per direct user instruction — see ADR-005. Waiting on a real Dodo test-mode account (`DODO_API_KEY`, `DODO_API_KEY_READONLY`, a Product + its Credit Entitlement ID) before writing any `src/ledger/` code, per `CLAUDE.md` § "If you're blocked." User confirmed a real test-mode account exists and shared a Promotions-tab screenshot showing a $1,000 fee-waiver promo — clarified this is NOT the same thing as spendable credit and doesn't complete the checklist; still need the actual API keys + Product + Credit Entitlement ID. Build on Agent B's already-done real-SDK research (`docs/OUTCOME.md`'s open-questions table) rather than re-deriving it once unblocked.
+**2026-07-29, later still: all of Phase 1 (0 through 1h) is done — new assignment per direct user instruction, see `docs/common/09-HACKATHON-WOW-PLAN.md` and ADR-010.** You now own **Plan Phase 2 (dashboard visual overhaul)** and, following on from it, **Plan Phase 3 (concept-preview layer for `PRODUCT_FEATURE.md`'s bigger vision)**. This is a **scoped, temporary exception** to "never edit `dashboard/` without flagging Agent B first": you may edit `dashboard/app/**/page.tsx`, `dashboard/components/**`, and `dashboard/app/globals.css` (plus any new presentational components/routes for Phase 3) freely. `dashboard/lib/*` and `dashboard/app/api/**` remain Agent B's real, already-tested data-reading/Dodo logic — do not touch those without flagging first, same rule as always, just pointed the other way for this stretch. Read `docs/common/09-HACKATHON-WOW-PLAN.md` §§ Phase 2/3 in full before starting — it has the concrete checklist (visual language, per-page redesign, the hash-chain-as-a-visual-chain idea, the concept-layer labeling requirement) and the explicit "no new dependency without an ADR" reminder.
+
+Earlier history (kept for continuity): Phase 1c (Dodo Payments integration) was reassigned to you 2026-07-29 per ADR-005, completed, and Phase 1f/1g work (CLI, live rehearsal Beats 1-4) also completed — all real, all tested. See `docs/OUTCOME.md` for the full record.
 
 ## Status
 
-❌ Phase 1c blocked on B-001 (account confirmed real, keys/Product/Credit-Entitlement-ID still needed). Phase 1f done with deviations (partial). Phase 2-4 done. See `docs/OUTCOME.md` and `docs/common/04-BLOCKERS.md`.
+✅ All of your original Phase 1 work (0, 1a, 1b, 1e, 1c, 1f, 1g Beats 1-4) is done and tested. **Active now: Plan Phase 2/3 (dashboard visuals + concept layer) per the new assignment above.** Phase 2-4 stub verification done. See `docs/OUTCOME.md` and `docs/common/04-BLOCKERS.md` (no open blockers).
 
 ## Progress log
 
