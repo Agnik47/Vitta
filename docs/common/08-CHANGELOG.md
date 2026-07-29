@@ -519,3 +519,45 @@ Reorganized `components/` into domain folders (`layout/`, `mandate/`, `events/`,
 **Interface changes:** None to any frozen contract in `docs/common/03-INTERFACES.md`. Additive only: a new `ExecuteResult`-adjacent-but-separate `CartTotalResolution` type in `src/webcmd/cart-total.ts`; new `resolveCartTotalInr()` export from the same file. No existing consumers of `execute()` or `decide()` are affected.
 
 **Blockers introduced/resolved:** ADR-013 follow-up 1 resolved at the code + unit-test level; the only remaining item on Phase 1 is a live e2e run at ₹300 (recipe committed) — not a code blocker, a machine-availability logistics item.
+
+---
+
+## [2026-07-30 later same day] — Agent B — Live end-to-end DENY test on this Mac: ADR-014 fix proven at the LIVE level
+
+**What changed:** No code changes. Live verification of the ADR-014 fix committed earlier today, now proven end-to-end against a real Blinkit cart on this Mac (upgrading the previous session's "unit-tests only, live pending" caveat).
+
+**Setup:** User provided real `.env` credentials post-commit and authorized proceeding. Installed `@agentrhq/webcmd@0.4.3` globally (`3s`), then `cloakbrowser install` — same missing-Chromium-binary root cause as B-002 hit on Windows, cleanly resolved on macOS (no `PATH`/`System32` variant needed here). `webcmd doctor` → `Connectivity: connected in 0.1s`. User completed a real Blinkit OTP login through the opened Chromium window (`user_id: 185039085`).
+
+**Cart:** loaded to real ₹295 via `webcmd blinkit add-to-cart 497142 --quantity 1` (Pillsbury Gold Sharbati Atta 5kg — closest single-item to the ₹300 target the user asked for; well above Blinkit's ~₹200 free-delivery threshold, so both `cart` and `checkout` payloads agree at ₹295 with `deliveryCharge: 0, handlingCharge: 0`, the "everything agrees" happy-path case).
+
+**Live resolver check** against the real JSON: `resolveCartTotalInr(checkoutRow, cartLines)` → `{amountInr: 295, itemCount: 1, sources: ['checkout.payable', 'checkout.itemsTotal+fees', 'cart.line-sum'], merchantBlocked: false}`. All three candidate sources agree.
+
+**Live DENY test:** created a fresh mandate `mnd_ms6gdmj2c54a44b009e1` with `--cap 250 --per-txn 250` (deliberately below the real cart). Funded via `--reserve-ref cks_0NkEvKofSCvb33CvbrQVl` (existing paid reserve, ₹1,324 read back live from Dodo). Ran `gate run -- webcmd blinkit place-order --confirm`:
+
+```
+› blinkit place-order --confirm
+DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹295
+  transaction ₹295 · limit ₹250
+  over by ₹45
+  reserve untouched
+  NO BROWSER ACTION TAKEN
+  → step-up required
+```
+
+**Post-DENY invariant check:** real Dodo balance read back live → still ₹1,324 exact (no draw). No `ledger.jsonl` entry, no receipt. Real event captured in `events.jsonl` with `amount_inr: 295, verdict: DENY, code: OVER_PER_TXN_CAP`.
+
+**What this proves:** the specific ADR-013 bug (decide() being handed an under-reported cart total) is fixed at the LIVE level, not just unit-test level. `decide()` saw the real merchant total (295), the cap check tripped correctly, and fail-closed is intact end-to-end. What's NOT proven yet: the ALLOW-then-execute branch (would need a real ₹295 order); the ADR-013 exact fee-bearing small-cart scenario is not reproducible here since the cart is above the free-delivery threshold.
+
+**Why:** User asked "I've given .env credentials. Can you please try again? End-to-end run."
+
+**Files touched:** `docs/OUTCOME.md` (Phase 1g addendum 3, new LIVE section), `docs/agent-b/WORKSPACE.md`, `docs/common/01-PROJECT-STATUS.md`, this file. Runtime data (gitignored): `events.jsonl` has one new real DENY event; temp mandate file deleted after use.
+
+**Testing status:** Live end-to-end run itself is the test. Balance-unchanged invariant verified live. `npm test` unchanged at 65/65.
+
+**Known issues:** ALLOW-execute branch not verified live yet. The ADR-013 exact scenario (small fee-bearing cart) also not reproduced live in this specific run — the cart is above free-delivery threshold; both would need separate authorization / cart changes.
+
+**Other agent needs to:** Nothing blocking. `dashboard/` untouched.
+
+**Interface changes:** None.
+
+**Blockers introduced/resolved:** ADR-013 follow-up 1 now genuinely closed (LIVE, not just unit-tested).

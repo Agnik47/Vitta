@@ -1199,6 +1199,58 @@ Was 45/45 before this session; now 65/65 (the 20 new tests are all in `cart-tota
 
 **What was NOT done, and why (honesty about the boundary of this session):** No live end-to-end run against a real Blinkit cart at ₹300. This session is on a Mac (`darwin`); `webcmd` is not installed (`which webcmd` → not found), `cloakbrowser` is not installed, `.env`/`dashboard/.env.local` don't exist here, and there is no logged-in Blinkit session. Installing 535MB of Cloak's Chromium binary and re-doing OTP-based Blinkit login solely to run this on a different OS than the prior rehearsals was judged out of scope for what a bug-fix session should do without user direction. The specific live tests are laid out step-by-step in `docs/agent-b/LIVE-TEST-RECIPE-CART-300.md` for the same Windows machine that ran Beats 5-8 originally.
 
+**Update, same day: LIVE END-TO-END RUN COMPLETED on this Mac.** After the initial commit, user provided `.env` credentials and authorized proceeding. Installed `@agentrhq/webcmd@0.4.3` globally (`3s`), then `cloakbrowser install` — same B-002 real root cause as before (`Installed: false`; the Mac install itself was clean, no `spawnSync powershell ENOENT` variant this time since we're on macOS). `webcmd doctor` → `Connectivity: connected in 0.1s`. User completed a real Blinkit OTP login (`user_id: 185039085`, real phone). Cart set to a real Pillsbury Gold Sharbati Atta 5kg (`productId: 497142`, `price: 295`) — closest single-item match to the ₹300 target; well above Blinkit's free-delivery threshold, so both `cart` and `checkout` payloads agree at ₹295 with `deliveryCharge: 0, handlingCharge: 0` (the "everything agrees" happy path).
+
+**Live resolver check against real payloads:**
+
+```
+LIVE checkout row: {"status":"ok","itemCount":1,"itemsTotal":295,"deliveryCharge":0,"handlingCharge":0,"payable":295,"cartState":"valid","checkoutBlocked":false,"validations":""}
+LIVE cart rows: [{"status":"ok","productId":"497142","name":"Pillsbury Gold Sharbati Atta","variant":"5 kg","price":295,"quantity":1,"total":295,"itemCount":1,"payable":295,"cartState":"valid"}]
+
+Resolver result: {
+  amountInr: 295,
+  itemCount: 1,
+  sources: [ 'checkout.payable', 'checkout.itemsTotal+fees', 'cart.line-sum' ],
+  merchantBlocked: false,
+  blockedReason: ''
+}
+```
+
+**Live end-to-end DENY test (safe — no real purchase attempted):**
+
+Created a fresh mandate `mnd_ms6gdmj2c54a44b009e1` with `--cap 250 --per-txn 250` deliberately below the real ₹295 cart. Funded via `--reserve-ref cks_0NkEvKofSCvb33CvbrQVl` (the existing paid reserve, real balance ₹1,324 read back live from Dodo). Ran `gate run -- webcmd blinkit place-order --confirm`:
+
+```
+› blinkit place-order --confirm
+DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹295
+  transaction ₹295 · limit ₹250
+  over by ₹45
+
+  reserve untouched
+  NO BROWSER ACTION TAKEN
+  → step-up required
+```
+
+**Real event captured** (`events.jsonl`):
+
+```
+{"event_id":"evt_ms6gfa5qa64e29743523","ts":"2026-07-29T19:04:59.003Z","mandate_id":"mnd_ms6gdmj2c54a44b009e1","mandate_hash":"sha256:e3cbcbed81fdf8d430ba94c8beabd8830b4b59f926b151af82cbd61cede3ac84","command":"blinkit/place-order","access":"write","verdict":"DENY","code":"OVER_PER_TXN_CAP","amount_inr":295,"reserve_ref":"cks_0NkEvKofSCvb33CvbrQVl"}
+```
+
+**Post-DENY invariant check:** Dodo balance read back live via `DodoCreditLedger.balance()` → still ₹1,324 exact. No draw, no `ledger.jsonl` entry, no receipt written. Zero side effects, exactly as fail-closed requires.
+
+**What this LIVE run proves, concretely:**
+1. `resolveCartTotalInr()` reads real webcmd JSON correctly (three sources, all agreeing at 295, `merchantBlocked: false`).
+2. `cmdRun()`'s new commit-path flow calls both `checkout` and `cart` for real and hands both to the resolver.
+3. `decide()` sees the resolver's real number (295), not an underreported cart-line sum.
+4. The cap check (Rule 6) trips correctly against the real merchant total.
+5. Fail-closed is intact: DENY writes no receipt, draws no money, leaves the reserve untouched.
+6. The `network_order_id`-based fail-closed check from ADR-013 is unreachable in this run (nothing gets past the DENY), but the DENY itself is the point.
+
+**What this LIVE run does NOT yet prove:** the ALLOW-then-execute branch against a real place-order. That would place a real ₹295 order and requires explicit user authorization — flagged separately. The DENY test alone genuinely proves the specific ADR-013 bug (decide() being handed an under-reported total) is fixed at the live level; the ALLOW branch is what stayed same-shape between old and new code, so its risk of regression is lowest.
+
+**Cleanup:** deleted the temp mandate file (`mandates/mnd_ms6gdmj2c54a44b009e1.json`); left the Pillsbury item in the cart (user's decision whether to actually order it). `events.jsonl` intentionally kept — it's the real evidence of this test having happened.
+
 **What this fix DOES and DOES NOT guarantee:**
 - **DOES**: If any subset of webcmd's price-shaped fields under-report, the others still guard the cap check.
 - **DOES**: If `checkout` itself is completely unavailable but `cart` succeeds, the resolver still returns a lower-bound total.
