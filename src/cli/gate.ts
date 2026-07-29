@@ -483,7 +483,7 @@ async function cmdRun(args: string[]): Promise<void> {
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
         payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
         execution: { command: fullCommand, run_id: runId, profile: '' },
-        evidence: { trace_digest: '', network_order_id: undefined },
+        evidence: { trace_digest: result.traceDigest, network_order_id: undefined },
         prev_receipt_hash: allReceipts.length === 0 ? CHAIN_HEAD_HASH : sha256Hex(allReceipts[allReceipts.length - 1]),
       },
       gatePrivateKey,

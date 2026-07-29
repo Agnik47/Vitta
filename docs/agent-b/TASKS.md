@@ -33,6 +33,7 @@ Spec: `docs/03-WEBCMD-INTEGRATION.md`. Prompt: `docs/PROMPTS.md` § Phase 1d.
   - [x] Looks up a nonsense command name, confirms `undefined` returned (fail-closed case) — confirmed
 - [x] Run against the real webcmd install, paste actual output into `docs/OUTCOME.md` (Phase 1d section) — done, see that section for full output including the doctor failure and the fallback-to-cache test.
 - [x] **Follow-up, 2026-07-29 (later still):** `execute()` verified against two real live browser commands (a read: `duckduckgo/search`; a write: `github/login`, chosen for zero side effects) via `execute()` itself, not just the raw CLI. Real `runId` (UUID), real `columns` data, honest `tracePath: ''`.
+- [x] **Follow-up, 2026-07-29 (later still): `tracePath`/`traceDigest` resolved for real (ADR-009).** Root cause of the empty `tracePath` wasn't a missing lookup — `execute()` used `--trace retain-on-failure`, which webcmd only exports an artifact for on failure, while a `Receipt` is only ever built after `execute()` succeeds. Switched to `--trace on`; `execute()` now parses webcmd's own `Webcmd trace artifact: <dir>` stderr line and returns a real `sha256:<hex>` of that directory's `trace.jsonl` as a new `traceDigest` field. `src/cli/gate.ts`'s receipt-building now uses it instead of hardcoding `''`.
 
 Phase 1d is now fully done — no open items.
 

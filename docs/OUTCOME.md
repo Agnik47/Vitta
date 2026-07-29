@@ -473,6 +473,61 @@ columns: [{"status":"action_required","logged_in":false,"site":"github", ...}]
 
 **What this unblocks:** Phase 1g (the full Beat 1-6 rehearsal) is no longer blocked by B-002 on this machine. `gate run`/`gate fund` (Agent A's Phase 1f) can now genuinely execute a real webcmd write command with a real, correct `runId` flowing through. A live merchant-site rehearsal still needs a logged-in `webcmd profile` for whichever site is used (per `docs/03-WEBCMD-INTEGRATION.md`'s own setup note) — not attempted here, out of scope for resolving the blocker itself.
 
+**Addendum, 2026-07-29 (later still) — `tracePath`/`trace_digest` resolved for real (ADR-009).** `docs/05-DEMO-SCRIPT.md` requires `gate receipt show` to display "the trace digest from webcmd's real `--trace` artifact (sha256 of the file)" as real data, not a placeholder — so this was worth closing properly rather than leaving open indefinitely.
+
+Read the installed package's own source directly (`dist/src/observation/artifact.js`, `dist/src/execution.js`) rather than guessing:
+
+```
+function getTraceDirectory(contextId, traceId, baseDir = baseWebcmdDir()) {
+  return path.join(baseDir, 'profiles', safeSegment(contextId), 'traces', safeSegment(traceId));
+}
+// baseWebcmdDir() = process.env.WEBCMD_CONFIG_DIR || path.join(os.homedir(), '.webcmd')
+```
+
+and, critically, in `execution.js`: a trace artifact is only exported on **success** when `traceMode === 'on'`; under `retain-on-failure` (what `execute()` had always passed), it's only exported on **failure**. Since a `Receipt` is only ever built after `execute()` *succeeds*, `trace_digest` was structurally guaranteed to always be empty under the old mode — confirmed empirically before changing anything:
+
+```
+$ webcmd duckduckgo search "pasta" --trace retain-on-failure -f json
+[ { "rank": 1, "title": "28 Different Types of Pasta...", ... } ]   ← succeeded
+$ find ~/.webcmd/profiles -maxdepth 3 -type d -name traces
+(nothing — no trace directory exists at all)
+
+$ webcmd blinkit add-to-cart 000000000 --quantity 1 --trace retain-on-failure -f json
+ok: false
+error:
+  code: EMPTY_RESULT
+  message: blinkit add-to-cart returned no data
+trace:
+  traceId: 20260729112307-3395c953
+  dir: C:\Users\dell\.webcmd\profiles\default\traces\20260729112307-3395c953
+  status: failure
+```
+
+The failure case's real directory contained `console.jsonl`, `network.jsonl` (1.9MB for one failed attempt), `receipt.json`, `screenshots/`, `state/`, `summary.md`, `trace.jsonl` — matching `artifact.js`'s own `exportObservationSession()` exactly.
+
+**Fix:** switched `execute()` to `--trace on`. Confirmed webcmd prints `Webcmd trace artifact: <dir>` to **stderr** on a real success (stdout stays the unwrapped `columns` array, unaffected):
+
+```
+$ webcmd blinkit add-to-cart 333764 --quantity 1 --trace on -f json
+[stderr] Webcmd trace artifact: C:\Users\dell\.webcmd\profiles\default\traces\20260729112907-1848ad7b
+[stdout] [{"status":"added","productId":"333764","quantity":1,"itemsTotal":238,"payable":238,"message":"Added 1"}]
+exit: 0
+```
+
+`execute()` now captures stderr, parses that line, reads `<dir>/trace.jsonl`, and returns `sha256:<hex>` of its raw bytes as a new `traceDigest` field. Verified directly (temporary script, deleted after use):
+
+```
+$ npx ts-node _verify_trace.ts    (execute('blinkit', 'search', ['atta']))
+runId: d72cbed0-4bf8-4dc7-9658-76a2e7e1a179
+tracePath: C:\Users\dell\.webcmd\profiles\default\traces\20260729113056-c3a22f4b
+traceDigest: sha256:2841a2968eb073eaa33431fe1ae3b4f02c169211b359a0261419501ffe7a70a5
+columns length: 20
+```
+
+`src/cli/gate.ts`'s receipt-building (one line) now reads `result.traceDigest` instead of hardcoding `''`. Not exercised through an actual `place-order`/commit receipt this session — that needs the Beats 5-8 real-purchase decision the user hasn't authorized — verified by direct code inspection and `tsc --noEmit` instead. `npx tsc --noEmit` clean (root + `dashboard/`), `npm test` 45/45, no regressions.
+
+**Real cost, noted not hidden:** every real write command now produces a trace directory of comparable size (~1-2MB), not just failures — `execute()` is never called for reads (`cmdRun()` short-circuits those before it), so the volume during an actual demo (a handful of write commands per rehearsal) stays small, and webcmd's own `pruneTraceArtifacts()` retention logic (also found in this source read) already handles cleanup without any action needed from this project.
+
 ---
 
 ## Phase 1e — Receipts and verify chain

@@ -27,6 +27,7 @@ export interface ExecuteResult {
   runId: string;
   columns: unknown;
   tracePath: string;
+  traceDigest: string;
 }
 
 let resolvedWebcmdCommand: { command: string; prefixArgs: string[] } | null = null;
@@ -58,26 +59,54 @@ function resolveWebcmdCommand(): { command: string; prefixArgs: string[] } {
 // docs/03-WEBCMD-INTEGRATION.md's sketch. Grepping the installed package's own source
 // (`dist/src/execution.js`, `cli.js`) turned up an internal `runId` used for the daemon's own
 // session-lease/idempotency bookkeeping, but it is never surfaced to the CLI's stdout — there is
-// nothing to extract. Similarly, `--trace retain-on-failure` writes an artifact somewhere on
-// failure, but its path isn't emitted either. Rather than depend on unexposed internals, `execute()`
-// generates its own real, unique runId before invoking webcmd — this is arguably more robust anyway,
-// since our own idempotency guard (`hasAlreadyDrawn`/`recordDraw` below) then depends on a value we
-// control end to end, not one we'd have to trust a third-party CLI to expose consistently.
-// `tracePath` is returned as `''` (not fabricated) until webcmd's actual trace-artifact location is
-// found — `src/cli/gate.ts` already treats `trace_digest` as an open placeholder for the same reason.
+// nothing to extract. Rather than depend on unexposed internals, `execute()` generates its own
+// real, unique runId before invoking webcmd — this is arguably more robust anyway, since our own
+// idempotency guard (`hasAlreadyDrawn`/`recordDraw` below) then depends on a value we control end
+// to end, not one we'd have to trust a third-party CLI to expose consistently.
+//
+// tracePath/traceDigest — resolved for real, docs/common/02-DECISIONS.md ADR-009. Uses `--trace on`
+// (not `retain-on-failure`): webcmd's own source (dist/src/execution.js) only calls
+// exportObservationSession() on failure when the mode is `retain-on-failure` — a successful command
+// (the only kind that ever reaches Receipt-building in gate.ts) never gets a trace artifact under
+// that mode, confirmed empirically (a real successful run produced no `~/.webcmd/profiles/` dir at
+// all). With `--trace on`, webcmd prints `Webcmd trace artifact: <dir>` to **stderr** on success —
+// confirmed by direct testing, not guessed. That directory contains `trace.jsonl` (the full redacted
+// event timeline, per dist/src/observation/artifact.js) — its sha256 is what's returned as
+// `traceDigest`, matching docs/05-DEMO-SCRIPT.md's "the trace digest from webcmd's real --trace
+// artifact (sha256 of the file)". If webcmd's stderr format ever changes and the trace line can't be
+// found, this degrades to empty strings rather than throwing — evidence/audit data, not something
+// that should ever block a decision that already resolved to ALLOW.
+const TRACE_ARTIFACT_LINE = /Webcmd trace artifact:\s*(.+)/;
+
 export function execute(site: string, command: string, args: string[]): Promise<ExecuteResult> {
   return new Promise((resolve, reject) => {
     const runId = crypto.randomUUID();
     const { command: cmd, prefixArgs } = resolveWebcmdCommand();
-    const proc = spawn(cmd, [...prefixArgs, site, command, ...args, '--trace', 'retain-on-failure', '-f', 'json']);
+    const proc = spawn(cmd, [...prefixArgs, site, command, ...args, '--trace', 'on', '-f', 'json']);
     let stdout = '';
+    let stderr = '';
     proc.stdout.on('data', (d) => (stdout += d));
+    proc.stderr.on('data', (d) => (stderr += d));
     proc.on('close', (code) => {
       if (code !== 0) return reject(new Error(`webcmd exited ${code}`));
       const columns = JSON.parse(stdout);
-      resolve({ runId, columns, tracePath: '' });
+      const { tracePath, traceDigest } = resolveTraceArtifact(stderr);
+      resolve({ runId, columns, tracePath, traceDigest });
     });
   });
+}
+
+function resolveTraceArtifact(stderr: string): { tracePath: string; traceDigest: string } {
+  const match = stderr.match(TRACE_ARTIFACT_LINE);
+  if (!match) return { tracePath: '', traceDigest: '' };
+  const tracePath = match[1].trim();
+  try {
+    const traceFile = readFileSync(path.join(tracePath, 'trace.jsonl'));
+    const traceDigest = `sha256:${crypto.createHash('sha256').update(traceFile).digest('hex')}`;
+    return { tracePath, traceDigest };
+  } catch {
+    return { tracePath, traceDigest: '' };
+  }
 }
 
 export interface LedgerEntry {
