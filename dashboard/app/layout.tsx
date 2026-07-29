@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
+import { Geist, Geist_Mono, Figtree } from "next/font/google";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+import { AppSidebar } from "@/components/layout/app-sidebar";
+import { AppNavbar } from "@/components/layout/app-navbar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -10,6 +14,11 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
 });
 
@@ -26,20 +35,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${figtree.variable} antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <div className="bg-amber-500 text-center text-xs font-semibold text-black py-1">
-          TEST MODE — no real money moves through this dashboard or the CLI it observes
-        </div>
-        <header className="border-b border-zinc-200 dark:border-zinc-800">
-          <nav className="mx-auto flex max-w-4xl gap-6 px-4 py-3 text-sm font-medium">
-            <Link href="/">Mandate</Link>
-            <Link href="/events">Events</Link>
-            <Link href="/receipts">Receipts</Link>
-          </nav>
-        </header>
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">{children}</main>
+      <body>
+        <TooltipProvider delayDuration={200}>
+          <SidebarProvider style={{ "--sidebar-width": "15rem" } as React.CSSProperties}>
+            <AppSidebar />
+            <SidebarInset>
+              <AppNavbar />
+              <div className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                {children}
+              </div>
+            </SidebarInset>
+          </SidebarProvider>
+        </TooltipProvider>
+        <Toaster position="bottom-right" />
       </body>
     </html>
   );

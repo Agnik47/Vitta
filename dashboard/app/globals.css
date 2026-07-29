@@ -1,26 +1,131 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * "Ledger / Notarial" design tokens — see dashboard/DESIGN.md.
+ * Light/paper theme only, by direct product decision — no .dark block,
+ * no prefers-color-scheme switch. If theming is ever revisited, that's a
+ * deliberate new decision, not something that should silently reappear here.
+ */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-figtree);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Domain tokens beyond shadcn's default set — see DESIGN.md § Design Tokens. */
+  --color-allow: var(--allow);
+  --color-deny: var(--deny);
+  --color-step-up: var(--step-up);
+  --color-seal: var(--seal);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-ink-faint: var(--ink-faint);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Paper + ink — warm, not clinical. */
+  --background: #faf9f6;
+  --foreground: #1a1d1b;
+  --card: #ffffff;
+  --card-foreground: #1a1d1b;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d1b;
+
+  /* Interactive default is ink itself, not a bright color — most buttons are
+     ink-outlined, not color-filled. See DESIGN.md § Component Rules. */
+  --primary: #1a1d1b;
+  --primary-foreground: #faf9f6;
+  --secondary: #f3f1ea;
+  --secondary-foreground: #1a1d1b;
+  --muted: #f3f1ea;
+  --muted-foreground: #62655f;
+  --accent: #efede4;
+  --accent-foreground: #1a1d1b;
+
+  --destructive: #a23b2e;
+  --border: #e4e1d8;
+  --input: #e4e1d8;
+
+  /* Focus rings use the one reserved brand color — a rare, functional use
+     of "the seal," not a decorative accent sprinkled everywhere. */
+  --ring: #7a2e23;
+
+  --chart-1: #7a2e23;
+  --chart-2: #3f6b4a;
+  --chart-3: #9c7a23;
+  --chart-4: #62655f;
+  --chart-5: #c9c4b5;
+
+  --radius: 0.4rem;
+
+  /* Sidebar reads as the ledger's bound cover — one shade whiter than the
+     page, not darker, inverted from the usual dashboard convention. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1d1b;
+  --sidebar-primary: #7a2e23;
+  --sidebar-primary-foreground: #faf9f6;
+  --sidebar-accent: #f3f1ea;
+  --sidebar-accent-foreground: #1a1d1b;
+  --sidebar-border: #c9c4b5;
+  --sidebar-ring: #7a2e23;
+
+  /* Domain tokens. */
+  --allow: #3f6b4a;
+  --deny: #a23b2e;
+  --step-up: #9c7a23;
+  --seal: #7a2e23;
+  --surface-sunken: #f3f1ea;
+  --ink-faint: #8b8d86;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }

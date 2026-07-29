@@ -16,9 +16,9 @@ No existing design system to extend — the current dashboard (`app/page.tsx`, `
 
 ## Chosen Visual Style — "Ledger / Notarial"
 
-Not a straight pick off the shelf. It's **Editorial** (typography-led, confident whitespace, a distinctive serif carrying real weight) crossed with **Developer Tool** (monospace for anything cryptographic, hairline dividers over shadows, low-chrome density) — rendered in a **light/paper palette** per direct instruction, deliberately rejecting both templates' usual defaults (Editorial's marketing-hero conventions; Dev Tool's dark-first, terminal-cramped density).
+Not a straight pick off the shelf. It's **Editorial** (typography-led, confident whitespace, a distinctive display face carrying real weight) crossed with **Developer Tool** (monospace for anything cryptographic, hairline dividers over shadows, low-chrome density) — rendered in a **light/paper palette** per direct instruction, deliberately rejecting both templates' usual defaults (Editorial's marketing-hero conventions; Dev Tool's dark-first, terminal-cramped density).
 
-The controlling metaphor: **a paper ledger with a wax seal**, not a dashboard. A human "signs" a mandate in this product's own language — the visual system should look like it takes that seriously: rule lines instead of drop shadows, a serif face for money and headings (a signed document has a considered typeface, not a default grotesk), monospace for hashes/run-IDs/DIDs (they *are* code, so they should look like code), and exactly one reserved accent color used sparingly as a "seal," never sprinkled across every button.
+The controlling metaphor: **a paper ledger with a wax seal**, not a dashboard. A human "signs" a mandate in this product's own language — the visual system should look like it takes that seriously: rule lines instead of drop shadows, a distinct display face for money and headings (a signed document has a considered typeface, not a default grotesk), monospace for hashes/run-IDs/DIDs (they *are* code, so they should look like code), and exactly one reserved accent color used sparingly as a "seal," never sprinkled across every button.
 
 **Explicitly rejected:** Glassmorphism (decorative, undercuts trust), Neumorphism (low contrast, dated, bad for glanceability), Brutalist (too maximalist for judges skimming quickly), Retro-futurist/Cyberpunk (wrong personality entirely), Material Design (generic, fights the "unique" requirement), and — the specific thing the user flagged — the generic "AI-generated dashboard" look: purple-to-blue gradients, glassy cards, `hover:scale`/`hover:-translate-y` on everything, oversized rounded corners, shadow-heavy floating cards.
 
@@ -42,9 +42,11 @@ colors:
   step_up (warning):         #9C7A23   muted ochre/gold
 
 typography:
-  display (headings, big money figures): "Fraunces" via next/font/google — a characterful serif
-                                          with real optical texture; avoids the overused
-                                          Playfair-Display-as-default-serif look.
+  display (headings, big money figures): "Figtree" via next/font/google — a warm, geometric
+                                          sans with distinct rounded character (user's own
+                                          choice, confirmed 2026-07-29); paired against Geist
+                                          Sans's neutral grotesk for chrome, it still reads as
+                                          two deliberate voices rather than "Inter everywhere."
   ui (chrome, labels, nav, body):        "Geist Sans" — already integrated, keep it; no reason
                                           to introduce a second UI face.
   data (hashes, run-IDs, DIDs, timestamps, JSON-shaped values): "Geist Mono" — already
@@ -53,11 +55,11 @@ typography:
                                           separate, prettied-up fiction.
   scale (px):   12 / 13 / 15 / 18 / 24 / 34 / 48   — a slightly non-default scale on purpose;
                 signals "hand-tuned," not "framework defaults left alone."
-  weight:       400 regular (body), 500 medium (labels/nav), 600 semibold (emphasis) — Fraunces
+  weight:       400 regular (body), 500 medium (labels/nav), 600 semibold (emphasis) — Figtree
                 additionally uses its own 500/600 optical-size-aware weights for display type.
-  line-height:  1.5 body (Geist Sans) · 1.15 headings (Fraunces, serif display wants tighter
+  line-height:  1.5 body (Geist Sans) · 1.15 headings (Figtree, serif display wants tighter
                 leading) · 1.6 data blocks (Geist Mono, hash/JSON legibility)
-  numeric:      tabular-nums everywhere a number appears in a column; Fraunces for hero money
+  numeric:      tabular-nums everywhere a number appears in a column; Figtree for hero money
                 figures, Geist Mono for anything that's an identifier rather than a quantity.
 
 spacing:
@@ -135,14 +137,14 @@ Install via `npx shadcn@latest init`, **"new-york" style preset** as the startin
 
 ## Layout System — Navbar + Sidebar Shell
 
-- **Top navbar (56px):** left — wordmark "Mandate Gate" set in Fraunces, with a small oxide seal glyph beside it (the one other place, besides page content, the accent color appears). Right — a redesigned **"TEST MODE"** indicator (a small stamped/seal-style badge rather than the current amber warning strip — keeps the honesty requirement front and center, but makes it feel like a deliberate design element instead of a leftover dev banner) plus a live connection-status dot reflecting whether the events poll is currently succeeding.
+- **Top navbar (56px):** left — wordmark "Mandate Gate" set in Figtree, with a small oxide seal glyph beside it (the one other place, besides page content, the accent color appears). Right — a redesigned **"TEST MODE"** indicator (a small stamped/seal-style badge rather than the current amber warning strip — keeps the honesty requirement front and center, but makes it feel like a deliberate design element instead of a leftover dev banner) plus a live connection-status dot reflecting whether the events poll is currently succeeding.
 - **Left sidebar (240px / 64px collapsed):** real pages first, in this order — **Mandate, Events, Receipts**. Then a hairline divider and a smaller, ink-muted **"Concept Preview"** section heading, under which the Phase 3 pages live (Compare, Rule Builder, Timeline) — positioned so a judge can never mistake "real" for "illustrative" just from where something sits in the nav. A slim, always-visible reserve-balance mini-stat is pinned at the sidebar's bottom (real data, no need to navigate to `/` to see it).
-- **Main content:** below the navbar, right of the sidebar, 32px desktop padding. Every page opens with a Fraunces page title and a one-line ink-muted description underneath — written for narration clarity during the live demo, not just as a heading.
+- **Main content:** below the navbar, right of the sidebar, 32px desktop padding. Every page opens with a Figtree page title and a one-line ink-muted description underneath — written for narration clarity during the live demo, not just as a heading.
 
 ## Page-by-page (bridges to the Plan Phase 2/3 checklists in `docs/common/09-HACKATHON-WOW-PLAN.md`)
 
 - **Shell:** navbar + sidebar as above, applied in `app/layout.tsx`.
-- **`/` — Mandate:** hero panel with the cap amount set in Fraunces and a faint oxide seal watermark; an expiry `stroke-dashoffset` ring; a reserve-balance gauge fed by the real Dodo balance; merchants shown as ink-outlined chips (not filled-color pills); the TEST MODE seal badge from the navbar echoed here at panel level.
+- **`/` — Mandate:** hero panel with the cap amount set in Figtree and a faint oxide seal watermark; an expiry `stroke-dashoffset` ring; a reserve-balance gauge fed by the real Dodo balance; merchants shown as ink-outlined chips (not filled-color pills); the TEST MODE seal badge from the navbar echoed here at panel level.
 - **`/events`:** the live feed table per Component Rules above; a small running "N ALLOW · N DENY · N STEP_UP" counter in the page header; verdict-filter tabs (flat underline style).
 - **`/receipts`:** each receipt renders as its own ledger-entry panel; a connecting rule-line between consecutive receipts is the chain visualization, breaking per the Motion section above when a tamper test invalidates it.
 - **`/concept/compare`, `/concept/rules`, `/concept/timeline`** (Phase 3, later): same token system, static/sample data, a persistent "Concept Preview — not live" tag at the same visual weight as the navbar's TEST MODE badge — this labeling is a hard requirement carried from `09-HACKATHON-WOW-PLAN.md`, not optional polish.
@@ -151,7 +153,7 @@ Install via `npx shadcn@latest init`, **"new-york" style preset** as the startin
 
 - Tailwind here is **v4**, CSS-first config — there is no `tailwind.config.ts`; tokens get added as CSS variables inside `app/globals.css`'s `@theme inline` block (the file already has `--color-background`/`--color-foreground`/`--font-sans`/`--font-mono` wired this way — extend it, don't replace the mechanism).
 - `app/globals.css` currently auto-switches to a dark palette via `@media (prefers-color-scheme: dark)`. Since the explicit ask is a white/paper theme (not a theme that flips depending on the judges' OS setting), **remove that dark-mode media query** for this build rather than trying to also design and maintain a second dark token set no one asked for.
-- Fraunces is added the same way Geist already is — via `next/font/google` in `app/layout.tsx` — no new npm package for the font itself.
+- Figtree is added the same way Geist already is — via `next/font/google` in `app/layout.tsx` — no new npm package for the font itself.
 - shadcn/ui's own install brings `radix-ui` primitives, `class-variance-authority`, `tailwind-merge`, `clsx`, and `lucide-react` as transitive/companion dependencies — expected and fine, these are what "use shadcn" means in practice.
 
 ## Package additions (to log as a short ADR alongside implementation, per `CLAUDE.md` rule 5 — user has authorized "other packages," this just keeps the paper trail the rest of the project already keeps)
@@ -164,9 +166,11 @@ Install via `npx shadcn@latest init`, **"new-york" style preset** as the startin
 
 ---
 
-## Open Questions — please confirm before implementation starts
+## Decisions confirmed, 2026-07-29
 
-1. **Fraunces** as the display serif — good, or would a different characterful serif (Newsreader, Source Serif 4, Instrument Serif) fit your taste better?
-2. The single reserved accent — **oxide/sealing-wax (#7A2E23)** — acceptable? (Chosen specifically to stay outside the green/red/amber verdict trio; alternatives in that same "outside the trio" constraint would be a deep teal or a plain ink-only system with zero color accent at all.)
-3. OK to add `lucide-react` + `sonner` alongside `shadcn/ui` now, and defer `recharts` to Phase 3? Or would you rather scope Phase 2 to shadcn + Tailwind only, no extras yet?
-4. Confirm the sidebar should visually separate real pages from "Concept Preview" pages (a deliberate honesty-driven choice carried from `09-HACKATHON-WOW-PLAN.md`) — yes, or did you have a different way in mind to distinguish real vs. illustrative?
+1. **Figtree** as the display font (headings, big money figures) — confirmed. Note: Figtree is a geometric/humanist *sans*, not a serif — corrected throughout this file from the original Fraunces-based serif framing; the pairing principle (a distinct display voice vs. Geist Sans for chrome) still holds.
+2. **Oxide/sealing-wax (#7A2E23)** as the single reserved accent — confirmed.
+3. Add `lucide-react` + `sonner` alongside `shadcn/ui` now; defer `recharts` to Phase 3 — confirmed.
+4. Sidebar visually separates real pages from "Concept Preview" pages — confirmed.
+
+Implementation is proceeding on this basis.
