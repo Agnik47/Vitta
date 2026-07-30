@@ -3,10 +3,10 @@
 @import "shadcn/tailwind.css";
 
 /*
- * "Ledger / Notarial" design tokens — see dashboard/DESIGN.md.
- * Light/paper theme only, by direct product decision — no .dark block,
- * no prefers-color-scheme switch. If theming is ever revisited, that's a
- * deliberate new decision, not something that should silently reappear here.
+ * Design tokens — see dashboard/DESIGN.md.
+ * Two themes: light (paper/ink — default) and dark (black/green).
+ * Theme is toggled by adding/removing the `.dark` class on <html>.
+ * No OS-level prefers-color-scheme auto-switch — manual toggle only.
  */
 
 @theme inline {
@@ -45,7 +45,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
-  /* Domain tokens beyond shadcn's default set — see DESIGN.md § Design Tokens. */
+  /* Domain tokens */
   --color-allow: var(--allow);
   --color-deny: var(--deny);
   --color-step-up: var(--step-up);
@@ -62,6 +62,7 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ─── LIGHT THEME (default) ──────────────────────────────────────── */
 :root {
   /* Paper + ink — warm, not clinical. */
   --background: #faf9f6;
@@ -71,8 +72,6 @@
   --popover: #ffffff;
   --popover-foreground: #1a1d1b;
 
-  /* Interactive default is ink itself, not a bright color — most buttons are
-     ink-outlined, not color-filled. See DESIGN.md § Component Rules. */
   --primary: #1a1d1b;
   --primary-foreground: #faf9f6;
   --secondary: #f3f1ea;
@@ -85,9 +84,6 @@
   --destructive: #a23b2e;
   --border: #e4e1d8;
   --input: #e4e1d8;
-
-  /* Focus rings use the one reserved brand color — a rare, functional use
-     of "the seal," not a decorative accent sprinkled everywhere. */
   --ring: #7a2e23;
 
   --chart-1: #7a2e23;
@@ -98,18 +94,16 @@
 
   --radius: 0.4rem;
 
-  /* Sidebar reads as the ledger's bound cover — one shade whiter than the
-     page, not darker, inverted from the usual dashboard convention. */
   --sidebar: #ffffff;
   --sidebar-foreground: #1a1d1b;
   --sidebar-primary: #7a2e23;
   --sidebar-primary-foreground: #faf9f6;
   --sidebar-accent: #f3f1ea;
   --sidebar-accent-foreground: #1a1d1b;
-  --sidebar-border: #c9c4b5;
+  --sidebar-border: #e4e1d8;
   --sidebar-ring: #7a2e23;
 
-  /* Domain tokens. */
+  /* Domain tokens */
   --allow: #3f6b4a;
   --deny: #a23b2e;
   --step-up: #9c7a23;
@@ -118,14 +112,122 @@
   --ink-faint: #8b8d86;
 }
 
+/* ─── DARK THEME ─────────────────────────────────────────────────── */
+/* Inspired by Dodo Payments dark docs: near-black bg, bright green accent. */
+.dark {
+  --background: #0d0d0d;
+  --foreground: #f0f0f0;
+  --card: #161616;
+  --card-foreground: #f0f0f0;
+  --popover: #1e1e1e;
+  --popover-foreground: #f0f0f0;
+
+  --primary: #00c951;
+  --primary-foreground: #0d0d0d;
+  --secondary: #1e1e1e;
+  --secondary-foreground: #f0f0f0;
+  --muted: #1e1e1e;
+  --muted-foreground: #888888;
+  --accent: #1e1e1e;
+  --accent-foreground: #f0f0f0;
+
+  --destructive: #ef4444;
+  --border: #2a2a2a;
+  --input: #2a2a2a;
+  --ring: #00c951;
+
+  --chart-1: #00c951;
+  --chart-2: #00c951;
+  --chart-3: #f59e0b;
+  --chart-4: #888888;
+  --chart-5: #3a3a3a;
+
+  --radius: 0.4rem;
+
+  --sidebar: #111111;
+  --sidebar-foreground: #f0f0f0;
+  --sidebar-primary: #00c951;
+  --sidebar-primary-foreground: #0d0d0d;
+  --sidebar-accent: #1e1e1e;
+  --sidebar-accent-foreground: #f0f0f0;
+  --sidebar-border: #2a2a2a;
+  --sidebar-ring: #00c951;
+
+  /* Domain tokens — green replaces oxide as the "positive" brand signal */
+  --allow: #00c951;
+  --deny: #ef4444;
+  --step-up: #f59e0b;
+  --seal: #00c951;
+  --surface-sunken: #0a0a0a;
+  --ink-faint: #666666;
+}
+
+/* ─── BASE LAYER ─────────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    /* Smooth theme switch — background and color transition on the root */
+    transition: background-color 300ms ease-out, color 300ms ease-out;
+  }
+
   body {
     @apply bg-background text-foreground;
+    /* Match html transition */
+    transition: background-color 300ms ease-out, color 300ms ease-out;
   }
+
   html {
     @apply font-sans;
   }
+}
+
+/* ─── SIDEBAR NAV OVERRIDES ──────────────────────────────────────── */
+/*
+ * Remove border-radius from sidebar menu buttons — the rounded active-item
+ * highlight is the most visible "AI-generated dashboard" tell. Replace with
+ * a sharp left-border indicator on the active item only.
+ * Smooth transition on background + color so switching tabs feels deliberate,
+ * not instantaneous (250ms is perceptible but not sluggish).
+ */
+[data-sidebar="menu-button"] {
+  border-radius: 0 !important;
+  transition:
+    background-color 250ms ease-out,
+    color 250ms ease-out,
+    border-color 250ms ease-out !important;
+}
+
+/* Remove radius from the inner hover/active highlight too */
+[data-sidebar="menu-item"] > * {
+  border-radius: 0 !important;
+}
+
+/* ─── CUSTOM KEYFRAMES ───────────────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes slide-in-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Live heartbeat indicator used in the navbar */
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* New event row entrance (events page) */
+.animate-row-enter {
+  animation: slide-in-from-top 280ms ease-out forwards;
 }

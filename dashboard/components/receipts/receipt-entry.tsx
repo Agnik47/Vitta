@@ -1,21 +1,17 @@
-import { BadgeCheck, Link2Off, ShieldAlert, ShieldQuestion } from "lucide-react";
+import { BadgeCheck, Copy, Link2Off, ShieldAlert, ShieldQuestion } from "lucide-react";
 import type { Receipt } from "@/lib/types";
 import type { ChainVerification } from "@/lib/read";
-import { Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 
-const DENY_STYLE = "border-deny/30 bg-deny/10 text-deny";
-const ALLOW_STYLE = "border-allow/30 bg-allow/10 text-allow";
-const STEP_UP_STYLE = "border-step-up/30 bg-step-up/10 text-step-up";
+const DENY_STYLE = "border-deny/30 bg-deny/5 text-deny";
+const ALLOW_STYLE = "border-allow/30 bg-allow/5 text-allow";
+const STEP_UP_STYLE = "border-step-up/30 bg-step-up/5 text-step-up";
 
 /**
- * Deliberately keeps these two failure modes distinct rather than collapsing
- * both into one "invalid" badge — this receipt's OWN signature being wrong
- * (it was directly edited) is a different fact from it being unable to prove
- * continuity from its predecessor (the predecessor was edited instead). This
- * is the exact distinction docs/05-DEMO-SCRIPT.md Beat 7 demonstrates: tamper
- * one receipt and the *next* receipt's chain link breaks, not just the
- * tampered one's own signature.
+ * Deliberately keeps these two failure modes distinct:
+ * — Own signature invalid = the receipt itself was edited (tampered)
+ * — Chain link invalid = the predecessor was edited (chain broken)
+ * See docs/05-DEMO-SCRIPT.md Beat 7 and DESIGN.md § Motion.
  */
 function overallStatus(verification: ChainVerification | null) {
   const chainValid = verification?.chain_link_valid ?? false;
@@ -30,50 +26,98 @@ function overallStatus(verification: ChainVerification | null) {
   if (sigValid === true && !chainValid) {
     return { label: "Chain broken", icon: Link2Off, className: DENY_STYLE };
   }
-  // signature_valid is null/undefined — gate public key not yet available, see
-  // docs/agent-b/WORKSPACE.md. Chain-link validity needs no key and is still real.
   return chainValid
-    ? { label: "Chain valid · signature pending", icon: ShieldQuestion, className: STEP_UP_STYLE }
+    ? { label: "Chain valid · sig pending", icon: ShieldQuestion, className: STEP_UP_STYLE }
     : { label: "Chain broken", icon: Link2Off, className: DENY_STYLE };
 }
 
-export function ReceiptEntry({ receipt, verification }: { receipt: Receipt; verification: ChainVerification | null }) {
+function Field({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
+  return (
+    <div>
+      <div className="text-[10px] tracking-widest text-ink-faint uppercase mb-0.5">{label}</div>
+      <div className={cn("text-sm text-foreground", mono && "font-mono text-xs")}>{children}</div>
+    </div>
+  );
+}
+
+export function ReceiptEntry({
+  receipt,
+  verification,
+}: {
+  receipt: Receipt;
+  verification: ChainVerification | null;
+}) {
   const status = overallStatus(verification);
   const Icon = status.icon;
+  const isVerified = status.label === "Verified";
 
   return (
-    <Panel>
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-sm font-medium">{receipt.receipt_id}</span>
+    <div
+      className={cn(
+        "border bg-card",
+        // Left-edge colored bar based on status
+        "border-l-2",
+        isVerified ? "border-l-allow border-border" : "border-l-deny border-border"
+      )}
+    >
+      {/* ── Header row ── */}
+      <div
+        className={cn(
+          "flex items-center justify-between border-b px-4 py-3",
+          isVerified ? "border-border" : "border-deny/20"
+        )}
+      >
+        <code className="font-mono text-sm font-medium text-foreground">{receipt.receipt_id}</code>
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
+            "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-medium",
             status.className
           )}
         >
-          <Icon className="size-3" strokeWidth={2.25} />
+          <Icon className="size-3.5" strokeWidth={2.25} />
           {status.label}
         </span>
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+      {/* ── Amount hero ── */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
-          <dt className="text-xs text-ink-faint">Merchant</dt>
-          <dd className="mt-0.5">{receipt.cart.merchant}</dd>
+          <div className="text-[10px] tracking-widest text-ink-faint uppercase">Amount paid</div>
+          <div className="font-heading text-[32px] font-semibold tabular-nums leading-none text-foreground mt-0.5">
+            ₹{receipt.cart.total_inr.toLocaleString("en-IN")}
+          </div>
         </div>
-        <div>
-          <dt className="text-xs text-ink-faint">Total</dt>
-          <dd className="mt-0.5 font-mono tabular-nums">₹{receipt.cart.total_inr.toLocaleString("en-IN")}</dd>
+        <div className="text-right">
+          <div className="text-[10px] tracking-widest text-ink-faint uppercase">Merchant</div>
+          <div className="mt-0.5 text-sm font-medium text-foreground capitalize">{receipt.cart.merchant}</div>
         </div>
-        <div>
-          <dt className="text-xs text-ink-faint">Run ID</dt>
-          <dd className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{receipt.execution.run_id}</dd>
+      </div>
+
+      {/* ── Fields grid ── */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-4 border-t border-border mt-2">
+        <Field label="Run ID" mono>
+          <span className="truncate block">{receipt.execution.run_id}</span>
+        </Field>
+        <Field label="Signed at">
+          {new Date(receipt.signed_at).toLocaleString()}
+        </Field>
+        <Field label="Items">{receipt.cart.items}</Field>
+        <Field label="Payment rail">
+          <span className="uppercase">{receipt.payment.rail}</span>
+          {" · "}
+          <span className="capitalize">{receipt.payment.status}</span>
+        </Field>
+      </div>
+
+      {/* ── Signature strip ── */}
+      <div className="border-t border-border bg-surface-sunken px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <div className="text-[10px] tracking-widest text-ink-faint uppercase shrink-0">Ed25519 sig</div>
+          <code className="flex-1 truncate font-mono text-[11px] text-muted-foreground">
+            {receipt.sig.slice(0, 40)}…
+          </code>
         </div>
-        <div>
-          <dt className="text-xs text-ink-faint">Signed at</dt>
-          <dd className="mt-0.5">{new Date(receipt.signed_at).toLocaleString()}</dd>
-        </div>
-      </dl>
-    </Panel>
+      </div>
+    </div>
   );
 }
