@@ -1,22 +1,10 @@
 import type { GateEvent } from "@/lib/types";
 import { VerdictBadge } from "@/components/events/verdict-badge";
-import { cn } from "@/lib/utils";
-
-const ROW_ACCENT = {
-  ALLOW: "before:bg-allow",
-  DENY: "before:bg-deny",
-  STEP_UP: "before:bg-step-up",
-} as const;
 
 export function EventRow({ event }: { event: GateEvent }) {
   return (
     <tr
-      className={cn(
-        "relative border-b border-border transition-[opacity,transform] duration-300 ease-out",
-        "starting:-translate-y-1 starting:opacity-0",
-        "before:absolute before:inset-y-0 before:left-0 before:w-0.5",
-        ROW_ACCENT[event.verdict]
-      )}
+      className="border-b border-border transition-[opacity,transform,background-color] duration-300 ease-out hover:bg-muted/30 starting:-translate-y-1 starting:opacity-0"
     >
       <td className="py-2 pr-3 pl-3 text-xs whitespace-nowrap text-muted-foreground">
         {new Date(event.ts).toLocaleTimeString()}

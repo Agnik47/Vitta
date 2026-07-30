@@ -6,11 +6,11 @@ import {
   Activity,
   Columns3,
   History,
-  Moon,
   Receipt as ReceiptIcon,
   ScrollText,
+  ShoppingCart,
   SlidersHorizontal,
-  Sun,
+  Store,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,8 +25,13 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { SidebarBalanceStat } from "@/components/layout/sidebar-balance-stat";
-import { useTheme } from "@/components/theme-provider";
+import { useCart } from "@/lib/cart-context";
 import { cn } from "@/lib/utils";
+
+const SHOP_NAV = [
+  { href: "/shop", label: "Search & compare", icon: Store },
+  { href: "/shop/cart", label: "Cart", icon: ShoppingCart, cartBadge: true },
+];
 
 const REAL_NAV = [
   { href: "/", label: "Mandate", icon: ScrollText },
@@ -40,9 +45,21 @@ const CONCEPT_NAV = [
   { href: "/concept/timeline", label: "Timeline", icon: History },
 ];
 
-function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  cartBadge,
+}: {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  cartBadge?: boolean;
+}) {
   const pathname = usePathname();
   const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const { lines } = useCart();
+  const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
 
   return (
     <SidebarMenuItem>
@@ -50,16 +67,21 @@ function NavLink({ href, label, icon: Icon }: { href: string; label: string; ico
         <Link
           href={href}
           className={cn(
-            // Sharp left-border indicator — no rounded background.
-            // The 2px border is the only active signal; background tint is subtle.
-            "border-l-2 pl-[calc(0.5rem-2px)] transition-colors duration-250",
+            // Flat background tint on the active item — no border stripe, no
+            // rounded pill. Icon picks up the seal accent when active.
+            "transition-colors duration-200",
             isActive
-              ? "border-l-seal font-medium text-foreground"
-              : "border-l-transparent text-muted-foreground hover:text-foreground"
+              ? "bg-accent font-medium text-foreground"
+              : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
           )}
         >
-          <Icon strokeWidth={1.75} />
-          <span>{label}</span>
+          <Icon strokeWidth={1.75} className={isActive ? "text-seal" : undefined} />
+          <span className="flex-1">{label}</span>
+          {cartBadge && itemCount > 0 ? (
+            <span className="flex size-5 items-center justify-center rounded-full bg-seal text-[10px] font-semibold tabular-nums text-primary-foreground group-data-[collapsible=icon]:hidden">
+              {itemCount}
+            </span>
+          ) : null}
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -90,52 +112,39 @@ function VittaMark({ className }: { className?: string }) {
   );
 }
 
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
-
-  return (
-    <button
-      onClick={toggleTheme}
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className={cn(
-        "flex size-7 items-center justify-center rounded-sm",
-        "text-muted-foreground hover:text-foreground",
-        "transition-colors duration-200 ease-out",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        // Hide label in icon-collapsed sidebar state
-        "group-data-[collapsible=icon]:hidden"
-      )}
-    >
-      {isDark ? (
-        <Sun className="size-3.5" strokeWidth={1.75} />
-      ) : (
-        <Moon className="size-3.5" strokeWidth={1.75} />
-      )}
-      <span className="sr-only">{isDark ? "Light mode" : "Dark mode"}</span>
-    </button>
-  );
-}
-
 export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-2 py-3">
-        {/* Vitta wordmark + theme toggle in the same header row */}
-        <div className="flex items-center justify-between px-1">
-          <Link href="/" className="flex items-center gap-2">
-            <VittaMark className="size-5 shrink-0 text-seal" />
-            <span className="font-heading text-lg font-semibold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">
-              Vitta
-            </span>
-          </Link>
-          <ThemeToggle />
-        </div>
+        {/* Vitta wordmark — theme toggle now lives in the navbar */}
+        <Link href="/" className="flex items-center gap-2 px-1">
+          <VittaMark className="size-5 shrink-0 text-seal" />
+          <span className="font-heading text-lg font-semibold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">
+            Vitta
+          </span>
+        </Link>
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Real pages */}
+        {/* Shop — the primary flow: search, compare, cart, checkout, real execute */}
         <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] tracking-widest text-ink-faint uppercase">
+            Shop
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {SHOP_NAV.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Real audit pages */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] tracking-widest text-ink-faint uppercase">
+            Audit trail
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {REAL_NAV.map((item) => (

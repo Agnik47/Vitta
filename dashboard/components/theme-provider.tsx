@@ -19,6 +19,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Deferred to an effect, not a lazy useState initializer, so the
+    // server-rendered markup and the client's first render match (theme
+    // depends on localStorage, unavailable during SSR) — same SSR-safe
+    // deferral pattern as mandate/expiry-ring.tsx.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const saved = localStorage.getItem("vitta-theme") as Theme | null;
     const resolved: Theme = saved === "dark" || saved === "light" ? saved : "light";

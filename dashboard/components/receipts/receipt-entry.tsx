@@ -1,4 +1,4 @@
-import { BadgeCheck, Copy, Link2Off, ShieldAlert, ShieldQuestion } from "lucide-react";
+import { BadgeCheck, Link2Off, ShieldAlert, ShieldQuestion } from "lucide-react";
 import type { Receipt } from "@/lib/types";
 import type { ChainVerification } from "@/lib/read";
 import { cn } from "@/lib/utils";
@@ -52,14 +52,7 @@ export function ReceiptEntry({
   const isVerified = status.label === "Verified";
 
   return (
-    <div
-      className={cn(
-        "border bg-card",
-        // Left-edge colored bar based on status
-        "border-l-2",
-        isVerified ? "border-l-allow border-border" : "border-l-deny border-border"
-      )}
-    >
+    <div className="border border-border bg-card">
       {/* ── Header row ── */}
       <div
         className={cn(

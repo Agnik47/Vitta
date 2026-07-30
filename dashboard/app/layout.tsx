@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppNavbar } from "@/components/layout/app-navbar";
 import { ThemeProvider } from "@/components/theme-provider";
+import { CartProvider } from "@/lib/cart-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,18 +44,20 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <TooltipProvider delayDuration={200}>
-            <SidebarProvider style={{ "--sidebar-width": "15rem" } as React.CSSProperties}>
-              <AppSidebar />
-              <SidebarInset>
-                <AppNavbar />
-                <div className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                  {children}
-                </div>
-              </SidebarInset>
-            </SidebarProvider>
-          </TooltipProvider>
-          <Toaster position="bottom-right" />
+          <CartProvider>
+            <TooltipProvider delayDuration={200}>
+              <SidebarProvider style={{ "--sidebar-width": "15rem" } as React.CSSProperties}>
+                <AppSidebar />
+                <SidebarInset>
+                  <AppNavbar />
+                  <div className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                    {children}
+                  </div>
+                </SidebarInset>
+              </SidebarProvider>
+            </TooltipProvider>
+            <Toaster position="bottom-right" />
+          </CartProvider>
         </ThemeProvider>
       </body>
     </html>
