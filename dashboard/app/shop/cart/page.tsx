@@ -24,10 +24,18 @@ export default function CartPage() {
         <div className="flex flex-col gap-4">
           <div className="border border-border bg-card">
             {lines.map((line) => {
-              const product = findProduct(line.productId);
-              const offer = product?.offers.find((o) => o.merchant === line.merchant);
-              if (!product || !offer) return null;
-              const lineTotal = (offer.priceInr + offer.deliveryFeeInr) * line.quantity;
+              // Live-search-added lines carry their own real snapshot (name/price/image) — they
+              // were never in the static mock catalog to begin with, so findProduct() can't
+              // resolve them. Catalog-based lines resolve as before.
+              const name = line.live?.name ?? findProduct(line.productId)?.name;
+              const offer = line.live
+                ? null
+                : findProduct(line.productId)?.offers.find((o) => o.merchant === line.merchant);
+              if (!name || (!line.live && !offer)) return null;
+              const unitPrice = line.live?.priceInr ?? offer!.priceInr;
+              const deliveryFee = line.live ? 0 : offer!.deliveryFeeInr;
+              const lineTotal = (unitPrice + deliveryFee) * line.quantity;
+              const isReal = Boolean(line.live) || Boolean(offer?.real);
 
               return (
                 <div
@@ -36,8 +44,8 @@ export default function CartPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">{product.name}</span>
-                      {offer.real && (
+                      <span className="truncate text-sm font-medium text-foreground">{name}</span>
+                      {isReal && (
                         <span className="inline-flex shrink-0 items-center gap-1 border border-allow/30 bg-allow/10 px-1.5 py-0.5 text-[10px] font-medium text-allow">
                           <Zap className="size-3" strokeWidth={2.25} />
                           Real
@@ -45,7 +53,8 @@ export default function CartPage() {
                       )}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      {MERCHANT_LABEL[line.merchant]} · ₹{offer.priceInr} each
+                      {MERCHANT_LABEL[line.merchant]} · ₹{unitPrice.toLocaleString("en-IN")} each
+                      {line.live ? " (live price, delivery fee shown at real checkout)" : ""}
                     </div>
                   </div>
 

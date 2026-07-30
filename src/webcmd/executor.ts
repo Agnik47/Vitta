@@ -32,7 +32,9 @@ export interface ExecuteResult {
 
 let resolvedWebcmdCommand: { command: string; prefixArgs: string[] } | null = null;
 
-function resolveWebcmdCommand(): { command: string; prefixArgs: string[] } {
+// Exported so other real, read-only entry points (e.g. src/cli/search.ts) can reuse this exact
+// safe-spawn resolution instead of re-deriving the same Windows ENOENT/shell-injection fix.
+export function resolveWebcmdCommand(): { command: string; prefixArgs: string[] } {
   if (resolvedWebcmdCommand) return resolvedWebcmdCommand;
   if (process.platform !== 'win32') {
     // POSIX global installs are real executables (shebang scripts) — spawn() can run them directly,
