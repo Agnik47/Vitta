@@ -34,7 +34,7 @@ function overallStatus(verification: ChainVerification | null) {
 function Field({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] tracking-widest text-ink-faint uppercase mb-0.5">{label}</div>
+      <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase mb-1">{label}</div>
       <div className={cn("text-sm text-foreground", mono && "font-mono text-xs")}>{children}</div>
     </div>
   );
@@ -52,18 +52,18 @@ export function ReceiptEntry({
   const isVerified = status.label === "Verified";
 
   return (
-    <div className="border border-border bg-card">
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
       {/* ── Header row ── */}
       <div
         className={cn(
-          "flex items-center justify-between border-b px-4 py-3",
+          "flex items-center justify-between border-b px-5 py-3.5",
           isVerified ? "border-border" : "border-deny/20"
         )}
       >
         <code className="font-mono text-sm font-medium text-foreground">{receipt.receipt_id}</code>
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-medium",
+            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold",
             status.className
           )}
         >
@@ -73,21 +73,21 @@ export function ReceiptEntry({
       </div>
 
       {/* ── Amount hero ── */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <div>
-          <div className="text-[10px] tracking-widest text-ink-faint uppercase">Amount paid</div>
-          <div className="font-heading text-[32px] font-semibold tabular-nums leading-none text-foreground mt-0.5">
+          <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase mb-0.5">Amount paid</div>
+          <div className="font-heading text-[34px] font-bold tabular-nums leading-none text-foreground mt-0.5">
             ₹{receipt.cart.total_inr.toLocaleString("en-IN")}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] tracking-widest text-ink-faint uppercase">Merchant</div>
-          <div className="mt-0.5 text-sm font-medium text-foreground capitalize">{receipt.cart.merchant}</div>
+          <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase mb-0.5">Merchant</div>
+          <div className="mt-0.5 text-sm font-semibold text-foreground capitalize">{receipt.cart.merchant}</div>
         </div>
       </div>
 
       {/* ── Fields grid ── */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-4 border-t border-border mt-2">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-5 py-4 border-t border-border">
         <Field label="Run ID" mono>
           <span className="truncate block">{receipt.execution.run_id}</span>
         </Field>

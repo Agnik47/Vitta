@@ -14,8 +14,8 @@ function StageTag({ real }: { real: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase",
-        real ? "border-allow/40 text-allow" : "border-dashed border-ink-faint/60 text-ink-faint"
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
+        real ? "border-allow/40 bg-allow/10 text-allow" : "border-dashed border-ink-faint/60 text-ink-faint"
       )}
     >
       {real ? <CircleCheck className="size-2.5" strokeWidth={2.5} /> : <FlaskConical className="size-2.5" strokeWidth={2.5} />}

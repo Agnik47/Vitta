@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  BookOpen,
   Columns3,
   History,
+  LayoutDashboard,
   Receipt as ReceiptIcon,
-  ScrollText,
   ShoppingCart,
   SlidersHorizontal,
   Store,
@@ -34,15 +35,16 @@ const SHOP_NAV = [
 ];
 
 const REAL_NAV = [
-  { href: "/", label: "Mandate", icon: ScrollText },
-  { href: "/events", label: "Events", icon: Activity },
-  { href: "/receipts", label: "Receipts", icon: ReceiptIcon },
+  { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/events", label: "Decisions", icon: Activity },
+  { href: "/receipts", label: "Proof chain", icon: ReceiptIcon },
+  { href: "/docs", label: "Docs", icon: BookOpen },
 ];
 
 const CONCEPT_NAV = [
-  { href: "/concept/compare", label: "Compare", icon: Columns3 },
-  { href: "/concept/rules", label: "Rule builder", icon: SlidersHorizontal },
-  { href: "/concept/timeline", label: "Timeline", icon: History },
+  { href: "/concept/compare", label: "Compare markets", icon: Columns3 },
+  { href: "/concept/rules", label: "Policy builder", icon: SlidersHorizontal },
+  { href: "/concept/timeline", label: "Activity flow", icon: History },
 ];
 
 function NavLink({

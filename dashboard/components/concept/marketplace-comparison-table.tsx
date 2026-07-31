@@ -102,18 +102,17 @@ function MerchantCard({
   return (
     <div
       className={cn(
-        // Base card — sharp corners, hairline border, no shadow
-        "flex flex-col rounded-none border bg-card transition-colors duration-250",
+        "flex flex-col rounded-xl border bg-card overflow-hidden transition-all duration-200 hover:shadow-sm",
         isCheapest
-          ? "border-seal"
+          ? "border-seal/60 shadow-[0_0_0_1px] shadow-seal/20"
           : "border-border"
       )}
     >
       {/* ── Merchant header ── */}
       <div
         className={cn(
-          "flex items-center justify-between px-4 py-3 border-b",
-          isCheapest ? "border-seal/30 bg-seal/5" : "border-border"
+          "flex items-center justify-between px-4 py-3.5 border-b",
+          isCheapest ? "border-seal/20 bg-seal/5" : "border-border"
         )}
       >
         <span className="font-heading text-base font-semibold text-foreground">
@@ -122,7 +121,7 @@ function MerchantCard({
 
         <div className="flex items-center gap-1.5">
           {isCheapest && (
-            <span className="inline-flex items-center gap-1 border border-seal/50 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-seal uppercase">
+            <span className="inline-flex items-center gap-1 rounded-full border border-seal/50 bg-seal/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-seal uppercase">
               <Award className="size-3" strokeWidth={2.25} />
               Best value
             </span>
@@ -130,7 +129,7 @@ function MerchantCard({
           {quote.isReal && (
             <a
               href="/receipts"
-              className="inline-flex items-center gap-1 border border-allow/40 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-allow uppercase hover:border-allow transition-colors duration-200"
+              className="inline-flex items-center gap-1 rounded-full border border-allow/40 bg-allow/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-allow uppercase hover:border-allow transition-colors duration-200"
               title="This order was actually placed — see Receipts"
             >
               <CheckCircle className="size-3" strokeWidth={2.25} />
@@ -200,10 +199,10 @@ export function MarketplaceComparisonTable() {
   return (
     <div>
       {/* ── Product identity strip ── */}
-      <div className="mb-5 flex items-center gap-3 rounded-none border border-border bg-card px-4 py-3">
+      <div className="mb-5 flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-3.5">
         <Package className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.5} />
         <div>
-          <div className="text-sm font-medium text-foreground">
+          <div className="text-sm font-semibold text-foreground">
             Aashirvaad Shudh Chakki Atta 5 kg × 2
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
@@ -217,7 +216,7 @@ export function MarketplaceComparisonTable() {
       </div>
 
       {/* ── Merchant card grid ── */}
-      <div className="grid grid-cols-1 gap-0 border border-border sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {QUOTES.map((q) => (
           <MerchantCard
             key={q.merchant}
@@ -228,11 +227,11 @@ export function MarketplaceComparisonTable() {
       </div>
 
       {/* ── Mandate gate note ── */}
-      <div className="mt-4 rounded-none border border-dashed border-seal/30 bg-seal/5 px-4 py-3">
-        <div className="text-[11px] font-medium tracking-wider text-seal uppercase mb-1">
-          Mandate gate context
+      <div className="mt-5 rounded-xl border border-seal/20 bg-seal/5 px-5 py-4">
+        <div className="text-[11px] font-bold tracking-wider text-seal uppercase mb-1.5">
+          How the gate uses this
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
+        <p className="text-[13px] text-muted-foreground leading-relaxed">
           In a real run, the agent compares final checkout costs (not listed prices) and submits the lowest to
           the policy engine. The mandate&apos;s per-transaction cap gates whether that amount is allowed —
           e.g., a ₹500 cap would permit Zepto&apos;s ₹470 but deny BigBasket&apos;s ₹492.{" "}
@@ -240,7 +239,7 @@ export function MarketplaceComparisonTable() {
             href="/concept/rules"
             className="text-seal underline decoration-seal/40 underline-offset-2 hover:decoration-seal transition-colors"
           >
-            Create a rule →
+            Build a policy →
           </a>
         </p>
       </div>

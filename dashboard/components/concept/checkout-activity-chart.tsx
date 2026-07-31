@@ -20,10 +20,10 @@ function CustomTooltip({ active, payload, label }: TooltipContentProps) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload as ActivityBar;
   return (
-    <div className="rounded-md border border-border bg-card px-3 py-2 text-xs shadow-none">
-      <div className="font-medium text-foreground">{label}</div>
-      <div className="mt-0.5 font-mono tabular-nums text-muted-foreground">₹{point.amountInr.toLocaleString("en-IN")}</div>
-      <div className="mt-0.5 text-[10px] tracking-wide text-ink-faint uppercase">
+    <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs shadow-none">
+      <div className="font-semibold text-foreground">{label}</div>
+      <div className="mt-1 font-mono tabular-nums text-muted-foreground">₹{point.amountInr.toLocaleString("en-IN")}</div>
+      <div className="mt-0.5 text-[10px] font-medium tracking-wide text-ink-faint uppercase">
         {point.kind === "real" ? "Real receipt" : "Sample projection"}
       </div>
     </div>

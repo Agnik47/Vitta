@@ -26,17 +26,17 @@ function StatCard({ label, count, icon: Icon, colorClass, bgClass, borderClass, 
     <button
       onClick={onClick}
       className={cn(
-        "flex flex-1 items-center gap-3 border px-4 py-3 text-left",
-        "transition-colors duration-250 ease-out",
-        isActive ? [bgClass, borderClass] : "border-border bg-card hover:bg-muted/40"
+        "flex flex-1 items-center gap-3 px-5 py-4 text-left",
+        "transition-all duration-200 ease-out",
+        isActive ? [bgClass, "ring-1 ring-inset", borderClass] : "hover:bg-muted/30"
       )}
     >
       <Icon className={cn("size-5 shrink-0", colorClass)} strokeWidth={1.75} />
       <div>
-        <div className={cn("font-heading text-2xl font-semibold tabular-nums leading-none", colorClass)}>
+        <div className={cn("font-heading text-2xl font-bold tabular-nums leading-none", colorClass)}>
           {count}
         </div>
-        <div className="mt-0.5 text-[10px] tracking-widest text-ink-faint uppercase">{label}</div>
+        <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">{label}</div>
       </div>
     </button>
   );
@@ -59,19 +59,21 @@ export function EventTable({ events }: { events: GateEvent[] }) {
 
   return (
     <div>
-      {/* ── Stat cards — clickable as filter shortcuts ── */}
-      <div className="mb-5 grid grid-cols-3 gap-0 border border-border">
-        <StatCard
-          label="Allow"
-          count={counts.ALLOW}
-          icon={CheckCircle2}
-          colorClass="text-allow"
-          bgClass="bg-allow/5"
-          borderClass="border-allow/40"
-          isActive={filter === "ALLOW"}
-          onClick={() => setFilter(filter === "ALLOW" ? "ALL" : "ALLOW")}
-        />
-        <div className="border-l border-r border-border">
+      {/* ── Stat cards ── */}
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <div className={cn("rounded-xl border overflow-hidden", filter === "ALLOW" ? "border-allow/40" : "border-border")}>
+          <StatCard
+            label="Allow"
+            count={counts.ALLOW}
+            icon={CheckCircle2}
+            colorClass="text-allow"
+            bgClass="bg-allow/5"
+            borderClass="border-allow/40"
+            isActive={filter === "ALLOW"}
+            onClick={() => setFilter(filter === "ALLOW" ? "ALL" : "ALLOW")}
+          />
+        </div>
+        <div className={cn("rounded-xl border overflow-hidden", filter === "DENY" ? "border-deny/40" : "border-border")}>
           <StatCard
             label="Deny"
             count={counts.DENY}
@@ -83,16 +85,18 @@ export function EventTable({ events }: { events: GateEvent[] }) {
             onClick={() => setFilter(filter === "DENY" ? "ALL" : "DENY")}
           />
         </div>
-        <StatCard
-          label="Step-up"
-          count={counts.STEP_UP}
-          icon={ShieldAlert}
-          colorClass="text-step-up"
-          bgClass="bg-step-up/5"
-          borderClass="border-step-up/40"
-          isActive={filter === "STEP_UP"}
-          onClick={() => setFilter(filter === "STEP_UP" ? "ALL" : "STEP_UP")}
-        />
+        <div className={cn("rounded-xl border overflow-hidden", filter === "STEP_UP" ? "border-step-up/40" : "border-border")}>
+          <StatCard
+            label="Step-up"
+            count={counts.STEP_UP}
+            icon={ShieldAlert}
+            colorClass="text-step-up"
+            bgClass="bg-step-up/5"
+            borderClass="border-step-up/40"
+            isActive={filter === "STEP_UP"}
+            onClick={() => setFilter(filter === "STEP_UP" ? "ALL" : "STEP_UP")}
+          />
+        </div>
       </div>
 
       {/* ── Filter tabs ── */}
@@ -121,17 +125,17 @@ export function EventTable({ events }: { events: GateEvent[] }) {
           hint="Run a `gate` command from the CLI to see it appear here."
         />
       ) : (
-        <div className="overflow-x-auto border border-border">
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-border text-[10px] tracking-widest text-ink-faint uppercase">
-                <th className="px-3 py-2.5 font-medium">Time</th>
-                <th className="px-3 py-2.5 font-medium">Command</th>
-                <th className="px-3 py-2.5 font-medium">Access</th>
-                <th className="px-3 py-2.5 font-medium">Verdict</th>
-                <th className="px-3 py-2.5 font-medium">Reason</th>
-                <th className="px-3 py-2.5 font-medium">Amount</th>
-                <th className="px-3 py-2.5 font-medium">Run ID</th>
+              <tr className="border-b border-border bg-muted/30 text-[11px] tracking-wider text-muted-foreground">
+                <th className="px-4 py-3 font-semibold">Time</th>
+                <th className="px-4 py-3 font-semibold">Command</th>
+                <th className="px-4 py-3 font-semibold">Access</th>
+                <th className="px-4 py-3 font-semibold">Verdict</th>
+                <th className="px-4 py-3 font-semibold">Reason</th>
+                <th className="px-4 py-3 font-semibold">Amount</th>
+                <th className="px-4 py-3 font-semibold">Run ID</th>
               </tr>
             </thead>
             <tbody>

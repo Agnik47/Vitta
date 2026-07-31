@@ -10,7 +10,7 @@ const VERDICT = {
 function DecisionRow({ event }: { event: GateEvent }) {
   const s = VERDICT[event.verdict];
   return (
-    <div className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-muted/30 transition-colors duration-200">
+    <div className="flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0 hover:bg-muted/30 transition-colors duration-200">
       {/* Verdict dot */}
       <span className={cn("size-1.5 shrink-0 rounded-full", s.dot)} />
 
@@ -27,7 +27,11 @@ function DecisionRow({ event }: { event: GateEvent }) {
       ) : null}
 
       {/* Verdict label */}
-      <span className={cn("shrink-0 text-xs font-medium", s.text)}>
+      <span className={cn("shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold",
+        event.verdict === "ALLOW" ? "border-allow/30 bg-allow/10 text-allow" :
+        event.verdict === "DENY" ? "border-deny/30 bg-deny/10 text-deny" :
+        "border-step-up/30 bg-step-up/10 text-step-up"
+      )}>
         {s.label}
       </span>
 
@@ -51,7 +55,7 @@ export function RecentDecisionsStrip({ events }: { events: GateEvent[] }) {
 
   if (recent.length === 0) {
     return (
-      <div className="border border-border border-dashed px-4 py-8 text-center bg-card">
+      <div className="rounded-xl border border-border border-dashed px-4 py-8 text-center bg-card">
         <p className="text-sm text-muted-foreground">No policy decisions yet.</p>
         <p className="mt-1 text-xs text-ink-faint">
           Run{" "}
@@ -63,7 +67,7 @@ export function RecentDecisionsStrip({ events }: { events: GateEvent[] }) {
   }
 
   return (
-    <div className="border border-border bg-card">
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
       {recent.map((e) => (
         <DecisionRow key={e.event_id} event={e} />
       ))}

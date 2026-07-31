@@ -16,7 +16,7 @@ export function VerdictBadge({ verdict }: { verdict: "ALLOW" | "DENY" | "STEP_UP
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold tracking-wide whitespace-nowrap",
         className
       )}
     >

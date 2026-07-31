@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 export function Panel({ className, ...props }: React.ComponentProps<typeof Card>) {
   return (
     <Card
-      className={cn("gap-4 rounded-md border border-border bg-card px-5 py-5 ring-0 shadow-none", className)}
+      className={cn("gap-4 rounded-xl border border-border bg-card px-5 py-5 ring-0 shadow-none", className)}
       {...props}
     />
   );
