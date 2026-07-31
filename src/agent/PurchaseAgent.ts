@@ -264,14 +264,43 @@ export class PurchaseAgent {
     }
 
     // Step 1 — clear stale cart (session-scoped; the caller decides whether this is needed).
+    //
+    // CRITICAL, found live: `clear-cart` reporting success is not sufficient evidence the real
+    // cart is actually empty. A real run left a genuinely non-empty cart (5 distinct products,
+    // including one never touched that run) immediately after a `clear-cart` call that itself
+    // reported ALLOW/committed. Combined with the next finding below, this silently inflated a
+    // human-approved ₹160 cart into a real ₹354 one. Never trust the report alone — read the real
+    // cart back and require it to show zero items before adding anything on top of it.
     if (input.clearCartFirst) {
       this.emit('clear-cart', 'running', `Clearing any existing ${merchant} cart from a previous session`);
-      const result = await runGate(['run', '--', 'webcmd', merchant, 'clear-cart']);
-      if (!result.ok) {
-        this.emit('clear-cart', 'failed', describeFailure(result, 'clear-cart failed'));
-        return this.fail(startedAt, merchant, items, 'Could not clear the existing cart before purchasing');
+      const CLEAR_CART_MAX_ATTEMPTS = 3;
+      let cartConfirmedEmpty = false;
+      let lastIssue: string | undefined;
+      for (let attempt = 1; attempt <= CLEAR_CART_MAX_ATTEMPTS; attempt++) {
+        const result = await runGate(['run', '--', 'webcmd', merchant, 'clear-cart']);
+        if (!result.ok) {
+          lastIssue = describeFailure(result, 'clear-cart failed');
+          continue;
+        }
+        const verify = await readCart(merchant);
+        if (verify.ok && (verify.cartItemCount ?? 0) === 0) {
+          cartConfirmedEmpty = true;
+          break;
+        }
+        lastIssue = verify.message
+          ? `Cart still not empty after clearing: ${verify.message}`
+          : `Cart still shows ${verify.cartItemCount ?? '?'} item(s) after clearing — refusing to add on top of an unconfirmed cart`;
       }
-      this.emit('clear-cart', 'done', 'Cart cleared');
+      if (!cartConfirmedEmpty) {
+        this.emit('clear-cart', 'failed', lastIssue ?? 'Could not confirm the cart was actually cleared');
+        return this.fail(
+          startedAt,
+          merchant,
+          items,
+          lastIssue ?? 'Could not confirm the real cart was empty before adding new items',
+        );
+      }
+      this.emit('clear-cart', 'done', 'Cart cleared and confirmed empty by a real read');
     } else {
       this.emit('clear-cart', 'skipped', 'Already cleared earlier this session');
     }

@@ -76,8 +76,51 @@ run, in chat, immediately before it happens.
 to let the pipeline execute `place-order --confirm` for real on a specific, named cart (so it's
 clear exactly what is being authorized — item(s), quantity, expected total).
 
+## 4. RESOLVED THIS SESSION — MinCartBanner was fabricating products and never actually loaded
+
+Two real bugs, both fixed (see `tasks.md` for full detail):
+- Hardcoded fake top-up products with invented ids/prices — replaced with real live search results.
+- A React effect-dependency bug meant the real search never got to update the UI, no matter how many
+  times it succeeded server-side — the banner was permanently stuck on "Searching…".
+
+## 5. RESOLVED THIS SESSION — local cart could silently diverge from the real merchant cart
+
+Found live: the dashboard's cart page trusted a purely local (sessionStorage) running total for the
+minimum-order-value check and the Proceed gate. Verified this can drift seriously from the real
+Blinkit cart (observed ₹158 local vs ₹220 real, with two real products present server-side that the
+local model had no record of — most likely leftover from an earlier test session, since the manual
+add-to-cart flow has no clear-cart step of its own). Wired the already-existing (but unused)
+`/api/shop/cart-read` route into the cart page as the authoritative, verified number, with an
+explicit warning shown whenever it disagrees with the local estimate. The automated Purchase Job
+pipeline was never at risk from this (it independently re-reads and re-verifies the real cart before
+committing), but the human's confirmation dialog was previously showing a number that could be wrong
+— now fixed to show and gate on the verified real figure.
+
+## 6. FOUND AND FIXED THIS SESSION — real money-safety bug in the first live purchase attempt
+
+The user authorized a real `--confirm` purchase run (₹160: Maggi×1, Nandini×2, Arokya×1, Amul
+Lactose Free×1). It correctly stopped short of drawing money or signing a receipt (merchant never
+confirmed an order — ADR-013 held), but the real cart it was about to check out was **₹354 across
+10 items**, not the ₹160/4 items the human approved, including a product never selected this run.
+
+Root cause, confirmed with isolated live tests: (1) `blinkit add-to-cart --quantity N` is additive,
+not absolute — proven by calling it twice with `--quantity 1` and getting quantity 2; (2)
+`clear-cart` reporting success is not proof the real cart is actually empty — the job's own
+"cleared" cart still held real items when its adds ran. Fixed in `src/agent/PurchaseAgent.ts`: the
+clear step now reads the real cart back and requires a confirmed-empty result (retrying up to 3
+times) before adding anything, failing the whole run closed otherwise. Rebuilt and tested
+(238/238), **not yet re-verified with a second live run**.
+
 ## Status as of this write-up
 
-Paused mid-verification at the user's request ("wait i will say start then u start again").
-Everything above reflects real findings already gathered; nothing further will be clicked/run in
-the live browser or against the real gate CLI until the user says to continue.
+Blinkit is now verified live, end to end, up through: real search → real add-to-cart → duplicate
+prevention → real minimum-order-value enforcement with real suggested top-ups → real-cart
+verification → "Proceed to purchase" correctly enabled only once the **verified real cart** clears
+the minimum. `npm test` (238/238) and `tsc --noEmit` (root + dashboard) both clean after all fixes.
+
+**Not yet done, and deliberately not attempted without explicit authorization:** clicking "Proceed
+to purchase" and confirming. That starts the real pipeline, which will clear the real Blinkit cart
+first (wiping today's accumulated test residue) and then, if the mandate's policy check allows it,
+walk all the way to a real Cash-on-Delivery order placement (`gate run -- webcmd blinkit place-order
+--confirm`) — a genuine spend, per blocker #3 above. Waiting on the user to say go, and to confirm
+which specific cart contents they want that real run to use.
