@@ -111,10 +111,14 @@ export const anakinSource: ProductSource = {
     }
 
     // These are client-rendered SPAs and their render genuinely is flaky through a scraper — the
-    // same query returned 21-26 products on one attempt and 0 on the next, minutes apart. One
-    // retry converts most of those misses into real results; beyond that it's more likely a real
-    // "this page has nothing" than a timing blip, so we stop rather than hammer the merchant.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // same query returned 21-26 products on one attempt and 0 on the next, minutes apart. Real
+    // measurement 2026-07-31 against Zepto specifically: a 2-attempt budget (the original setting
+    // here) still landed empty on 3 of 5 real queries end to end through this exact route
+    // (chips/milk/eggs empty, atta/Maggi real) — beyond what "one retry covers most misses" assumed.
+    // A 3rd attempt is still bounded (never hammers indefinitely) and directly targets that gap.
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const isLastAttempt = attempt === maxAttempts - 1;
       try {
         const res = await fetch(ANAKIN_SCRAPE_URL, {
           method: "POST",
@@ -131,13 +135,13 @@ export const anakinSource: ProductSource = {
         });
 
         if (!res.ok) {
-          if (attempt === 0) continue;
+          if (!isLastAttempt) continue;
           return { merchant, ok: false, products: [], error: `Anakin HTTP ${res.status}` };
         }
 
         const body = (await res.json()) as AnakinScrapeResponse;
         if (body.error) {
-          if (attempt === 0) continue;
+          if (!isLastAttempt) continue;
           return { merchant, ok: false, products: [], error: body.error };
         }
 
@@ -165,14 +169,14 @@ export const anakinSource: ProductSource = {
         }
 
         if (products.length > 0) return { merchant, ok: true, products };
-        if (attempt === 0) continue; // empty render — one more try before believing it
+        if (!isLastAttempt) continue; // empty render — try again before believing it
 
-        // Zero parseable products after a retry is reported as a failure, not as "no results" —
+        // Zero parseable products after every retry is reported as a failure, not as "no results" —
         // they're different facts, and conflating them would hide a broken extraction behind an
         // empty grid.
         return { merchant, ok: false, products: [], error: "No products extracted from the page" };
       } catch (err) {
-        if (attempt === 0) continue;
+        if (!isLastAttempt) continue;
         return { merchant, ok: false, products: [], error: (err as Error).message };
       }
     }
