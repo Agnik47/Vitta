@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Activity,
@@ -35,7 +36,7 @@ const SHOP_NAV = [
 ];
 
 const REAL_NAV = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/events", label: "Decisions", icon: Activity },
   { href: "/receipts", label: "Proof chain", icon: ReceiptIcon },
   { href: "/docs", label: "Docs", icon: BookOpen },
@@ -59,7 +60,7 @@ function NavLink({
   cartBadge?: boolean;
 }) {
   const pathname = usePathname();
-  const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = href === "/overview" ? pathname === "/overview" || pathname.startsWith("/overview") : pathname.startsWith(href);
   const { lines } = useCart();
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
 
@@ -90,40 +91,48 @@ function NavLink({
   );
 }
 
-/** Vitta "V" mark — a simple SVG grain/coin symbol representing wealth (Sanskrit: vitta). */
-function VittaMark({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className={className}
-      aria-hidden="true"
-    >
-      {/* Outer ring */}
-      <circle cx="12" cy="12" r="10.5" stroke="currentColor" strokeWidth="1.5" />
-      {/* Bold V inside */}
-      <path
-        d="M7.5 7.5 L12 16.5 L16.5 7.5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
-  );
-}
 
 export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-2 py-3">
-        {/* Vitta wordmark — theme toggle now lives in the navbar */}
-        <Link href="/" className="flex items-center gap-2 px-1">
-          <VittaMark className="size-5 shrink-0 text-seal" />
-          <span className="font-heading text-lg font-semibold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">
-            Vitta
-          </span>
+        {/* Logo — switches between light/dark mode and full/icon based on sidebar state */}
+        <Link href="/" className="flex items-center px-1">
+          {/* Expanded (Full Logo) */}
+          <div className="relative h-20 w-40 group-data-[collapsible=icon]:hidden">
+            <Image
+              src="/logs/Vitta_LightMode_Logo.png"
+              alt="Vitta Logo"
+              fill
+              className="object-contain object-left [.dark_&]:hidden block"
+              priority
+            />
+            <Image
+              src="/logs/Vitta_DarkMode_Logo.png"
+              alt="Vitta Logo"
+              fill
+              className="object-contain object-left hidden [.dark_&]:block"
+              priority
+            />
+          </div>
+          
+          {/* Collapsed (Icon Only) */}
+          <div className="relative size-6 hidden group-data-[collapsible=icon]:block">
+            <Image
+              src="/logs/Vitta_LightMode_Icon.png"
+              alt="Vitta Icon"
+              fill
+              className="object-contain [.dark_&]:hidden block"
+              priority
+            />
+            <Image
+              src="/logs/Vitta_DarkMode_icon.png"
+              alt="Vitta Icon"
+              fill
+              className="object-contain hidden [.dark_&]:block"
+              priority
+            />
+          </div>
         </Link>
       </SidebarHeader>
 

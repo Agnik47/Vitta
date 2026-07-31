@@ -7,7 +7,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppNavbar } from "@/components/layout/app-navbar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CartProvider } from "@/lib/cart-context";
-import "./globals.css";
+import "../globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
