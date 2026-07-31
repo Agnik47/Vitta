@@ -165,6 +165,7 @@ test('cart lines with only `total` are summed', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
 // Regression: the real `blinkit/cart` row shape (clis/blinkit/cart.js) repeats the CART-level
 // `payable` and `itemCount` on EVERY line. Summing `payable` multiplied the cart by its line
 // count. Observed live 2026-07-31: a genuine ₹179 two-line cart resolved to ₹358 and was DENYed
@@ -206,6 +207,51 @@ test('cart.payable still guards the cap when per-line totals under-report', () =
   const result = resolveCartTotalInr(undefined, cartLines);
   assert.equal(result.amountInr, 250);
   assert.deepEqual(result.sources, ['cart.payable']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Zepto and BigBasket cart shapes. Before these were supported, BOTH merchants resolved to ₹0 and
+// threw — which made a commit-path decision impossible for either, since neither exposes a
+// `read`-access checkout to price from either (both are access:'write', so gate.ts can't probe
+// them before decide() runs). The cart is the only safe pricing source for these two.
+// ---------------------------------------------------------------------------------------------
+
+test('zepto/cart shape (unit price x quantity, no line total) resolves instead of throwing', () => {
+  // Real zepto/cart columns: rank, product_id, title, pack_size, quantity, price, mrp, availability.
+  // There is no `payable`, `total`, or `line_total` — the old resolver summed to ₹0 and threw.
+  const cartLines: CartLineRow[] = [
+    { price: 55, quantity: 2 }, // 110
+    { price: 30, quantity: 1 }, // 30
+  ];
+  const result = resolveCartTotalInr(undefined, cartLines);
+  assert.equal(result.amountInr, 140);
+  assert.deepEqual(result.sources, ['cart.line-sum']);
+});
+
+test('zepto/cart line with no quantity defaults to 1, not 0', () => {
+  const result = resolveCartTotalInr(undefined, [{ price: 99 }]);
+  assert.equal(result.amountInr, 99);
+});
+
+test('bigbasket/cart shape (line_total) resolves instead of throwing', () => {
+  // Real bigbasket/cart columns: product_id, title, quantity, price, line_total, availability, url.
+  const cartLines: CartLineRow[] = [
+    { price: 299, quantity: 1, line_total: 299 },
+    { price: 45, quantity: 2, line_total: 90 },
+  ];
+  const result = resolveCartTotalInr(undefined, cartLines);
+  assert.equal(result.amountInr, 389);
+});
+
+test('bigbasket line where line_total under-reports price x quantity: resolver takes the larger', () => {
+  // Fail-closed at the line level. If a merchant's own line total disagrees with unit x qty, the
+  // bigger number is the one decide() must see — the ADR-013 lesson applied per line.
+  const cartLines: CartLineRow[] = [{ price: 100, quantity: 3, line_total: 100 }];
+  assert.equal(resolveCartTotalInr(undefined, cartLines).amountInr, 300);
+});
+
+test('a zepto/bigbasket cart with all-zero prices still throws (₹0 is not a valid commit)', () => {
+  assert.throws(() => resolveCartTotalInr(undefined, [{ price: 0, quantity: 4 }]), /unparseable|missing|₹0/i);
 });
 
 // ---------------------------------------------------------------------------------------------

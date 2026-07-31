@@ -3,7 +3,7 @@
 // with the CLI process, not an error — see docs/agent-b/ERROR-HANDLING.md § Dashboard.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import type { Mandate, GateEvent, Receipt } from './types';
+import type { Mandate, GateEvent, Receipt, TransactionAuthorization } from './types';
 import { sha256Hex, CHAIN_HEAD_HASH, verifySignature } from './hash';
 
 export function getDataDir(): string {
@@ -70,6 +70,34 @@ export function readReceipts(): Receipt[] {
     }
   }
   return receipts;
+}
+
+export function readAuthorizations(): TransactionAuthorization[] {
+  const dir = path.join(getDataDir(), 'authorizations');
+  if (!existsSync(dir)) return [];
+
+  const authorizations: TransactionAuthorization[] = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      authorizations.push(JSON.parse(readFileSync(path.join(dir, file), 'utf-8')) as TransactionAuthorization);
+    } catch {
+      // Mid-write or malformed file — skip it, don't crash the route.
+    }
+  }
+  return authorizations;
+}
+
+/** A TransactionAuthorization is signed but never chain-linked (see authorization.ts's own header
+ *  for why) — so this only needs to check its own signature, not a chain link. Same null-when-no-
+ *  key-yet behavior as verifyChainLocal(). */
+export function verifyAuthorizationSignature(
+  authorization: TransactionAuthorization,
+  gatePublicKeyPem: string | null,
+): boolean | null {
+  if (!gatePublicKeyPem) return null;
+  const { sig, ...unsigned } = authorization;
+  return verifySignature(unsigned, sig, gatePublicKeyPem);
 }
 
 export interface ChainVerification {

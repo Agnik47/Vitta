@@ -13,6 +13,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { resolveWebcmdCommand } from '../webcmd/executor';
+import { resolveCartTotalInr, type CartLineRow } from '../webcmd/cart-total';
 
 interface ManifestCommand {
   site: string;
@@ -58,6 +59,29 @@ async function main(): Promise<void> {
     }
     try {
       const rows = JSON.parse(stdout);
+
+      // For a cart read, also resolve the total the same way gate.ts prices a commit. The number is
+      // computed HERE, with the gate's own resolver, so the purchase UI can show the user exactly
+      // the figure decide() will be handed — a second, subtly different sum computed in the
+      // dashboard would be worse than showing none at all. (The dashboard mirrors src/ types by
+      // hand rather than importing them — see docs/06-DASHBOARD-SPEC.md — so the shared logic has
+      // to live on this side of the boundary.)
+      if (command === 'cart' && Array.isArray(rows)) {
+        let cartTotalInr: number | undefined;
+        let cartItemCount = 0;
+        let cartTotalError: string | undefined;
+        try {
+          const resolution = resolveCartTotalInr(undefined, rows as CartLineRow[]);
+          cartTotalInr = resolution.amountInr;
+          cartItemCount = resolution.itemCount;
+        } catch (err) {
+          // An empty or ₹0 cart throws by design. That's a fact to report, not a total to invent.
+          cartTotalError = (err as Error).message;
+        }
+        process.stdout.write(JSON.stringify({ ok: true, rows, cartTotalInr, cartItemCount, cartTotalError }));
+        return;
+      }
+
       process.stdout.write(JSON.stringify({ ok: true, rows }));
     } catch {
       process.stdout.write(JSON.stringify({ ok: false, message: 'Could not parse webcmd output' }));

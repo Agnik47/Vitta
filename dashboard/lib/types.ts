@@ -52,12 +52,33 @@ export interface GateEvent {
 
 export interface Receipt {
   receipt_id: string;
+  // Optional (not required, unlike src/receipt/schema.ts's Receipt) — a receipt signed before the
+  // two-stage authorization/confirmation split genuinely has no authorization_id, and that's an
+  // honest fact about it, not a validation error.
+  authorization_id?: string;
   mandate_hash: string;
   cart: { merchant: string; items: number; total_inr: number };
   payment: { rail: 'dodo_test'; reserve_ref: string; status: 'captured' };
   execution: { command: string; run_id: string; profile: string };
-  evidence: { trace_digest: string; network_order_id?: string };
+  evidence: { trace_digest: string; network_order_id?: string; commit_proof?: string };
   prev_receipt_hash: string;
   signed_at: string;
+  sig: string;
+}
+
+// Read-only mirror of src/receipt/authorization.ts's TransactionAuthorization — see that file for
+// the full "why this exists" reasoning. Created the moment decide() returns ALLOW for a commit
+// command, before the browser ever touches the merchant's checkout; never implies money moved or
+// that the merchant confirmed anything.
+export interface TransactionAuthorization {
+  authorization_id: string;
+  run_id: string;
+  mandate_id: string;
+  mandate_hash: string;
+  merchant: string;
+  cart: { items: number; total_inr: number };
+  verdict: 'ALLOW';
+  reserve_verified_inr: number;
+  authorized_at: string;
   sig: string;
 }

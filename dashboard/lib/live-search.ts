@@ -37,11 +37,16 @@ function searchCliEntryPoint(): string {
   return path.join(getDataDir(), "dist", "cli", "search.js");
 }
 
-interface RawSearchResponse {
+export interface RawSearchResponse {
   ok: boolean;
   rows?: unknown;
   message?: string;
   authRequired?: boolean;
+  /** Only present for a `cart` read — resolved by the CLI with the gate's own cart-total resolver,
+   *  so it is the same figure decide() will be handed at commit time. */
+  cartTotalInr?: number;
+  cartItemCount?: number;
+  cartTotalError?: string;
 }
 
 // Real, live-tested finding: individual webcmd search calls varied 22s-38s end to end through
@@ -50,7 +55,7 @@ interface RawSearchResponse {
 // cutting it close. execFile kills the child and reports `error.killed` on timeout; that case
 // must produce an honest "timed out" message, not silently fall through to an empty `{}` parse
 // that looks identical to "the merchant genuinely returned nothing."
-function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSearchResponse> {
+export function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSearchResponse> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
@@ -61,10 +66,28 @@ function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSearchResp
           resolve({ ok: false, message: `Timed out after ${Math.round(timeoutMs / 1000)}s waiting on webcmd` });
           return;
         }
+        const trimmedStdout = stdout.trim();
+        if (!trimmedStdout) {
+          // The child process produced NO output at all — it never even reached search.js's own
+          // fail() (which always writes a real {ok:false,message} JSON before exiting). This means
+          // the spawn itself failed (e.g. dist/cli/search.js missing, ENOENT, permissions) — the
+          // only real diagnostic available is `error.message`/stderr. Found live: this path was
+          // previously falling through to `JSON.parse(stdout.trim() || "{}")`, which parses "{}"
+          // successfully and silently produces an object with no `message` field at all — the exact
+          // cause of every card showing a bare "unknown error" with the real reason discarded.
+          resolve({
+            ok: false,
+            message: error?.message?.trim() || stderr.trim() || "search.js produced no output and no error was reported",
+          });
+          return;
+        }
         try {
-          resolve(JSON.parse(stdout.trim() || "{}") as RawSearchResponse);
+          resolve(JSON.parse(trimmedStdout) as RawSearchResponse);
         } catch {
-          resolve({ ok: false, message: stderr.trim() || "search.js produced no parseable output" });
+          resolve({
+            ok: false,
+            message: stderr.trim() || error?.message?.trim() || "search.js produced unparseable output",
+          });
         }
       }
     );

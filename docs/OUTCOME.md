@@ -1348,6 +1348,77 @@ Cleanup: deleted temp mandates `mnd_ms6gzbre901c6da0707b.json` and `mnd_ms6gn2bo
 
 ---
 
+## Human-in-the-loop purchase workflow (2026-07-31) — ✅ Shipped, with one real capability boundary
+
+Built the flow the user asked for: search → unified grid → cheapest recommendation → **human selects** →
+Proceed → real gate-CLI add-to-cart → real merchant cart + minimum-order check → explicit confirmation →
+commit. Plus a min/max budget filter and a "keep watching" mode. No write command runs before the human
+clicks.
+
+### Findings that changed the design — all verified against the real `manifest.json` (805 commands, 109 sites)
+
+| Finding | Consequence |
+|---|---|
+| `zepto/add-to-cart` takes a **product URL**, not an id | `/api/shop/cart-add`'s `^[a-zA-Z0-9_-]{1,64}$` pattern rejected URLs outright — **Zepto add-to-cart was broken in every case**. Fixed via `dashboard/lib/product-ref.ts`. |
+| `bigbasket/add-to-cart` takes "Product ID or URL" | `/pd/<id>/` extraction from an Anakin URL works and is preferred. |
+| All three `add-to-cart` accept `--quantity` | The old code's claim that zepto/bigbasket lacked it was simply wrong. |
+| `zepto/place-order` columns are `["status","confirmed","message"]` — **no `orderId`** | `gate.ts`'s ADR-013 guard would have rejected every genuinely successful Zepto order. Generalised to a per-site commit proof. |
+| **BigBasket has no order-placing command** — 7 commands; `checkout` is explicitly "without placing an order" | No generic click/eval escape hatch exists anywhere in the manifest either. See boundary below. |
+| `zepto/checkout` + `bigbasket/checkout` are **`access: write`**; `blinkit/checkout` is `read` | `gate.ts:402` ran `webcmd <site> checkout` **to price a commit, before `decide()`** — a real merchant-side write executed outside the gate decision. **Fail-closed hole, now fixed.** |
+| `zepto/cart` has `price`+`quantity`; `bigbasket/cart` has `line_total` — neither has `payable`/`total` | `resolveCartTotalInr()` resolved **₹0 and threw** for both. Commit pricing was impossible for either merchant. Fixed. |
+
+### ⚠️ FINDING — `bigbasket add-to-cart` is broken in webcmd 0.4.3, and fails *silently*
+
+Verified live, twice, with traces:
+
+- **With a product id** (`bigbasket add-to-cart 150502`): trace shows `pre_navigate` to `https://www.bigbasket.com`
+  — the **homepage** — then `command end`. It never navigates to the product page and never clicks anything.
+  Exit 0, `status: "success"`, and the cart stays empty. **This is the ADR-013 failure class again**: a
+  success report for an action that did not happen. Trace `20260731021309-cb505212`.
+- **With the full product URL**: same homepage-only navigation, then
+  `COMMAND_EXEC: Could not find a BigBasket add-to-cart button.` At least this one fails loudly.
+  Trace `20260731021503-fca35a19`.
+
+This is a webcmd adapter bug, not something this repo can fix ("Do not modify webcmd",
+`docs/03-WEBCMD-INTEGRATION.md § Do not`). **BigBasket is therefore search-and-compare only in practice** —
+its cards are real and its prices are real, but nothing can be added to its cart.
+
+### The BigBasket boundary (design, independent of the bug above)
+
+Even with a working add-to-cart, BigBasket could not be carried to a placed order: no command exists to do
+it. `COMMIT_SPEC` gives it `proof: 'none'` — the gate prices the cart, runs `decide()`, refuses on
+DENY/STEP_UP, performs the checkout navigation on ALLOW, then **hands off to the human**. It never draws and
+never signs, because ADR-013's rule is that a receipt attests to an order *the gate placed*, and BigBasket
+returns no confirmation payload to attest to.
+
+### Real verification runs
+
+| Check | Result |
+|---|---|
+| `npm test` | **188 pass, 0 fail** (+37: `commit-spec.test.ts` 16, `cart-total.test.ts` +6, `product-ref.test.ts` 16) |
+| Write-probe fix, live | `(skipping bigbasket/checkout as a pricing source — not a read command; pricing from the cart alone)` — then `✗ Failed to resolve cart total: … Refusing to hand decide() an unparseable total.` **No write fired before `decide()`.** |
+| Cap enforcement, live | Real ₹60 Blinkit cart vs ₹50 cap → `DENY blinkit/place-order · OVER_PER_TXN_CAP · ₹60`, `over by ₹10`, `reserve untouched`, `NO BROWSER ACTION TAKEN` |
+| Blinkit add-to-cart, live | `ALLOW blinkit/add-to-cart · ₹0` → real cart read returned the real line, `cartTotalInr: 60` |
+| Cart total resolution, live | `{"rows":[{"productId":"171258","name":"Maggi Masala…","price":60,"quantity":1,"payable":60}],"cartTotalInr":60,"cartItemCount":1}` |
+| Full UI flow, real browser | Searched "maggi" → real Blinkit grid (₹162/₹180, ₹60, ₹30, ₹20, Yippee ₹86/₹90 — the user's exact Maggi-vs-Yippee case) → selected a card → sticky bar `"Blinkit · ₹60 · ₹55 more than the cheapest"` → Proceed → real add-to-cart (gate event `evt_ms8bmiae76b15e83dea1`, ALLOW ₹0) → real cart **₹120** labelled "resolved exactly as decide() will see it" → min-cart check **"₹30 more to reach ₹150"** with **real** Blinkit suggestions (Amul Moti Toned Milk ₹30, Amul Gold ₹34, Amul Taaza ₹34, Nandini ₹36 — the ₹30 one exactly closes the gap) |
+| Route fail-closed guards | `POST /api/shop/execute` without `confirm` → refused. `cart-add` with a BigBasket URL claimed as Zepto → `"That URL is not an https zepto product URL — refusing to hand it to the browser"` |
+
+**Not run:** the final `place-order` commit. That moves real money and is the user's call, not the agent's.
+
+**Still unverified:** `zepto place-order`'s real payload — so the `confirmed` + success-status proof rule is
+written strictly (both required, absent status = refuse) and flagged in `commit-spec.ts` as needing a live
+run before it is trusted. Zepto's own search also returned 0 products through both webcmd and Anakin during
+this session (the SPA render flakiness recorded earlier), so no real Zepto product URL was available to test
+`zepto add-to-cart` either.
+
+### Schema change
+
+`Receipt.evidence` gained an optional `commit_proof?: string`. Exactly one of `network_order_id` /
+`commit_proof` is present on any signed receipt — it names *which* merchant-issued confirmation was accepted,
+now that not every merchant issues an order id.
+
+---
+
 ## Final pre-hackathon status (fill in night of 31 Jul)
 
 **What shipped, exactly:**

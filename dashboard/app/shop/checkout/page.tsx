@@ -39,6 +39,9 @@ function CreateMandateForm({ onCreated }: { onCreated: () => void }) {
   const [cap, setCap] = useState("500");
   const [perTxn, setPerTxn] = useState("500");
   const [expires, setExpires] = useState("23:59");
+  // The CLI defaults this to 1, which silently DENYs the second purchase of a session with
+  // TXN_LIMIT_REACHED. Surfaced as a real field rather than hidden behind that default.
+  const [maxTxns, setMaxTxns] = useState("5");
   const [busy, setBusy] = useState(false);
 
   async function handleCreate() {
@@ -51,8 +54,11 @@ function CreateMandateForm({ onCreated }: { onCreated: () => void }) {
           subject,
           capInr: Number(cap),
           perTxnInr: Number(perTxn),
-          merchants: ["blinkit"],
+          // Scoped to all three merchants the purchase flow can actually reach — a Zepto or
+          // BigBasket pick would otherwise DENY with MERCHANT_NOT_ALLOWED.
+          merchants: ["blinkit", "zepto", "bigbasket"],
           expires,
+          maxTxns: Number(maxTxns),
         }),
       });
       const json = await res.json();
@@ -84,15 +90,21 @@ function CreateMandateForm({ onCreated }: { onCreated: () => void }) {
           <Input type="number" value={perTxn} onChange={(e) => setPerTxn(e.target.value)} className="mt-1.5" />
         </div>
       </div>
-      <div className="mt-4 max-w-[160px]">
-        <label className="text-[11px] tracking-wide text-ink-faint uppercase">Expires (24h)</label>
-        <Input value={expires} onChange={(e) => setExpires(e.target.value)} className="mt-1.5" placeholder="23:59" />
+      <div className="mt-4 grid max-w-sm grid-cols-2 gap-4">
+        <div>
+          <label className="text-[11px] tracking-wide text-ink-faint uppercase">Expires (24h)</label>
+          <Input value={expires} onChange={(e) => setExpires(e.target.value)} className="mt-1.5" placeholder="23:59" />
+        </div>
+        <div>
+          <label className="text-[11px] tracking-wide text-ink-faint uppercase">Max transactions</label>
+          <Input type="number" min={1} max={50} value={maxTxns} onChange={(e) => setMaxTxns(e.target.value)} className="mt-1.5" />
+        </div>
       </div>
       <Button className="mt-5" onClick={handleCreate} disabled={busy}>
         {busy ? "Signing…" : "Create real mandate"}
       </Button>
       <p className="mt-3 text-xs text-ink-faint">
-        Real Ed25519-signed mandate, scoped to Blinkit — same as running{" "}
+        Real Ed25519-signed mandate, scoped to Blinkit, Zepto and BigBasket — same as running{" "}
         <code className="font-mono text-foreground">gate mandate create</code>.
       </p>
     </Panel>
@@ -160,7 +172,7 @@ function ExecutePanel({ mandate, balance }: { mandate: Mandate; balance: Balance
       const res = await fetch("/api/shop/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ merchant: "blinkit", command: "place-order", confirm: true }),
+        body: JSON.stringify({ merchant: "blinkit", confirm: true }),
       });
       const json: ExecuteResult = await res.json();
       setResult(json);

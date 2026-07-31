@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // `gate` CLI entrypoint. See docs/05-DEMO-SCRIPT.md for the exact terminal output each
 // subcommand targets, and docs/PROMPTS.md Phase 1f for the subcommand list.
+import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { loadManifest } from '../webcmd/manifest';
 import { sign, verify } from '../mandate/sign';
@@ -12,12 +13,19 @@ import type { Mandate } from '../mandate/schema';
 import { decide } from '../policy/decide';
 import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '../receipt/chain';
 import type { Receipt } from '../receipt/schema';
+import { buildAndSignAuthorization, type TransactionAuthorization } from '../receipt/authorization';
 import { DodoCreditLedger } from '../ledger/DodoCreditLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
 import { resolveCartTotalInr, type CheckoutRow, type CartLineRow } from '../webcmd/cart-total';
+import {
+  commitProofKind as resolveCommitProofKind,
+  evaluateCommitProof,
+  isCommitCommand as isCommitCommandFor,
+  type CommitResultRow,
+} from '../webcmd/commit-spec';
 import { formatGateEventLine, formatAgentLine } from './ui';
 import { getOrCreateKeyPair } from './keys';
-import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, appendEvent } from './store';
+import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, saveAuthorization, appendEvent } from './store';
 import type { GateEvent } from '../events/GateEvent';
 
 async function main(): Promise<void> {
@@ -225,12 +233,17 @@ function cmdVerify(args: string[]): void {
 async function cmdFund(args: string[]): Promise<void> {
   const { positionals, flags } = parseArgs(args);
   const mandateId = positionals[0];
-  if (!mandateId) throw new Error('Usage: gate fund <mandate_id> --amount <n> | gate fund <mandate_id> --reserve-ref <ref>');
+  if (!mandateId) {
+    throw new Error(
+      'Usage: gate fund <mandate_id> --amount <n> | gate fund <mandate_id> --reserve-ref <ref> | gate fund <mandate_id> --auto --amount <n>',
+    );
+  }
   // --reserve-ref attaches an ALREADY-FUNDED real reserve instead of creating a new checkout
   // session. Needed because ledger.fund() can only ever create a session a human must then pay
   // in a browser — impossible mid-demo, and the reason a full end-to-end run couldn't be repeated
   // without a fresh out-of-band payment every time. See docs/common/02-DECISIONS.md ADR-012.
   const existingReserveRef = flags['reserve-ref'];
+  const auto = flags.auto !== undefined;
 
   const mandate = loadMandate(mandateId);
   const { sig: existingSig, ...existingUnsigned } = mandate;
@@ -241,6 +254,54 @@ async function cmdFund(args: string[]): Promise<void> {
 
   const ledger = new DodoCreditLedger();
   const { privateKey } = getOrCreateKeyPair('issuer');
+
+  if (auto) {
+    if (existingReserveRef) throw new Error('--auto and --reserve-ref are mutually exclusive.');
+    // Auto-funding only TOPS UP a reserve that already exists — it never creates the first money on
+    // a mandate. That first funding is always the real, human-initiated fund() (a checkout session
+    // a person actually pays, or --reserve-ref attaching one they already paid) — the same
+    // human-authorization discipline this project has applied to every real purchase so far. This
+    // command exists purely so an automated purchase pipeline doesn't have to stop and ask a human
+    // again for a top-up on a mandate that human already funded once.
+    if (!mandate.reserve.ref) {
+      throw new Error(
+        `Mandate ${mandateId} has no reserve to top up — fund it once with a real payment first ` +
+          `(gate fund ${mandateId} --amount <n> or --reserve-ref <ref>).`,
+      );
+    }
+    const amountInr = Number(requireFlag(flags, 'amount'));
+    if (Number.isNaN(amountInr) || amountInr <= 0) throw new Error('--amount must be a positive number');
+
+    const currentBalanceInr = (await ledger.balance(mandate.reserve.ref)) / 100;
+    // Hard cap at the mandate's own signed spending limit — auto-funding can let a within-policy
+    // order proceed without a human re-confirming, but it must never become a way to exceed the
+    // limit the human already signed. decide()'s cap check still runs on top of this regardless;
+    // this is a second, earlier guard so a top-up is never even attempted past the cap.
+    if (currentBalanceInr + amountInr > mandate.scope.cap_inr) {
+      throw new Error(
+        `Auto-fund of ₹${formatInr(amountInr)} would bring the reserve to ₹${formatInr(currentBalanceInr + amountInr)}, ` +
+          `over the mandate's ₹${formatInr(mandate.scope.cap_inr)} cap — refusing.`,
+      );
+    }
+
+    const runId = flags['run-id'] || generateId('fnd');
+    await ledger.credit(mandate.reserve.ref, Math.round(amountInr * 100), runId);
+
+    // Re-read the real balance rather than computing before+after locally — same "trust the real
+    // API response, not local arithmetic" discipline the --reserve-ref branch below already uses.
+    const newBalanceInr = (await ledger.balance(mandate.reserve.ref)) / 100;
+    const funded: Omit<Mandate, 'sig'> = {
+      ...existingUnsigned,
+      reserve: { ...mandate.reserve, blocked_inr: newBalanceInr },
+    };
+    const updatedMandate: Mandate = { ...funded, sig: sign(funded, privateKey) };
+    saveMandate(updatedMandate);
+
+    console.log(`✓ MANDATE ${mandateId} auto-funded — ₹${formatInr(newBalanceInr)} (was ₹${formatInr(currentBalanceInr)})`);
+    console.log(`  reserve reference ${mandate.reserve.ref}`);
+    console.log(`  real balance read from Dodo after the credit`);
+    return;
+  }
 
   if (existingReserveRef) {
     if (flags.amount) {
@@ -302,11 +363,8 @@ async function cmdFund(args: string[]): Promise<void> {
 /** The first row webcmd returns for a commit command (`place-order`/`checkout`). Only the fields
  * this CLI actually consumes are typed — the real payload carries the command's full `columns`
  * schema. `orderId` empty/absent means the merchant never confirmed an order (see cmdRun). */
-interface CommitResultRow {
-  orderId?: string;
-  status?: string;
-  message?: string;
-}
+// Per-merchant commit semantics (which command spends, and what proves the order was placed) live
+// in src/webcmd/commit-spec.ts — pure logic, unit-tested against every real manifest column shape.
 
 async function cmdRun(args: string[]): Promise<void> {
   // Parse: args = ["--", "webcmd", "blinkit", "search", "atta"]
@@ -378,12 +436,15 @@ async function cmdRun(args: string[]): Promise<void> {
     throw new Error(`Unknown command "${fullCommand}" (not in manifest)`);
   }
 
-  // Only the actual commit action (place-order/checkout) represents real spend — per
-  // docs/03-WEBCMD-INTEGRATION.md's command table, other write commands like add-to-cart are
-  // "gated, but ₹0 committed until checkout." Fetching the cart for those would be an unnecessary
-  // browser round-trip and, worse, would incorrectly deny them if the cart total exceeds the cap
-  // before the agent ever tries to actually spend anything.
-  const isCommitCommand = command === 'place-order' || command === 'checkout';
+  // Only the actual commit action represents real spend — per docs/03-WEBCMD-INTEGRATION.md's
+  // command table, other write commands like add-to-cart are "gated, but ₹0 committed until
+  // checkout." Fetching the cart for those would be an unnecessary browser round-trip and, worse,
+  // would incorrectly deny them if the cart total exceeds the cap before the agent ever tries to
+  // actually spend anything.
+  //
+  // Which command that is depends on the merchant — see src/webcmd/commit-spec.ts.
+  const isCommitCommand = isCommitCommandFor(site, command);
+  const commitProofKind = resolveCommitProofKind(site);
 
   let cartAmountInr: number;
   let cartItemCount = 0;
@@ -402,21 +463,39 @@ async function cmdRun(args: string[]): Promise<void> {
     // matching the fail-closed invariant (CLAUDE.md rule 3).
     let checkoutPayload: CheckoutRow | undefined;
     let cartLines: CartLineRow[] | undefined;
-    try {
-      const checkoutResult = execSync(`webcmd ${site} checkout -f json`).toString();
-      const parsedCheckout: unknown = JSON.parse(checkoutResult);
-      // The `checkout` command returns a single-row array (per its columns schema) — take row 0.
-      if (Array.isArray(parsedCheckout) && parsedCheckout.length > 0) {
-        checkoutPayload = parsedCheckout[0] as CheckoutRow;
-      } else if (parsedCheckout && typeof parsedCheckout === 'object' && !Array.isArray(parsedCheckout)) {
-        checkoutPayload = parsedCheckout as CheckoutRow;
+
+    // Pricing must never itself be a write. `blinkit/checkout` is access:'read' (its description is
+    // literally "…without placing an order"), but `zepto/checkout` and `bigbasket/checkout` are
+    // access:'write' — probing those to price a decision would have performed a real merchant-side
+    // write BEFORE decide() ever ran, which is precisely the thing this gate exists to prevent.
+    // So: only read-access commands are ever used as a pricing source, and the command we are
+    // about to commit is never probed regardless of how it is classified.
+    const canProbe = (probeCommand: string): boolean =>
+      manifest.get(`${site}/${probeCommand}`) === 'read' && probeCommand !== command;
+
+    if (canProbe('checkout')) {
+      try {
+        const checkoutResult = execSync(`webcmd ${site} checkout -f json`).toString();
+        const parsedCheckout: unknown = JSON.parse(checkoutResult);
+        // The `checkout` command returns a single-row array (per its columns schema) — take row 0.
+        if (Array.isArray(parsedCheckout) && parsedCheckout.length > 0) {
+          checkoutPayload = parsedCheckout[0] as CheckoutRow;
+        } else if (parsedCheckout && typeof parsedCheckout === 'object' && !Array.isArray(parsedCheckout)) {
+          checkoutPayload = parsedCheckout as CheckoutRow;
+        }
+      } catch (err) {
+        // A checkout-read failure is not fatal on its own — the cart-line fallback below still
+        // provides a lower-bound total. Surface the reason on stderr so a demo operator can see it.
+        console.error(`  (checkout read failed, falling back to cart lines: ${(err as Error).message})`);
       }
-    } catch (err) {
-      // A checkout-read failure is not fatal on its own — the cart-line fallback below still
-      // provides a lower-bound total. Surface the reason on stderr so a demo operator can see it.
-      console.error(`  (checkout read failed, falling back to cart lines: ${(err as Error).message})`);
+    } else {
+      console.error(`  (skipping ${site}/checkout as a pricing source — not a read command; pricing from the cart alone)`);
     }
+
     try {
+      if (!canProbe('cart')) {
+        throw new Error(`${site}/cart is not available as a read command`);
+      }
       const cartResult = execSync(`webcmd ${site} cart -f json`).toString();
       const parsedCart: unknown = JSON.parse(cartResult);
       if (Array.isArray(parsedCart)) {
@@ -568,16 +647,45 @@ async function cmdRun(args: string[]): Promise<void> {
     return;
   }
 
+  // Two independent, both-real facts, kept separate rather than conflated into one artifact:
+  //   1. TRANSACTION AUTHORIZATION — decide() said ALLOW and the real Dodo reserve balance already
+  //      read (ledgerBalanceInr) covers this cart. True right now, before the browser touches
+  //      anything. Signed and saved immediately below, BEFORE execute() runs.
+  //   2. MERCHANT CONFIRMATION + the real Receipt — only real once the merchant itself proves an
+  //      order exists (evaluateCommitProof). draw()/recordDraw()/buildAndSignReceipt() stay exactly
+  //      where they always were: gated on that proof, never moved earlier. Moving the real Dodo
+  //      draw() before merchant confirmation would recreate ADR-013's exact failure — draw() is an
+  //      immediate, real ledger debit here, not a reversible authorization hold, so a merchant that
+  //      never confirms would leave the reserve genuinely short for nothing.
+  const runId = crypto.randomUUID();
+  const authorization: TransactionAuthorization = buildAndSignAuthorization(
+    {
+      authorization_id: generateId('auth'),
+      run_id: runId,
+      mandate_id: mandate.mandate_id,
+      mandate_hash: sha256Hex(mandate),
+      merchant: site,
+      cart: { items: cartItemCount, total_inr: cartAmountInr },
+      verdict: 'ALLOW',
+      reserve_verified_inr: ledgerBalanceInr,
+    },
+    gatePrivateKey,
+  );
+  saveAuthorization(authorization);
+  console.log(`✓ TRANSACTION AUTHORIZED ${authorization.authorization_id}`);
+  console.log(`  ${site} · ₹${formatInr(cartAmountInr)} · reserve verified ₹${formatInr(ledgerBalanceInr)}`);
+  console.log('  no money moved yet — awaiting merchant confirmation');
+
   try {
-    const result = await execute(site, command, cmdArgs);
-    const runId = result.runId;
+    const result = await execute(site, command, cmdArgs, runId);
 
     // Real webcmd output for a commit command (found live, docs/03-WEBCMD-INTEGRATION.md never
     // specified this): `result.columns` is a bare array of row objects matching that command's own
     // `columns` schema — blinkit/place-order's schema includes a real `orderId` field.
     const resultRows = Array.isArray(result.columns) ? (result.columns as Array<CommitResultRow>) : [];
     const commitRow = resultRows[0];
-    const networkOrderId = commitRow?.orderId;
+    const proof = evaluateCommitProof(commitRow, commitProofKind);
+    const networkOrderId = proof.orderId;
 
     // FAIL CLOSED: webcmd exiting 0 does NOT mean the order was actually placed. Found live —
     // a real `blinkit place-order --confirm` returned exit 0, `status: "success"` in its own trace,
@@ -587,9 +695,33 @@ async function cmdRun(args: string[]): Promise<void> {
     // purchase that never happened — the single worst failure mode for a product whose entire claim
     // is that a receipt proves what the agent did. Nothing is drawn, recorded, or signed unless the
     // merchant actually gave us an order id. See docs/common/02-DECISIONS.md ADR-013.
-    if (!networkOrderId) {
-      console.log(`✗ ${fullCommand} did NOT complete — no order id returned by ${site}`);
+    if (!proof.ok) {
+      // proof:'none' is not a failure — it's a merchant that has no order-placing command at all
+      // (BigBasket). The automated step really did run and the gate really did approve the spend;
+      // what's missing is any way for the merchant to tell us an order exists. So: report the
+      // hand-off honestly, draw nothing, sign nothing. Exit 0, because nothing went wrong.
+      if (commitProofKind === 'none') {
+        const handoffUrl = (commitRow as { url?: string } | undefined)?.url;
+        console.log(`✓ ${fullCommand} completed — ₹${formatInr(cartAmountInr)} approved, awaiting your final click`);
+        console.log(`  ${site} exposes no order-placing command, so the gate cannot complete the purchase`);
+        if (commitRow?.status) console.log(`  merchant stage: ${commitRow.status}`);
+        if (handoffUrl) console.log(`  finish here: ${handoffUrl}`);
+        console.log('');
+        console.log(`  authorization ${authorization.authorization_id} · reserve untouched — nothing drawn`);
+        console.log('  NO RECEIPT WRITTEN — a receipt attests to an order the gate placed, and this one is yours to place');
+        if (result.tracePath) console.log(`  evidence: ${result.tracePath}`);
+        return;
+      }
+
+      // WAITING FOR MERCHANT CONFIRMATION — not a policy failure (the mandate already authorized
+      // this spend, above) and not fabricated as anything more than what it is: the merchant hasn't
+      // told us an order exists yet. Still a non-zero exit (this run did not reach a receipt), but
+      // the language and the surviving authorization record are what distinguish this from a real
+      // DENY, which never gets an authorization at all.
+      console.log(`⏳ ${fullCommand} — WAITING FOR MERCHANT CONFIRMATION`);
+      console.log(`  authorized ${authorization.authorization_id} · ${site} has not confirmed an order yet`);
       if (commitRow?.status) console.log(`  merchant status: ${commitRow.status}`);
+      if (commitRow?.confirmed !== undefined) console.log(`  merchant confirmed: ${commitRow.confirmed}`);
       if (commitRow?.message) console.log(`  merchant message: ${commitRow.message}`);
       console.log('');
       console.log('  reserve untouched — nothing drawn');
@@ -598,6 +730,8 @@ async function cmdRun(args: string[]): Promise<void> {
       process.exitCode = 1;
       return;
     }
+
+    console.log(`✓ MERCHANT ORDER CONFIRMED · ${site}${networkOrderId ? ` · order #${networkOrderId}` : ''}`);
 
     // Draw from ledger
     if (mandate.reserve.ref) {
@@ -617,11 +751,16 @@ async function cmdRun(args: string[]): Promise<void> {
     const receipt: Receipt = buildAndSignReceipt(
       {
         receipt_id: generateId('rcp'),
+        authorization_id: authorization.authorization_id,
         mandate_hash: sha256Hex(mandate),
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
         payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
         execution: { command: fullCommand, run_id: runId, profile: '' },
-        evidence: { trace_digest: result.traceDigest, network_order_id: networkOrderId },
+        evidence: {
+          trace_digest: result.traceDigest,
+          network_order_id: networkOrderId,
+          commit_proof: proof.commitProof,
+        },
         prev_receipt_hash: allReceipts.length === 0 ? CHAIN_HEAD_HASH : sha256Hex(allReceipts[allReceipts.length - 1]),
       },
       gatePrivateKey,
@@ -630,6 +769,11 @@ async function cmdRun(args: string[]): Promise<void> {
 
     console.log(`✓ ${fullCommand} executed · runId ${runId}`);
     console.log(`  receipt ${receipt.receipt_id}`);
+    console.log(`  amount ₹${formatInr(cartAmountInr)}`);
+    // Printed for callers that only see stdout (e.g. the purchase agent) — previously only present
+    // inside the signed receipt's evidence block, unparseable without opening that file.
+    if (networkOrderId) console.log(`  order id ${networkOrderId}`);
+    else if (proof.commitProof) console.log(`  commit proof ${proof.commitProof}`);
   } catch (err) {
     throw new Error(`Execution failed: ${(err as Error).message}`);
   }
@@ -639,14 +783,26 @@ async function cmdRun(args: string[]): Promise<void> {
 // helpers
 // ---------------------------------------------------------------------------------------------
 
+// Flags that are present-or-absent, never value-taking. Every other `--flag` unconditionally
+// consumes the next token as its value (matching every existing call site's flags, all of which are
+// value flags) — found live: `gate fund <id> --auto --amount 25` silently set flags.auto = '--amount'
+// and stranded '25' as an unclaimed positional, because parseArgs had no notion of a boolean flag at
+// all until `--auto` became this CLI's first one.
+const BOOLEAN_ONLY_FLAGS = new Set(['auto']);
+
 function parseArgs(args: string[]): { positionals: string[]; flags: Record<string, string> } {
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg.startsWith('--')) {
-      flags[arg.slice(2)] = args[i + 1] ?? '';
-      i++;
+      const name = arg.slice(2);
+      if (BOOLEAN_ONLY_FLAGS.has(name)) {
+        flags[name] = 'true';
+      } else {
+        flags[name] = args[i + 1] ?? '';
+        i++;
+      }
     } else {
       positionals.push(arg);
     }

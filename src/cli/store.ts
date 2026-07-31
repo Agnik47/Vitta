@@ -11,10 +11,12 @@ import path from 'node:path';
 import { isMandate } from '../mandate/schema';
 import type { Mandate } from '../mandate/schema';
 import type { Receipt } from '../receipt/schema';
+import type { TransactionAuthorization } from '../receipt/authorization';
 import type { GateEvent } from '../events/GateEvent';
 
 const MANDATES_DIR = './mandates';
 const RECEIPTS_DIR = './receipts';
+const AUTHORIZATIONS_DIR = './authorizations';
 const EVENTS_PATH = './events.jsonl';
 
 /** Appends one GateEvent as a JSON line — the dashboard's /events page (dashboard/lib/read.ts)
@@ -73,6 +75,33 @@ export function loadAllReceipts(dir = RECEIPTS_DIR): Receipt[] {
         return JSON.parse(readFileSync(filePath, 'utf-8')) as Receipt;
       } catch (err) {
         throw new Error(`Failed to parse receipt file ${filePath}: ${(err as Error).message}`);
+      }
+    });
+}
+
+export function saveAuthorization(authorization: TransactionAuthorization, dir = AUTHORIZATIONS_DIR): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, `${authorization.authorization_id}.json`), JSON.stringify(authorization, null, 2));
+}
+
+export function loadAuthorization(authorizationId: string, dir = AUTHORIZATIONS_DIR): TransactionAuthorization {
+  const filePath = path.join(dir, `${authorizationId}.json`);
+  if (!existsSync(filePath)) {
+    throw new Error(`No authorization found with id "${authorizationId}" (looked for ${filePath})`);
+  }
+  return JSON.parse(readFileSync(filePath, 'utf-8')) as TransactionAuthorization;
+}
+
+export function loadAllAuthorizations(dir = AUTHORIZATIONS_DIR): TransactionAuthorization[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => {
+      const filePath = path.join(dir, f);
+      try {
+        return JSON.parse(readFileSync(filePath, 'utf-8')) as TransactionAuthorization;
+      } catch (err) {
+        throw new Error(`Failed to parse authorization file ${filePath}: ${(err as Error).message}`);
       }
     });
 }

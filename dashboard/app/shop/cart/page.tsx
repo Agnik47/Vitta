@@ -1,15 +1,87 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowRight, Minus, Plus, ShoppingCart, Trash2, Zap } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, ArrowRight, Loader2, Minus, Plus, ShoppingCart, Trash2, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
-import { useCart } from "@/lib/cart-context";
-import { findProduct, MERCHANT_LABEL } from "@/lib/shop-catalog";
+import { useCart, type CartLine } from "@/lib/cart-context";
+import { findProduct, MERCHANT_LABEL, type ShopMerchant } from "@/lib/shop-catalog";
+import { getShopSessionId } from "@/lib/shop-session";
+import type { Mandate } from "@/lib/types";
+
+/** Only a real line (a live search result, or a catalog offer marked `real: true`) can go through
+ *  an actual checkout — an illustrative offer has no merchant behind it to place an order with. */
+function isRealLine(line: CartLine): boolean {
+  if (line.live) return true;
+  return Boolean(findProduct(line.productId)?.offers.find((o) => o.merchant === line.merchant)?.real);
+}
 
 export default function CartPage() {
+  const router = useRouter();
   const { lines, removeItem, setQuantity, totalInr, hasRealItems } = useCart();
+  const [starting, setStarting] = useState(false);
+
+  const realLines = lines.filter(isRealLine);
+  const realMerchants = Array.from(new Set(realLines.map((l) => l.merchant)));
+  const purchaseMerchant: ShopMerchant | null = realMerchants.length === 1 ? realMerchants[0] : null;
+  const canProceed = realLines.length > 0 && purchaseMerchant !== null;
+
+  async function handleProceed() {
+    if (!purchaseMerchant) return;
+    setStarting(true);
+    try {
+      const [mandateRes, configRes] = await Promise.all([
+        fetch("/api/mandate").then((r) => r.json()).catch(() => ({ mandate: null })),
+        fetch("/api/shop/config").then((r) => r.json()).catch(() => ({ minCartInr: undefined })),
+      ]);
+      const mandate = (mandateRes as { mandate: Mandate | null }).mandate;
+      const minCartInr = (configRes as { minCartInr?: number }).minCartInr;
+
+      const items = realLines
+        .filter((l) => l.merchant === purchaseMerchant)
+        .map((l) => ({
+          productId: l.productId,
+          url: l.live?.url,
+          productName: l.live?.name ?? findProduct(l.productId)?.name ?? l.productId,
+          quantity: l.quantity,
+        }));
+
+      const res = await fetch("/api/shop/purchase-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: getShopSessionId(),
+          merchant: purchaseMerchant,
+          items,
+          minCartInr,
+          mandateId: mandate?.mandate_id,
+          confirm: true,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error("Could not start the purchase", { description: json.message });
+        return;
+      }
+      router.push(`/shop/purchase/${json.jobId}`);
+    } finally {
+      setStarting(false);
+    }
+  }
 
   return (
     <div>
@@ -89,22 +161,64 @@ export default function CartPage() {
             })}
           </div>
 
-          <div className="flex items-center justify-between border border-border bg-surface-sunken px-4 py-3">
-            <div>
-              <div className="text-[10px] tracking-widest text-ink-faint uppercase">Cart total</div>
-              <div className="font-heading text-2xl font-semibold tabular-nums text-foreground">
-                ₹{totalInr.toLocaleString("en-IN")}
+          <div className="flex flex-col gap-3 border border-border bg-surface-sunken px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] tracking-widest text-ink-faint uppercase">Cart total</div>
+                <div className="font-heading text-2xl font-semibold tabular-nums text-foreground">
+                  ₹{totalInr.toLocaleString("en-IN")}
+                </div>
+                {!hasRealItems && (
+                  <div className="mt-1 text-xs text-step-up">No real items in cart yet — nothing here can be purchased.</div>
+                )}
               </div>
-              {!hasRealItems && (
-                <div className="mt-1 text-xs text-step-up">No real Blinkit items in cart — checkout can only simulate.</div>
-              )}
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="lg" disabled={!canProceed || starting}>
+                    {starting ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" /> Starting…
+                      </>
+                    ) : (
+                      <>
+                        Proceed to purchase
+                        <ArrowRight className="size-4" />
+                      </>
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="size-4 text-deny" strokeWidth={2} />
+                      This moves real (test-mode) money
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This starts an automatic pipeline that adds every real {purchaseMerchant ? MERCHANT_LABEL[purchaseMerchant] : ""}{" "}
+                      item above to your real cart, verifies it, and — if your mandate&apos;s real policy check
+                      allows it — places a real order and draws from your real Dodo reserve. It runs to completion
+                      with no further confirmation from you. Continue?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleProceed}>Yes, start the real purchase</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
-            <Button asChild size="lg">
-              <Link href="/shop/checkout" className="flex items-center gap-2">
-                Proceed to checkout
-                <ArrowRight className="size-4" />
-              </Link>
-            </Button>
+
+            {realLines.length > 0 && realMerchants.length > 1 && (
+              <div className="flex items-start gap-2.5 border border-step-up/30 bg-step-up/5 px-3 py-2.5 text-xs text-muted-foreground">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-step-up" strokeWidth={1.75} />
+                <span>
+                  Your real items span {realMerchants.length} marketplaces (
+                  {realMerchants.map((m) => MERCHANT_LABEL[m]).join(", ")}). A single purchase can only check out one
+                  marketplace at a time — remove items from all but one to proceed.
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

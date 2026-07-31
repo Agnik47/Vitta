@@ -110,4 +110,26 @@ export class DodoCreditLedger implements Ledger {
   async release(_reserveRef: string): Promise<void> {
     // Test mode: no real money to return. A no-op is acceptable for Phase 1 — see docs/02-DODO-INTEGRATION.md.
   }
+
+  // NOT VERIFIED LIVE (2026-07-31) — DODO_API_KEY (the write key `writeClient()` needs) was not
+  // available anywhere in the environment this was built in: not in .env.local (which deliberately
+  // only carries the read-only key for the dashboard, per ADR — see that file's own comment), not
+  // in the OS environment, not in any shell. This method could not be run against the real Dodo API
+  // even once. It is written to the exact same shape as draw() above (already real, already
+  // verified live — same client, same method, same customer resolution), differing only in
+  // `entry_type`, based on the SDK's own real, verified-from-source doc comment on
+  // createLedgerEntry(): "For credit entries, a new grant is created" — a plain internal ledger
+  // grant, not a checkout/payment flow, so it does not touch the "never enter payment details"
+  // boundary any more than draw()'s existing debit call does. Confirm this live — a real balance
+  // rising via balance() after a real credit() call — before trusting it in a demo. Record the real
+  // response shape in docs/OUTCOME.md when that happens (CLAUDE.md rule 6).
+  async credit(reserveRef: string, amountInrPaise: number, idempotencyKey: string): Promise<void> {
+    const customerId = await resolveCustomerId(reserveRef);
+    await writeClient().creditEntitlements.balances.createLedgerEntry(customerId, {
+      credit_entitlement_id: creditEntitlementId(),
+      amount: String(amountInrPaise),
+      entry_type: 'credit',
+      idempotency_key: idempotencyKey,
+    });
+  }
 }

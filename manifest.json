@@ -2692,7 +2692,7 @@
     "args": [
       {
         "name": "product",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -2759,7 +2759,7 @@
     "args": [
       {
         "name": "category",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -2821,6 +2821,26 @@
     "siteSession": null
   },
   {
+    "command": "bigbasket/clear-cart",
+    "site": "bigbasket",
+    "name": "clear-cart",
+    "aliases": [],
+    "description": "Remove every line from the current BigBasket cart",
+    "access": "write",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "ok",
+      "removed",
+      "remaining"
+    ],
+    "domain": "www.bigbasket.com",
+    "example": "webcmd bigbasket clear-cart -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
     "command": "bigbasket/location",
     "site": "bigbasket",
     "name": "location",
@@ -2844,6 +2864,39 @@
     "siteSession": null
   },
   {
+    "command": "bigbasket/place-order",
+    "site": "bigbasket",
+    "name": "place-order",
+    "aliases": [],
+    "description": "Submit the visible BigBasket final order/payment action. Requires --confirm.",
+    "access": "write",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "confirm",
+        "type": "bool",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": false,
+        "help": "Required acknowledgement that this may place/pay for a real order"
+      }
+    ],
+    "columns": [
+      "status",
+      "confirmed",
+      "orderId",
+      "url",
+      "message"
+    ],
+    "domain": "www.bigbasket.com",
+    "example": "webcmd bigbasket place-order -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
     "command": "bigbasket/product",
     "site": "bigbasket",
     "name": "product",
@@ -2855,7 +2908,7 @@
     "args": [
       {
         "name": "product",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -2894,7 +2947,7 @@
     "args": [
       {
         "name": "query",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -3359,7 +3412,7 @@
     "args": [
       {
         "name": "productId",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -3379,7 +3432,7 @@
       },
       {
         "name": "lat",
-        "type": "str",
+        "type": "string",
         "required": false,
         "valueRequired": false,
         "positional": false,
@@ -3389,7 +3442,7 @@
       },
       {
         "name": "lon",
-        "type": "str",
+        "type": "string",
         "required": false,
         "valueRequired": false,
         "positional": false,
@@ -3466,6 +3519,26 @@
     "siteSession": null
   },
   {
+    "command": "blinkit/clear-cart",
+    "site": "blinkit",
+    "name": "clear-cart",
+    "aliases": [],
+    "description": "Remove every line from the current Blinkit cart",
+    "access": "write",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "ok",
+      "removed",
+      "remaining"
+    ],
+    "domain": "blinkit.com",
+    "example": "webcmd blinkit clear-cart -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
     "command": "blinkit/location",
     "site": "blinkit",
     "name": "location",
@@ -3518,7 +3591,7 @@
     "site": "blinkit",
     "name": "place-order",
     "aliases": [],
-    "description": "Advance the Blinkit checkout and submit the final order/payment action. Requires --confirm.",
+    "description": "Submit the visible Blinkit final order/payment action. Requires --confirm.",
     "access": "write",
     "strategy": "cookie",
     "browser": true,
@@ -3532,16 +3605,6 @@
         "choices": [],
         "default": false,
         "help": "Required acknowledgement that this may place/pay for a real order"
-      },
-      {
-        "name": "advance-only",
-        "type": "bool",
-        "required": false,
-        "valueRequired": false,
-        "positional": false,
-        "choices": [],
-        "default": false,
-        "help": "Walk the checkout up to the payment step and report it, without ever clicking a paying button"
       }
     ],
     "columns": [
@@ -3570,7 +3633,7 @@
     "args": [
       {
         "name": "productId",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -3580,7 +3643,7 @@
       },
       {
         "name": "lat",
-        "type": "str",
+        "type": "string",
         "required": false,
         "valueRequired": false,
         "positional": false,
@@ -3590,7 +3653,7 @@
       },
       {
         "name": "lon",
-        "type": "str",
+        "type": "string",
         "required": false,
         "valueRequired": false,
         "positional": false,
@@ -3629,7 +3692,7 @@
     "args": [
       {
         "name": "query",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -3649,7 +3712,7 @@
       },
       {
         "name": "lat",
-        "type": "str",
+        "type": "string",
         "required": false,
         "valueRequired": false,
         "positional": false,
@@ -3659,7 +3722,7 @@
       },
       {
         "name": "lon",
-        "type": "str",
+        "type": "string",
         "required": false,
         "valueRequired": false,
         "positional": false,
@@ -33557,7 +33620,7 @@
     "args": [
       {
         "name": "product",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -33632,6 +33695,26 @@
     ],
     "domain": "www.zepto.com",
     "example": "webcmd zepto checkout -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "zepto/clear-cart",
+    "site": "zepto",
+    "name": "clear-cart",
+    "aliases": [],
+    "description": "Remove every line from the current Zepto cart",
+    "access": "write",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "ok",
+      "removed",
+      "remaining"
+    ],
+    "domain": "www.zepto.com",
+    "example": "webcmd zepto clear-cart -f yaml",
     "defaultFormat": null,
     "siteSession": null
   },
@@ -33724,7 +33807,7 @@
     "args": [
       {
         "name": "product",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,
@@ -33760,7 +33843,7 @@
     "args": [
       {
         "name": "query",
-        "type": "str",
+        "type": "string",
         "required": true,
         "valueRequired": false,
         "positional": true,

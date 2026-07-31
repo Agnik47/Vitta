@@ -31,7 +31,9 @@ function gateCliEntryPoint(): string {
  * in for just this child process. Simple KEY=value parsing only — matches this repo's actual
  * .env format (see CLAUDE.md's own `.env.example`), no quoting/multiline support needed.
  */
-function loadRootEnvOverrides(): Record<string, string> {
+// Exported so lib/agent-cli.ts can spawn dist/cli/agent.js with the same real env resolution,
+// rather than re-deriving this DODO_*-loading logic a second time.
+export function loadRootEnvOverrides(): Record<string, string> {
   const envPath = path.join(getDataDir(), ".env");
   if (!existsSync(envPath)) return {};
   const overrides: Record<string, string> = {};
@@ -53,18 +55,31 @@ function loadRootEnvOverrides(): Record<string, string> {
  * Never rejects on a non-zero exit — a DENY/STEP_UP is a normal, expected result, not a fault of
  * this function, so callers inspect `ok`/`exitCode` rather than catching.
  */
-export function runGateCli(argv: string[]): Promise<GateCliResult> {
+export function runGateCli(argv: string[], timeoutMs = 60_000): Promise<GateCliResult> {
   return new Promise((resolve) => {
     execFile(
       process.execPath, // the same node binary running this server — never a shell-resolved "node"
       [gateCliEntryPoint(), ...argv],
       {
         cwd: getDataDir(),
-        timeout: 60_000,
+        timeout: timeoutMs,
         maxBuffer: 10 * 1024 * 1024,
         env: { ...process.env, ...loadRootEnvOverrides() },
       },
       (error, stdout, stderr) => {
+        // A timeout is NOT the same as a DENY, and must never be reported as one — the browser
+        // action may well still be in flight. Say so explicitly rather than letting the caller read
+        // an empty stdout as "nothing happened". (Same lesson as the search CLI's 20s timeout,
+        // which silently looked identical to "the merchant returned nothing".)
+        if (error && (error as NodeJS.ErrnoException & { killed?: boolean }).killed) {
+          resolve({
+            ok: false,
+            stdout,
+            stderr: `gate CLI timed out after ${Math.round(timeoutMs / 1000)}s — the browser action may still be in progress; check events.jsonl before retrying`,
+            exitCode: 124,
+          });
+          return;
+        }
         const exitCode = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
         resolve({ ok: exitCode === 0, stdout, stderr, exitCode });
       }

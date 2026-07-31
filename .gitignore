@@ -20,8 +20,10 @@ dist/
 # their own locally; the two only need to line up for the joint Phase 5 rehearsal, run on one machine.
 /mandates/
 /receipts/
+/authorizations/
 /events.jsonl
 /ledger.jsonl
+/dashboard/purchase_jobs_store.json
 
 # manifest.json is deliberately NOT gitignored, unlike the runtime data above — see
 # docs/OUTCOME.md Phase 1f. It's a relatively stable cache of external reference data (webcmd's

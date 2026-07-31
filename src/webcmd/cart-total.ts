@@ -39,12 +39,22 @@ export interface CheckoutRow {
   validations?: unknown[];
 }
 
-/** Real `blinkit/cart` shape — a bare array of line items (found live, ADR-013 predecessor). */
+/** Real cart line shape. `price`/`quantity`/`total`/`payable` are Blinkit's (found live, ADR-013
+ *  predecessor). The other merchants name the same idea differently — verified against their
+ *  manifest.json column schemas, which is why all of them are optional and all are consulted:
+ *    - blinkit/cart   -> price, quantity, total, payable
+ *    - zepto/cart     -> ["rank","product_id","title","pack_size","quantity","price","mrp","availability"]
+ *                        i.e. NO line total at all — only unit price x quantity
+ *    - bigbasket/cart -> ["product_id","title","quantity","price","line_total","availability","url"]
+ *  Before this, a Zepto or BigBasket cart resolved to ₹0 and threw, making a commit-path decision
+ *  impossible for either merchant. */
 export interface CartLineRow {
   price?: number;
   quantity?: number;
   total?: number;
   payable?: number;
+  /** BigBasket's per-line total. */
+  line_total?: number;
   itemCount?: number;
 }
 
@@ -101,16 +111,14 @@ export function resolveCartTotalInr(
   }
 
   if (cartLines && cartLines.length > 0) {
-    // Per-line amounts come from `total` (price × quantity) ONLY.
-    //
-    // `payable` must never be summed here. Verified against the real adapter source
-    // (clis/blinkit/cart.js): every row is built as `payable: summary.payable` — the CART-level
-    // grand total, repeated identically on each line, exactly like `itemCount`. Summing it
-    // multiplied the cart by its line count: a real 2-line ₹179 cart resolved to ₹358, which
-    // wrongly consumed mandate cap (observed live — a valid ₹184 purchase was DENYed
-    // OVER_TOTAL_CAP) and would have signed a receipt attesting to double the true amount.
-    // The earlier `line.payable ?? line.total` ordering came from a guessed per-line shape.
-    const cartSum = cartLines.reduce((sum, line) => sum + (line.total ?? 0), 0);
+    const cartSum = cartLines.reduce((sum, line) => {
+      const perLine = [
+        line.total,
+        line.line_total,
+        typeof line.price === 'number' ? line.price * (line.quantity ?? 1) : undefined,
+      ].filter((v): v is number => typeof v === 'number' && v > 0);
+      return sum + (perLine.length > 0 ? Math.max(...perLine) : 0);
+    }, 0);
     if (cartSum > 0) {
       candidates.push({ value: cartSum, source: 'cart.line-sum' });
     }

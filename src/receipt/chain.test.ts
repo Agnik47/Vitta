@@ -11,6 +11,7 @@ const gateKeys = generateKeyPair();
 function baseFields(overrides: Partial<Omit<Receipt, 'sig' | 'signed_at'>> = {}): Omit<Receipt, 'sig' | 'signed_at'> {
   return {
     receipt_id: 'rcp_1',
+    authorization_id: 'auth_1',
     mandate_hash: 'sha256:deadbeef',
     cart: { merchant: 'blinkit', items: 7, total_inr: 1412 },
     payment: { rail: 'dodo_test', reserve_ref: 'cks_test', status: 'captured' },

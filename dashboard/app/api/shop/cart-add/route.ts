@@ -2,22 +2,11 @@
 // so it still passes through decide() and lands a real GateEvent, same as every other write in
 // this project. See ADR-015 / CLAUDE.md rule 8.
 //
-// Originally Blinkit-only, whitelisted against a small set of productIds hand-verified in a past
-// session against the static mock catalog. Now also serves real live-search results (see
-// dashboard/lib/live-search.ts) — those productIds are just as real (fetched from webcmd this
-// request) but can't be pre-enumerated, so the check here is a format/site-support guard, not a
-// whitelist: fail closed on garbage input and unsupported merchants, never on a genuinely-fresh
-// real id. Zepto/BigBasket both have real `add-to-cart <product>` write commands per the manifest.
+// The product reference each merchant wants differs (id vs URL) and is resolved by
+// lib/product-ref.ts, which also does the host validation — see that file for why a plain regex
+// was wrong here.
 import { runGateCli } from "@/lib/gate-cli";
-
-const SITE_BY_MERCHANT = { blinkit: "blinkit", zepto: "zepto", bigbasket: "bigbasket" } as const;
-type SupportedMerchant = keyof typeof SITE_BY_MERCHANT;
-
-// webcmd product ids seen so far are short alphanumeric tokens (Blinkit) — this is a sanity/format
-// check, not a business-logic whitelist. The real safety boundary is execFile's argv array (no
-// shell), same as every other write route in this project — this check just rejects obvious junk
-// before it reaches webcmd at all.
-const PRODUCT_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+import { isAddToCartMerchant, resolveProductRef, type AddToCartMerchant } from "@/lib/product-ref";
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -27,35 +16,48 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, message: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { productId, quantity, merchant } = (body ?? {}) as {
+  const { productId, quantity, merchant, url } = (body ?? {}) as {
     productId?: unknown;
     quantity?: unknown;
     merchant?: unknown;
+    url?: unknown;
   };
 
-  const site: SupportedMerchant = typeof merchant === "string" && merchant in SITE_BY_MERCHANT
-    ? (merchant as SupportedMerchant)
-    : "blinkit"; // default preserves the original Blinkit-only call sites unchanged
+  // Defaults to blinkit so the original Blinkit-only call sites keep working unchanged.
+  const site: AddToCartMerchant = isAddToCartMerchant(merchant) ? merchant : "blinkit";
 
-  if (typeof productId !== "string" || !PRODUCT_ID_PATTERN.test(productId)) {
-    // Fail closed: anything that isn't a plausible real product id never reaches webcmd.
-    return Response.json({ ok: false, message: "Invalid product id" }, { status: 400 });
+  // Zepto needs the URL and Blinkit needs the id, so accept both fields and let product-ref.ts
+  // pick whichever this merchant can actually use.
+  const candidates = [
+    site === "blinkit" ? productId : url,
+    site === "blinkit" ? url : productId,
+  ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+
+  if (candidates.length === 0) {
+    return Response.json({ ok: false, message: "productId or url is required" }, { status: 400 });
+  }
+
+  let resolved = resolveProductRef(candidates[0], site);
+  for (let i = 1; i < candidates.length && !resolved.ok; i++) {
+    resolved = resolveProductRef(candidates[i], site);
+  }
+  if (!resolved.ok) {
+    // Fail closed: nothing that isn't a valid reference for THIS merchant reaches webcmd.
+    return Response.json({ ok: false, message: resolved.message }, { status: 400 });
   }
 
   const qty = typeof quantity === "number" && Number.isInteger(quantity) ? quantity : 1;
+  // Blinkit and Zepto cap at 12, BigBasket at 20 (manifest). 12 is the safe common ceiling.
   if (qty < 1 || qty > 12) {
     return Response.json({ ok: false, message: "quantity must be between 1 and 12" }, { status: 400 });
   }
 
-  // Blinkit's add-to-cart accepts --quantity; zepto/bigbasket's manifest examples show a single
-  // positional arg with no quantity flag documented — pass it only where it's known-supported
-  // rather than guessing a flag name for the other two.
-  const argv =
-    site === "blinkit"
-      ? ["run", "--", "webcmd", "blinkit", "add-to-cart", productId, "--quantity", String(qty)]
-      : ["run", "--", "webcmd", site, "add-to-cart", productId];
-
-  const result = await runGateCli(argv);
+  // All three add-to-cart commands accept --quantity (verified in manifest.json; an earlier
+  // comment here claiming zepto/bigbasket lacked it was simply wrong).
+  const result = await runGateCli(
+    ["run", "--", "webcmd", site, "add-to-cart", resolved.arg, "--quantity", String(qty)],
+    120_000 // a real browser add-to-cart measured 20-40s per merchant; 60s was too tight
+  );
 
   if (!result.ok) {
     return Response.json(
@@ -64,5 +66,5 @@ export async function POST(req: Request) {
     );
   }
 
-  return Response.json({ ok: true, raw: result.stdout.trim() });
+  return Response.json({ ok: true, raw: result.stdout.trim(), ref: resolved.arg });
 }

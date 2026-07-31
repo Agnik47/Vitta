@@ -80,11 +80,21 @@ export function resolveWebcmdCommand(): { command: string; prefixArgs: string[] 
 // that should ever block a decision that already resolved to ALLOW.
 const TRACE_ARTIFACT_LINE = /Webcmd trace artifact:\s*(.+)/;
 
-export function execute(site: string, command: string, args: string[]): Promise<ExecuteResult> {
+export function execute(site: string, command: string, args: string[], presetRunId?: string): Promise<ExecuteResult> {
   return new Promise((resolve, reject) => {
-    const runId = crypto.randomUUID();
+    // A caller that already minted a runId (src/cli/gate.ts, for a commit command — the runId is
+    // recorded on a real, signed TransactionAuthorization BEFORE this function is even called, so
+    // it must be the same id execute() itself uses, not a fresh independent one).
+    const runId = presetRunId ?? crypto.randomUUID();
     const { command: cmd, prefixArgs } = resolveWebcmdCommand();
-    const proc = spawn(cmd, [...prefixArgs, site, command, ...args, '--trace', 'on', '-f', 'json']);
+    const proc = spawn(cmd, [...prefixArgs, site, command, ...args, '--trace', 'on', '-f', 'json'], {
+      // webcmd's own default command timeout (60s) is tight for the custom BigBasket adapters added
+      // in this build — their real cart-verification round trips (read cart, navigate, poll,
+      // re-read cart to confirm) run 70-90s end to end. Found live: a real add-to-cart hit exactly
+      // this ceiling and was killed mid-confirmation. Raised here, not in each adapter, since this
+      // is the one real spawn point for every write command.
+      env: { ...process.env, WEBCMD_BROWSER_COMMAND_TIMEOUT: process.env.WEBCMD_BROWSER_COMMAND_TIMEOUT ?? '220' },
+    });
     let stdout = '';
     let stderr = '';
     proc.stdout.on('data', (d) => (stdout += d));

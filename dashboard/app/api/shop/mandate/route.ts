@@ -13,12 +13,13 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, message: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { subject, capInr, perTxnInr, merchants, expires } = (body ?? {}) as {
+  const { subject, capInr, perTxnInr, merchants, expires, maxTxns } = (body ?? {}) as {
     subject?: unknown;
     capInr?: unknown;
     perTxnInr?: unknown;
     merchants?: unknown;
     expires?: unknown;
+    maxTxns?: unknown;
   };
 
   if (typeof subject !== "string" || subject.trim().length === 0 || subject.length > 100) {
@@ -36,6 +37,12 @@ export async function POST(req: Request) {
   if (typeof expires !== "string" || !TIME_RE.test(expires)) {
     return Response.json({ ok: false, message: "expires must be HH:MM (24-hour)" }, { status: 400 });
   }
+  // The CLI defaults max_txns to 1, which means the SECOND purchase of a session always DENYs
+  // TXN_LIMIT_REACHED. That's a sensible CLI default but a confusing one for a shopping UI, so the
+  // caller can raise it — deliberately, and still bounded, since this is a real spending limit.
+  if (maxTxns !== undefined && (typeof maxTxns !== "number" || !Number.isInteger(maxTxns) || maxTxns < 1 || maxTxns > 50)) {
+    return Response.json({ ok: false, message: "maxTxns must be an integer between 1 and 50" }, { status: 400 });
+  }
 
   const result = await runGateCli([
     "mandate",
@@ -50,6 +57,7 @@ export async function POST(req: Request) {
     merchants.join(","),
     "--expires",
     expires,
+    ...(maxTxns !== undefined ? ["--max-txns", String(maxTxns)] : []),
   ]);
 
   if (!result.ok) {

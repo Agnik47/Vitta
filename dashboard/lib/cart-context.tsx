@@ -5,6 +5,7 @@
 // triggers a real webcmd add-to-cart via /api/shop/cart-add — see CartProvider's addItem.
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { findProduct, type ShopMerchant } from "@/lib/shop-catalog";
+import { getCartLineKey } from "@/lib/cart-dedup";
 
 /** A real snapshot taken at add-time from a live search result — not a catalog entry, since live
  * results (name/price/image) can't be pre-enumerated the way the static mock catalog is. */
@@ -40,16 +41,30 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 const STORAGE_KEY = "vitta-shop-cart";
 
+/** Normalized identity for a cart line — id first, else the live snapshot's URL/name — via the
+ *  same real dedup logic the rest of the purchase pipeline uses (src/agent/cart-dedup.ts). Reused
+ *  here instead of a hand-rolled `productId === x && merchant === y` check, which missed the
+ *  URL-path/title normalization this already-tested helper does. */
+function lineKey(line: { productId: string; merchant: ShopMerchant; live?: LiveSnapshot }): string {
+  return getCartLineKey(line.merchant, line.productId, line.live?.url, line.live?.name);
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     // Deferred to an effect (not a lazy useState initializer) so SSR and first client render
-    // match — localStorage doesn't exist during SSR. Same pattern as theme-provider.tsx.
+    // match — sessionStorage doesn't exist during SSR. Same pattern as theme-provider.tsx.
+    //
+    // sessionStorage, not localStorage: the cart previously survived a full browser restart, which
+    // meant a "previous session's" item could still be sitting there and get paid for by a later,
+    // unrelated purchase — exactly the bug the one-click pipeline's clear-cart-once-per-session rule
+    // exists to prevent (see lib/shop-session.ts, lib/purchase-job.ts). sessionStorage clears itself
+    // when the tab/browser actually closes, which is the real session boundary this app means.
     let restored: CartLine[] | null = null;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) restored = JSON.parse(raw);
     } catch {
       // Corrupt/unavailable storage — start with an empty cart rather than crash.
@@ -62,7 +77,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lines));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(lines));
   }, [lines, hydrated]);
 
   const addItem = useCallback(async (productId: string, merchant: ShopMerchant, live?: LiveSnapshot) => {
@@ -71,11 +86,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     // always go through the real add-to-cart route, same "gated, but nothing committed until
     // checkout" pattern the CLI itself follows.
     if (live) {
+      // Anakin-sourced results carry no product id — those listing pages expose none, so the URL
+      // is the real identifier. Without this, every Anakin product on a given merchant would share
+      // the key "" and collapse into a single cart line.
+      const lineId = productId || live.url || live.name;
+
       try {
         const res = await fetch("/api/shop/cart-add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productId, merchant, quantity: 1 }),
+          // Both are sent because the three merchants want different things — Zepto's add-to-cart
+          // takes the product URL, Blinkit's takes an id, BigBasket accepts either. The route
+          // picks whichever that merchant can use (lib/product-ref.ts).
+          body: JSON.stringify({ productId, merchant, url: live.url, quantity: 1 }),
         });
         const json = await res.json();
         if (!res.ok || !json.ok) {
@@ -85,14 +108,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, message: (err as Error).message };
       }
 
+      const newLine: CartLine = { productId: lineId, merchant, quantity: 1, live };
+      const key = lineKey(newLine);
       setLines((prev) => {
-        const existing = prev.find((l) => l.productId === productId && l.merchant === merchant);
+        const existing = prev.find((l) => lineKey(l) === key);
         if (existing) {
-          return prev.map((l) =>
-            l.productId === productId && l.merchant === merchant ? { ...l, quantity: l.quantity + 1 } : l
-          );
+          return prev.map((l) => (lineKey(l) === key ? { ...l, quantity: l.quantity + 1 } : l));
         }
-        return [...prev, { productId, merchant, quantity: 1, live }];
+        return [...prev, newLine];
       });
 
       return { ok: true };
@@ -120,12 +143,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const key = lineKey({ productId, merchant });
     setLines((prev) => {
-      const existing = prev.find((l) => l.productId === productId && l.merchant === merchant);
+      const existing = prev.find((l) => lineKey(l) === key);
       if (existing) {
-        return prev.map((l) =>
-          l.productId === productId && l.merchant === merchant ? { ...l, quantity: l.quantity + 1 } : l
-        );
+        return prev.map((l) => (lineKey(l) === key ? { ...l, quantity: l.quantity + 1 } : l));
       }
       return [...prev, { productId, merchant, quantity: 1 }];
     });
