@@ -101,9 +101,24 @@ export function resolveCartTotalInr(
   }
 
   if (cartLines && cartLines.length > 0) {
-    const cartSum = cartLines.reduce((sum, line) => sum + (line.payable ?? line.total ?? 0), 0);
+    // Per-line amounts come from `total` (price × quantity) ONLY.
+    //
+    // `payable` must never be summed here. Verified against the real adapter source
+    // (clis/blinkit/cart.js): every row is built as `payable: summary.payable` — the CART-level
+    // grand total, repeated identically on each line, exactly like `itemCount`. Summing it
+    // multiplied the cart by its line count: a real 2-line ₹179 cart resolved to ₹358, which
+    // wrongly consumed mandate cap (observed live — a valid ₹184 purchase was DENYed
+    // OVER_TOTAL_CAP) and would have signed a receipt attesting to double the true amount.
+    // The earlier `line.payable ?? line.total` ordering came from a guessed per-line shape.
+    const cartSum = cartLines.reduce((sum, line) => sum + (line.total ?? 0), 0);
     if (cartSum > 0) {
       candidates.push({ value: cartSum, source: 'cart.line-sum' });
+    }
+    // Cart-level payable, taken ONCE. Rows carry identical values, so max() reads that single
+    // number while still failing closed if a future adapter ever varies them per line.
+    const cartPayable = cartLines.reduce((best, line) => Math.max(best, line.payable ?? 0), 0);
+    if (cartPayable > 0) {
+      candidates.push({ value: cartPayable, source: 'cart.payable' });
     }
   }
 

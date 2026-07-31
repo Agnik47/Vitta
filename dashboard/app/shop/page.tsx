@@ -55,7 +55,26 @@ export default function ShopPage() {
         </Button>
       </form>
 
-      {activeQuery && <LiveSearchResults query={activeQuery} />}
+      {activeQuery ? (
+        <LiveSearchResults query={activeQuery} />
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border px-6 py-20 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/shop_empty_state.jpg"
+            alt="Search empty state"
+            className="w-48 h-48 rounded-xl object-cover shadow-sm opacity-90 grayscale-[0.2]"
+          />
+          <div className="max-w-[280px]">
+            <h3 className="font-heading text-lg font-semibold text-foreground">
+              What are you looking for?
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Search for any grocery item to compare live prices across Zepto, Blinkit, and BigBasket.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

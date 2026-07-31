@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRef } from "react";
+import gsap from "gsap";
 import {
   Activity,
   BookOpen,
@@ -63,22 +65,41 @@ function NavLink({
   const { lines } = useCart();
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
 
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const iconRef = useRef<SVGSVGElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  const handleMouseEnter = () => {
+    if (isActive) return;
+    gsap.to(iconRef.current, { scale: 1.1, duration: 0.2, ease: "power1.out" });
+    gsap.to(textRef.current, { x: 3, duration: 0.2, ease: "power1.out" });
+  };
+
+  const handleMouseLeave = () => {
+    if (isActive) return;
+    gsap.to(iconRef.current, { scale: 1, duration: 0.2, ease: "power1.inOut" });
+    gsap.to(textRef.current, { x: 0, duration: 0.2, ease: "power1.inOut" });
+  };
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={isActive} tooltip={label}>
         <Link
+          ref={linkRef}
           href={href}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           className={cn(
-            // Flat background tint on the active item — no border stripe, no
-            // rounded pill. Icon picks up the seal accent when active.
-            "transition-colors duration-200",
+            "transition-colors duration-200 rounded-xl",
             isActive
               ? "bg-accent font-medium text-foreground"
-              : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
           )}
         >
-          <Icon strokeWidth={1.75} className={isActive ? "text-seal" : undefined} />
-          <span className="flex-1">{label}</span>
+          <div ref={iconRef as any} className="shrink-0 flex items-center justify-center">
+            <Icon strokeWidth={1.75} className={isActive ? "text-seal" : undefined} />
+          </div>
+          <span ref={textRef} className="flex-1">{label}</span>
           {cartBadge && itemCount > 0 ? (
             <span className="flex size-5 items-center justify-center rounded-full bg-seal text-[10px] font-semibold tabular-nums text-primary-foreground group-data-[collapsible=icon]:hidden">
               {itemCount}

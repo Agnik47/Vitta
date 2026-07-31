@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 const HEARTBEAT_INTERVAL_MS = 5000;
 
 const ROUTE_META: Record<string, { label: string; icon: React.ElementType }> = {
-  "/": { label: "Mandate", icon: ScrollText },
+  "/": { label: "Vitta", icon: ScrollText },
   "/events": { label: "Events", icon: Activity },
   "/receipts": { label: "Receipts", icon: ReceiptIcon },
   "/concept/compare": { label: "Compare", icon: Columns3 },
@@ -119,7 +119,6 @@ export function AppNavbar() {
 
         <Separator orientation="vertical" className="hidden h-5 sm:block" />
 
-        <TestModeBadge className="hidden sm:inline-flex" />
         <ThemeToggle />
       </div>
     </header>

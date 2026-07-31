@@ -130,7 +130,7 @@ test('empty validations array is not blocked (empty ≠ blocking)', () => {
 // ---------------------------------------------------------------------------------------------
 
 test('when only cart lines are present, resolver returns the cart sum', () => {
-  const cartLines: CartLineRow[] = [{ payable: 120 }, { payable: 80 }];
+  const cartLines: CartLineRow[] = [{ total: 120 }, { total: 80 }];
   const result = resolveCartTotalInr(undefined, cartLines);
   assert.equal(result.amountInr, 200);
   assert.deepEqual(result.sources, ['cart.line-sum']);
@@ -144,7 +144,7 @@ test('when only checkout is present, resolver uses whichever of payable/componen
 
 test('cart-sum and checkout.payable disagree: resolver picks the larger', () => {
   const checkout: CheckoutRow = { payable: 500 };
-  const cartLines: CartLineRow[] = [{ payable: 200 }, { payable: 200 }];
+  const cartLines: CartLineRow[] = [{ total: 200 }, { total: 200 }];
   const result = resolveCartTotalInr(checkout, cartLines);
   assert.equal(result.amountInr, 500);
 });
@@ -153,15 +153,59 @@ test('cart-sum LARGER than checkout.payable (stale checkout): resolver picks the
   // Defensive: if a stale checkout read gave a smaller number than a fresher cart sum, taking
   // the larger fails closed — the cart shows more items now.
   const checkout: CheckoutRow = { payable: 100 };
-  const cartLines: CartLineRow[] = [{ payable: 250 }, { payable: 250 }];
+  const cartLines: CartLineRow[] = [{ total: 250 }, { total: 250 }];
   const result = resolveCartTotalInr(checkout, cartLines);
   assert.equal(result.amountInr, 500);
 });
 
-test('cart-line `payable` missing falls back to `total`', () => {
+test('cart lines with only `total` are summed', () => {
   const cartLines: CartLineRow[] = [{ total: 150 }, { total: 50 }];
   const result = resolveCartTotalInr(undefined, cartLines);
   assert.equal(result.amountInr, 200);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Regression: the real `blinkit/cart` row shape (clis/blinkit/cart.js) repeats the CART-level
+// `payable` and `itemCount` on EVERY line. Summing `payable` multiplied the cart by its line
+// count. Observed live 2026-07-31: a genuine ₹179 two-line cart resolved to ₹358 and was DENYed
+// OVER_TOTAL_CAP against a ₹500 mandate.
+// ---------------------------------------------------------------------------------------------
+
+test('real blinkit/cart shape: cart-level `payable` on every row is NOT summed', () => {
+  const cartLines: CartLineRow[] = [
+    { price: 116, quantity: 1, total: 116, itemCount: 2, payable: 179 },
+    { price: 63, quantity: 1, total: 63, itemCount: 2, payable: 179 },
+  ];
+  const result = resolveCartTotalInr(undefined, cartLines);
+  assert.equal(result.amountInr, 179, 'must be the real cart total, not 179 × 2 lines');
+  assert.ok(!result.sources.includes('cart.line-sum') || result.amountInr === 179);
+});
+
+test('real blinkit/cart shape with checkout agreeing: still resolves to the true total', () => {
+  const checkout: CheckoutRow = { itemCount: 2, itemsTotal: 179, payable: 179 };
+  const cartLines: CartLineRow[] = [
+    { price: 116, quantity: 1, total: 116, itemCount: 2, payable: 179 },
+    { price: 63, quantity: 1, total: 63, itemCount: 2, payable: 179 },
+  ];
+  const result = resolveCartTotalInr(checkout, cartLines);
+  assert.equal(result.amountInr, 179);
+});
+
+test('a three-line cart does not triple the total', () => {
+  const cartLines: CartLineRow[] = [
+    { total: 50, payable: 300 }, { total: 100, payable: 300 }, { total: 150, payable: 300 },
+  ];
+  const result = resolveCartTotalInr(undefined, cartLines);
+  assert.equal(result.amountInr, 300, 'cart.payable taken once, line-sum agrees at 300');
+});
+
+test('cart.payable still guards the cap when per-line totals under-report', () => {
+  // Fail-closed property must survive the fix: if `total` fields are missing/small but the
+  // cart-level payable is larger, the larger number still wins.
+  const cartLines: CartLineRow[] = [{ total: 10, payable: 250 }, { total: 10, payable: 250 }];
+  const result = resolveCartTotalInr(undefined, cartLines);
+  assert.equal(result.amountInr, 250);
+  assert.deepEqual(result.sources, ['cart.payable']);
 });
 
 // ---------------------------------------------------------------------------------------------

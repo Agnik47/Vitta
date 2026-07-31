@@ -1361,3 +1361,103 @@ Cleanup: deleted temp mandates `mnd_ms6gzbre901c6da0707b.json` and `mnd_ms6gn2bo
 ---
 
 This log exists so spec-vs-reality drift is visible, not lost. Update it every time a phase in `PROMPTS.md` finishes running.
+
+---
+
+# Addendum — 2026-07-31: Blinkit checkout execution fixed end to end (ADR-016)
+
+**Status:** ✅ Advance-only path verified live, spending nothing · ⏳ real `--confirm` order still not run (awaiting user go-ahead)
+
+**Why this session happened:** the dashboard checkout's "Confirm & execute real purchase" button ran
+`gate run -- webcmd blinkit place-order --confirm` and always failed with
+`no order id returned by blinkit / merchant status: blocked`. Three separate real bugs were behind it.
+
+## What was actually wrong (the handoff's hypothesis was wrong)
+
+The handoff guessed the stealth profile was missing a delivery address or payment method. The trace
+screenshot (`traces/20260731093422-429c7a5f`) disproves that outright: full cart, address selected
+("Delivering to Work"), sitting on a live **"Proceed To Pay ₹184"** bar.
+
+| # | Bug | Where | Effect |
+| --- | --- | --- | --- |
+| 1 | Packaged `place-order` refuses to click "Proceed" **by design** (its own test asserts `not.toContain('Proceed')`) | webcmd package | Never advanced past the cart panel |
+| 2 | Payment methods render in a **cross-origin zpaykit iframe**; top-level DOM scan sees nothing | webcmd adapter | "No payment methods" while six were on screen |
+| 3 | `resolveCartTotalInr()` summed `line.payable`, but `blinkit/cart` repeats the **cart-level** payable on every row | **our** `src/webcmd/cart-total.ts` | ₹179 cart resolved as **₹358** |
+
+Bug 3 is the serious one and it was ours, not webcmd's. It inflated every multi-line cart by its
+line count — wrongly consuming mandate cap (a valid ₹184 purchase was DENYed `OVER_TOTAL_CAP`), and
+under a larger cap would have drawn double from the reserve and signed a receipt attesting to double
+the true amount. The per-line `payable` semantics had been guessed, never checked against the
+adapter source — exactly what CLAUDE.md rule 6 warns about.
+
+## What was built
+
+A **user-local adapter override** at `~/.webcmd/clis/blinkit/place-order.js`, vendored in-repo at
+`webcmd-adapters/blinkit/` and installed with `node webcmd-adapters/install.mjs`. The packaged file
+and its test are untouched — `main.js` loads `USER_CLIS` after `BUILTIN_CLIS` and `registerCommand`
+is last-write-wins, which is webcmd's own sanctioned override mechanism.
+
+It walks the checkout funnel (ADVANCE vs COMMIT vs BLOCKED classification, deepest-node-wins,
+bounded steps), reaches into the zpaykit iframe via `page.frames()` / `page.evaluateInFrame()`, and
+selects Cash on Delivery — which the DOM renders as just **`Cash`**; the label "Cash on Delivery"
+exists only in zpaykit's API payload. Selection success is confirmed by the parent page's "Pay Now"
+becoming **enabled**, not by matching a label.
+
+New `--advance-only` flag walks to the payment step and provably never touches a paying control.
+That is what made live verification possible at zero cost, and it is the right dry-run for rehearsal.
+
+## Real terminal output — full chain, nothing spent
+
+```
+› blinkit place-order --advance-only
+ALLOW  blinkit/place-order · ₹179
+✗ blinkit/place-order did NOT complete — no order id returned by blinkit
+  merchant status: advanced
+  merchant message: Advance-only: stopped before any paying action. Walked:
+    advance:"Proceed To Pay" → select:"Cash". Selected Cash on Delivery.
+    Payment frame offers: Wallets | Add credit or debit cards | Netbanking | UPI | Cash | Pay Later.
+    Final control ready: Pay Now.
+  reserve untouched — nothing drawn
+  NO RECEIPT WRITTEN — refusing to attest to an order the merchant never confirmed
+  evidence: C:\Users\ASUS\.webcmd\profiles\default\traces\20260731102714-778cd50e
+```
+
+Mandate verified → correct ₹179 total → `decide()` ALLOW → funnel advanced → COD selected → stopped
+before paying → ADR-013 fail-closed correctly declined to draw or sign. Every layer exercised.
+
+**Confirmed from zpaykit's real `getPaymentMethods` 200 response:** Wallets (Mobikwik), Cards,
+Netbanking, UPI QR, **Cash → "Cash on Delivery", enabled**, Pay Later (LazyPay). COD availability
+is what makes an autonomous run possible at all — UPI/card would require a human second factor.
+
+## Tests
+
+- **138/138** project tests pass, 0 failures. (`npm test` has no path filter, so it discovers both
+  `src/**/*.test.ts` and their compiled `dist/**/*.test.js` copies — the raw count shifts with
+  whether `dist/` is built. Pre-existing quirk, not introduced here.) Four tests that encoded the guessed per-line `payable`
+  shape were corrected to the real one; five regressions added, including the exact live two-line
+  ₹179 payload asserting it resolves to 179 and not 358.
+- **37/37** offline adapter checks (`webcmd-adapters/blinkit/place-order.verify.mjs`) run the real
+  generated scripts against a stub DOM built from labels observed in the actual traces — including
+  the verbatim `"₹184 TOTAL Proceed To Pay ›"` bar and the greyed-out "Pay Now".
+
+## Also fixed
+
+`cmdRun()` swallowed reserve-balance errors and set `ledgerBalanceInr = 0` silently, so an
+unreachable ledger printed as `cart ₹179 · mandate ₹500 · over by ₹179` — impossible arithmetic that
+reads as an exhausted mandate. Now printed to stderr. Verdict stays fail-closed.
+
+**Operational note for the demo:** `gate` reads `DODO_*` from the ambient environment and expects a
+shell that has sourced `.env`. Running `node dist/cli/gate.js` directly without it silently DENYs
+everything. Use `node --env-file=.env dist/cli/gate.js …` (the dashboard already injects `.env`
+itself via `lib/gate-cli.ts`).
+
+## Not done — needs explicit authorisation
+
+**No real order has been placed.** Live verification was authorised only up to the payment screen.
+The `--confirm` path is implemented and unit-tested but never executed live, so
+`buildOrderProbeEvaluate()`'s order-id extraction is still unverified against a real Blinkit
+confirmation screen.
+
+⚠️ **The dashboard's execute route already passes `--confirm`.** Its "Confirm & execute real
+purchase" button is now genuinely capable of placing real Cash-on-Delivery orders — previously it
+always failed harmlessly at "Proceed To Pay". Treat that button as live from now on.

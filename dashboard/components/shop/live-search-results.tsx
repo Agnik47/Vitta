@@ -138,13 +138,22 @@ function loadingSlots(): Record<LiveMerchant, Slot> {
   return Object.fromEntries(MERCHANTS.map((m) => [m, { status: "loading" } as Slot])) as Record<LiveMerchant, Slot>;
 }
 
+import { GroupedProductCard, type GroupedProduct } from "@/components/shop/grouped-product-card";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function getGroupKey(name: string): string {
+  const words = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.slice(0, 3).join(" ");
+}
+
 export function LiveSearchResults({ query }: { query: string }) {
   const [slots, setSlots] = useState<Record<LiveMerchant, Slot>>(loadingSlots);
-  // Bumped per query so a slow response from a superseded search can't overwrite a newer one.
   const generation = useRef(0);
 
-  // React's documented "adjust state when a prop changes" pattern — during render, not in an
-  // effect, which would cause an extra cascading render.
   const [prevQuery, setPrevQuery] = useState(query);
   if (query !== prevQuery) {
     setPrevQuery(query);
@@ -177,10 +186,35 @@ export function LiveSearchResults({ query }: { query: string }) {
 
   const done = MERCHANTS.filter((m) => slots[m].status === "done");
   const stillLoading = MERCHANTS.filter((m) => slots[m].status === "loading");
-  const products = done.flatMap((m) => {
+  
+  const rawProducts = done.flatMap((m) => {
     const slot = slots[m];
     return slot.status === "done" ? slot.result.products : [];
   });
+
+  // Group products by similarity heuristic
+  const groupedProductsMap = new Map<string, GroupedProduct>();
+  for (const p of rawProducts) {
+    const key = getGroupKey(p.name);
+    if (!groupedProductsMap.has(key)) {
+      groupedProductsMap.set(key, { key, name: p.name, imageUrl: p.imageUrl, offers: [] });
+    }
+    const group = groupedProductsMap.get(key)!;
+    if (!group.imageUrl && p.imageUrl) group.imageUrl = p.imageUrl;
+    // Prefer shorter, cleaner names for the group title
+    if (p.name.length < group.name.length) group.name = p.name;
+    
+    // Only one offer per merchant per group
+    const existing = group.offers.find((o) => o.merchant === p.merchant);
+    if (!existing) {
+      group.offers.push(p);
+    } else if (p.priceInr < existing.priceInr) {
+      Object.assign(existing, p);
+    }
+  }
+  
+  const products = Array.from(groupedProductsMap.values());
+
   const failures = done
     .map((m) => (slots[m].status === "done" ? (slots[m] as { result: MerchantSearchResult }).result : null))
     .filter((r): r is MerchantSearchResult => r !== null && !r.ok);
@@ -190,42 +224,83 @@ export function LiveSearchResults({ query }: { query: string }) {
   return (
     <div className="flex flex-col gap-4">
       {stillLoading.length > 0 && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
           <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
-          Searching {stillLoading.map((m) => MERCHANT_LABEL[m]).join(", ")}…
+          Fetching live from {stillLoading.map((m) => MERCHANT_LABEL[m]).join(", ")}…
         </div>
       )}
 
       {products.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {products.map((p) => (
-            <ProductCard key={`${p.merchant}-${p.productId || p.name}`} product={p} />
+            <GroupedProductCard key={p.key} group={p} />
           ))}
+          {/* Show skeletons for merchants still loading */}
+          {stillLoading.length > 0 && (
+            <>
+              <Skeleton className="h-[340px] rounded-xl" />
+              <Skeleton className="h-[340px] rounded-xl hidden sm:block" />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* When no products have loaded yet but we are still searching */}
+      {products.length === 0 && stillLoading.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <Skeleton className="h-[340px] rounded-xl" />
+          <Skeleton className="h-[340px] rounded-xl hidden sm:block" />
+          <Skeleton className="h-[340px] rounded-xl hidden lg:block" />
+          <Skeleton className="h-[340px] rounded-xl hidden xl:block" />
         </div>
       )}
 
       {allDone && products.length === 0 && failures.length < MERCHANTS.length && (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border px-6 py-12 text-center">
-          <PackageSearch className="size-5 text-ink-faint" strokeWidth={1.5} />
-          <p className="text-sm text-muted-foreground">
-            No matching products found across Zepto, Blinkit, or BigBasket.
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border px-6 py-14 text-center bg-muted/10">
+          <PackageSearch className="size-6 text-ink-faint" strokeWidth={1.5} />
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">
+              No matching products found.
+            </p>
+            <p className="mt-1 text-[13px] text-ink-faint">
+              Try a different search term across Zepto, Blinkit, and BigBasket.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {allDone && failures.length > 0 && failures.length < MERCHANTS.length && (
+        <div className="flex items-center gap-2 rounded-xl bg-orange-500/10 border border-orange-500/20 px-4 py-2.5 mt-2">
+          <TriangleAlert className="size-4 shrink-0 text-orange-500" strokeWidth={2} />
+          <p className="text-xs text-orange-600/90 dark:text-orange-400">
+            <strong>Some merchants are currently unreachable:</strong>{" "}
+            {failures.map(f => MERCHANT_LABEL[f.merchant]).join(", ")}.
           </p>
         </div>
       )}
 
-      {/* Failures are reported separately from "no results" — they're different facts, and hiding a
-          broken merchant behind an empty grid would misrepresent what the user is seeing. */}
-      {allDone && failures.length > 0 && (
-        <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3">
-          {failures.map((f) => (
-            <div key={f.merchant} className="flex items-start gap-2 text-xs text-muted-foreground">
-              <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-step-up" strokeWidth={1.75} />
-              <span>
-                <span className="font-medium text-foreground">{MERCHANT_LABEL[f.merchant]}</span>{" "}
-                unavailable — {f.error ?? "unknown error"}
-              </span>
-            </div>
-          ))}
+      {allDone && failures.length === MERCHANTS.length && products.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border px-6 py-10 text-center bg-muted/10 mt-2">
+          <div className="flex flex-col items-center gap-2">
+            <TriangleAlert className="size-6 text-orange-500" strokeWidth={1.5} />
+            <h3 className="text-sm font-medium text-foreground">
+              Search currently unavailable
+            </h3>
+            <p className="max-w-md text-[13px] text-muted-foreground">
+              We couldn't retrieve results from the marketplaces right now. This is usually due to API limits or connection issues.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5 w-full max-w-sm mt-2 text-left bg-background/50 rounded-lg p-3 border border-border/50">
+            {failures.map((f) => (
+              <div key={f.merchant} className="flex items-start gap-2 text-xs text-muted-foreground">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-orange-500/70" strokeWidth={1.75} />
+                <span>
+                  <span className="font-medium text-foreground">{MERCHANT_LABEL[f.merchant]}</span>{" "}
+                  — {f.error || "unavailable or unknown error"}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -3518,7 +3518,7 @@
     "site": "blinkit",
     "name": "place-order",
     "aliases": [],
-    "description": "Submit the visible Blinkit final order/payment action. Requires --confirm.",
+    "description": "Advance the Blinkit checkout and submit the final order/payment action. Requires --confirm.",
     "access": "write",
     "strategy": "cookie",
     "browser": true,
@@ -3532,6 +3532,16 @@
         "choices": [],
         "default": false,
         "help": "Required acknowledgement that this may place/pay for a real order"
+      },
+      {
+        "name": "advance-only",
+        "type": "bool",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": false,
+        "help": "Walk the checkout up to the payment step and report it, without ever clicking a paying button"
       }
     ],
     "columns": [

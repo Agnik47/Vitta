@@ -37,9 +37,13 @@ async function main(): Promise<void> {
         return await cmdRun(rest);
       case 'fund':
         return await cmdFund(rest);
+      case 'sniper':
+        // Dynamically import so we don't load sniper dependencies for basic gate commands
+        const { cmdSniper } = await import('./sniper.js');
+        return await cmdSniper(rest);
       default:
         console.error(`Unknown command: ${command ?? '(none)'}`);
-        console.error('Usage: gate <scan|mandate|receipt|verify|run|fund> ...');
+        console.error('Usage: gate <scan|mandate|receipt|verify|run|fund|sniper> ...');
         process.exitCode = 1;
     }
   } catch (err) {
@@ -469,8 +473,19 @@ async function cmdRun(args: string[]): Promise<void> {
       ledgerBalanceInr = balancePaise / 100;
     }
   } catch (err) {
-    // If balance lookup fails, treat as zero balance (fail closed)
+    // If balance lookup fails, treat as zero balance (fail closed).
+    //
+    // But SAY SO. Swallowing this silently makes an unreachable ledger look identical to an
+    // exhausted mandate: decide() returns OVER_TOTAL_CAP and the operator reads
+    // "cart ₹179 · mandate ₹500 · over by ₹179" — arithmetic that cannot be true unless the
+    // balance was 0. Hit for real on 2026-07-31 by running `node dist/cli/gate.js` without the
+    // DODO_* vars loaded (the CLI expects a shell that has sourced .env; use
+    // `node --env-file=.env` otherwise). The verdict stays fail-closed either way — this only
+    // makes the cause visible instead of costing a demo several minutes of misdiagnosis.
     ledgerBalanceInr = 0;
+    console.error(
+      `  (reserve balance read failed — treating as ₹0, which will DENY: ${(err as Error).message})`,
+    );
   }
 
   const allReceipts = loadAllReceipts();

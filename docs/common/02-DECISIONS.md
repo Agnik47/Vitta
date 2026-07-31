@@ -425,3 +425,112 @@ Ended up NOT picking candidate (b) "parse the real grand total off the checkout 
 3. Any real-money test of the new execute path needs a live, explicit, in-chat go-ahead before it runs — not implied by this ADR's existence.
 4. If Agent B's own session touches `dashboard/lib/*` or the existing API routes concurrently, normal conflict resolution applies (`06-SYNC-WORKFLOW.md`) — the new routes are additive, so a clean rebase should be the common case, but flagging since this is a bigger simultaneous change than this project's usual small-diff pushes.
 
+
+---
+
+## ADR-016 — Blinkit checkout completed via a user-local webcmd adapter override; `cart.line-sum` no longer multiplies the cart by its line count
+
+**Date:** 2026-07-31
+**Author:** Agent A, on direct user instruction to fix the end-to-end checkout failure
+**Status:** Accepted — advance-only path verified live; the `--confirm` commit path is written and unit-tested but has NOT yet placed a real order
+
+### The reported failure
+
+`gate run -- webcmd blinkit place-order --confirm` from the dashboard checkout produced `ALLOW blinkit/place-order 358`, then:
+
+```
+X blinkit/place-order did NOT complete - no order id returned by blinkit
+  merchant status: blocked
+  merchant message: No final place-order/payment button is visible. Complete address/payment
+                    selection in the browser checkout first.
+```
+
+The initial hypothesis in the handoff was "the stealth profile is missing an address or payment method." **That was wrong** — the trace screenshot (`traces/20260731093422-429c7a5f`) shows a complete cart, a selected delivery address ("Delivering to Work"), and a live "Proceed To Pay ₹184" bar.
+
+### Root cause 1 — the packaged adapter deliberately refuses to advance the funnel
+
+`clis/blinkit/place-order.js` matches only `/^place order$/i`, `/^pay( now)?$/i`, `/^cash on delivery$/i`. All three are `^…$`-anchored, so Blinkit's compound green bar (`"₹184 TOTAL Proceed To Pay ›"`) can never match. This is **not an oversight**: the package's own test asserts
+
+```js
+expect(script).not.toContain('Proceed');
+```
+
+i.e. upstream `place-order` is designed to click only a genuinely-final control on an already-advanced checkout screen, and to hand back to a human otherwise. Sound default — just one screen earlier than this project needs.
+
+**Decision: do not patch the packaged file.** Instead ship a user-local override at `~/.webcmd/clis/blinkit/place-order.js`. `dist/src/main.js` discovers `BUILTIN_CLIS` and then `USER_CLIS`, and `registerCommand` is last-write-wins, so a user file shadows the packaged command. This is webcmd's own sanctioned extension point (`adapter-shadow.js` reports shadowing; `webcmd adapter reset blinkit` undoes it). Upstream's file and its test remain untouched and still pass.
+
+The override is vendored in this repo at `webcmd-adapters/blinkit/` (with the verbatim upstream original alongside it) and installed by `node webcmd-adapters/install.mjs`, so the fix is version-controlled rather than living only in a home directory.
+
+### Root cause 2 — the payment methods are in a cross-origin iframe
+
+After clicking "Proceed To Pay" the browser lands on `blinkit.com/checkout`, whose "Select Payment Method" list is rendered by **Zomato's zpaykit inside a cross-origin iframe** (`www.zomato.com/zpaykit/init`). A top-level `document.querySelectorAll` sees none of it. An intermediate version of this adapter therefore concluded "no payment methods rendered", while the trace screenshot showed six of them. Network evidence disproved the guess: `POST /zpaykit/getPaymentMethods` returned **200** with the full list, and the trace's Failed Network section was empty.
+
+The override now uses `page.frames()` + `page.evaluateInFrame()` to drive that frame.
+
+**`Cash on Delivery` exists only in the API payload.** zpaykit's `getPaymentMethods` response labels it `cash / Cash on Delivery`, but the DOM renders the section as just **`Cash`** (with a "Please keep exact change handy…" note). Matching the API's name found nothing. Opening the `Cash` section *is* the selection — it is what flips the parent page's "Pay Now" from grey to green.
+
+Consequently the adapter's success test for selecting a payment method is **not** a label match but a state change: *the parent page's paying control stopped being disabled.*
+
+### What the override guarantees
+
+- ADVANCE steps (Proceed To Pay / Continue / opening Cash) move no money; COMMIT steps (Place Order / Pay Now / `Pay ₹N`) are the only ones that can charge, are reachable only with `--confirm`, and are clicked at most once per run.
+- Disabled controls are never clicked — a greyed "Pay Now" is reported as disabled, never counted as a commit.
+- `--advance-only` (new flag) walks to the payment step and stops, provably never touching a paying control. This is what made live verification possible without spending money.
+- Reaching a human-only rail (UPI PIN, OTP, 3DS) returns `status: action_required` instead of feigning success.
+- A commit click that yields no order id returns `submitted_unconfirmed` — never `placed` — and says plainly that an order **may** exist, so nobody retries into a double charge. `gate run` still fails closed on the empty `orderId` per ADR-013.
+
+37 offline checks run the real generated scripts against a stub DOM built from the labels actually observed in the traces (`webcmd-adapters/blinkit/place-order.verify.mjs`).
+
+### Root cause 3 — `₹358` for a `₹179` cart (a bug in OUR code, not webcmd's)
+
+`resolveCartTotalInr()` summed `line.payable ?? line.total` across cart lines. But the real `blinkit/cart` adapter builds **every row** as `payable: summary.payable` — the CART-level grand total, repeated per line exactly like `itemCount`:
+
+```js
+return summary.items.map((item) => ({ ..., total: item.total, payable: summary.payable, ... }));
+```
+
+So a genuine 2-line ₹179 cart summed to **₹358**. The `CartLineRow.payable` per-line semantics in `cart-total.ts` were guessed, never verified against the adapter source (CLAUDE.md rule 6).
+
+Impact: inflated every multi-line cart by its line count — wrongly consuming mandate cap (observed live: a valid ₹184 purchase DENYed `OVER_TOTAL_CAP`), and, under a large enough cap, would have drawn double from the reserve and signed a receipt attesting to double the true amount.
+
+**Fix:** per-line sum uses `total` only; cart-level `payable` is taken **once** (via `max` across rows, which preserves fail-closed if a future adapter ever varies it per row). Four existing tests encoded the guessed per-line shape and were corrected to the real one; five regression tests added, including the exact live two-line ₹179 payload. Suite: **138/138 passing, 0 failures**.
+
+Note on that number: `npm test` is `node --require ts-node/register --test` with no path filter, so it discovers **both** `src/**/*.test.ts` and their compiled `dist/**/*.test.js` copies — the total therefore shifts depending on whether `dist/` is currently built and current. Pre-existing quirk, not introduced here; worth a path filter someday, but not while the build is frozen for the demo.
+
+### Also fixed — a silent ₹0 balance that looks identical to an exhausted mandate
+
+`cmdRun()` caught every reserve-balance error and set `ledgerBalanceInr = 0` with no output. `decide()` then returned `OVER_TOTAL_CAP` and printed `cart ₹179 · mandate ₹500 · over by ₹179` — arithmetic that is impossible unless the balance was 0. Hit for real by running `node dist/cli/gate.js` directly: the CLI reads `DODO_*` from the ambient environment and expects a shell that has sourced `.env` (use `node --env-file=.env` otherwise). The verdict stays fail-closed; the cause is now printed to stderr.
+
+### Verified live, end to end, spending nothing
+
+```
+› blinkit place-order --advance-only
+ALLOW  blinkit/place-order · ₹179
+✗ blinkit/place-order did NOT complete — no order id returned by blinkit
+  merchant status: advanced
+  merchant message: Advance-only: stopped before any paying action. Walked:
+    advance:"Proceed To Pay" → select:"Cash". Selected Cash on Delivery.
+    Payment frame offers: Wallets | Add credit or debit cards | Netbanking | UPI | Cash | Pay Later.
+    Final control ready: Pay Now.
+  reserve untouched — nothing drawn
+  NO RECEIPT WRITTEN — refusing to attest to an order the merchant never confirmed
+```
+
+Every layer is exercised: mandate verify → correct ₹179 total → `decide()` ALLOW → funnel advanced → COD selected → stopped before paying → ADR-013 fail-closed correctly declined to draw or sign.
+
+### Alternatives considered
+
+- *Patch the packaged adapter in `node_modules`.* Rejected — overrides an explicit upstream safety test, is wiped by `npm update -g`, and is invisible to version control.
+- *Treat the stall as "missing address/payment", per the original hypothesis.* Rejected — the trace screenshot disproves it.
+- *Report `action_required` at "Proceed To Pay" and always hand off to a human.* Considered and offered to the user, who chose advance-and-select-COD with handoff as the fallback.
+- *Scrape zpaykit's `getPaymentMethods` JSON and drive the API directly.* Rejected — reimplements a payment flow instead of driving the merchant's own UI, and would bypass whatever client-side validation Blinkit performs.
+
+### Not done — explicitly out of scope until authorised
+
+**No real order has been placed.** The user authorised live verification only up to the payment screen. The `--confirm` path (which would click the now-enabled "Pay Now" and place a real Cash-on-Delivery order for real groceries) is implemented and unit-tested but **never executed live**. Note that the dashboard's `/api/shop/execute` route already passes `--confirm`, so its "Confirm & execute real purchase" button is now genuinely capable of placing real COD orders — previously it always failed at "Proceed To Pay".
+
+### Follow-ups
+
+1. Run the real `--confirm` order once, with explicit user go-ahead, to verify the commit path and the `orderId` probe against a real Blinkit confirmation. Until then `buildOrderProbeEvaluate()`'s redux/URL/text extraction is unverified against a real order-confirmation screen.
+2. webcmd's `blinkit/cart` reporting the cart-level `payable` per row is arguably an upstream wart; worth reporting, but our resolver no longer depends on it.
+3. The ADR-014 under-report remains: webcmd says `payable: 179` where Blinkit's UI shows `₹184` (₹5 handling). Out of scope per CLAUDE.md rule 7, unchanged by this ADR.
