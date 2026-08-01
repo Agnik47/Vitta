@@ -1,5 +1,5 @@
 // Unit tests for canonicalJSON()/sign()/verify(). See docs/PROMPTS.md Phase 1a.
-// Zero dependency on webcmd, Dodo, or the filesystem beyond reading its own inputs.
+// Zero dependency on webcmd, Prava, or the filesystem beyond reading its own inputs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalJSON, generateKeyPair, sign, verify } from './sign';

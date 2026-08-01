@@ -19,7 +19,7 @@ function baseMandate(overrides: Partial<Mandate['scope']> = {}): Mandate {
       expires_at: '2026-07-28T18:00:00.000Z',
       ...overrides,
     },
-    reserve: { type: 'dodo_credit_test', blocked_inr: 800, ref: 'cks_test' },
+    reserve: { type: 'prava_mandate_sandbox', blocked_inr: 800, ref: 'mdt_test' },
     sig: 'placeholder',
   };
 }

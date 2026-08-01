@@ -25,7 +25,7 @@ export interface TransactionAuthorization {
   /** Always 'ALLOW' — this object's own existence already says so; kept explicit rather than
    *  implied, since a reader loading just this file shouldn't have to infer it. */
   verdict: 'ALLOW';
-  /** The real reserve balance (INR) read from Dodo at authorization time, confirming it covered
+  /** The real reserve balance (INR) read from Prava at authorization time, confirming it covered
    *  the cart total. */
   reserve_verified_inr: number;
   authorized_at: string; // ISO 8601

@@ -13,9 +13,9 @@ export interface Mandate {
     expires_at: string; // ISO 8601
   };
   reserve: {
-    type: 'dodo_credit_test'; // labelled honestly — see docs/00-PRODUCT-BRIEF.md § Hard scope boundary
+    type: 'prava_mandate_sandbox'; // labelled honestly — see docs/00-PRODUCT-BRIEF.md § Hard scope boundary
     blocked_inr: number;
-    ref: string; // Dodo reserveRef from Ledger.fund()
+    ref: string; // Prava reserveRef from Ledger.fund()
   };
   sig: string; // Ed25519 signature, base64 or hex
 }
@@ -40,7 +40,7 @@ export function isMandate(value: unknown): value is Mandate {
 
   if (typeof m.reserve !== 'object' || m.reserve === null) return false;
   const reserve = m.reserve as Record<string, unknown>;
-  if (reserve.type !== 'dodo_credit_test') return false;
+  if (reserve.type !== 'prava_mandate_sandbox') return false;
   if (typeof reserve.blocked_inr !== 'number') return false;
   if (typeof reserve.ref !== 'string') return false;
 

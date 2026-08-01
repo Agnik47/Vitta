@@ -1,7 +1,7 @@
-// GET-only. Reads the current mandate.json and the live Dodo reserve balance (read-only key).
-// Never writes anything, never imports DODO_API_KEY (write key) — see docs/06-DASHBOARD-SPEC.md.
+// GET-only. Reads the current mandate.json and the live Prava reserve balance (read-only key).
+// Never writes anything, never imports PRAVA_SECRET_KEY from client code.
 import { readCurrentMandate } from '@/lib/read';
-import { getReserveBalance } from '@/lib/dodo';
+import { getReserveBalance } from '@/lib/prava';
 
 export async function GET() {
   const mandate = readCurrentMandate();

@@ -438,7 +438,7 @@ export default function PurchaseJobPage() {
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-allow" strokeWidth={1.75} />
                 <span>
                   This run executed the full pipeline — real cart, real mandate check, real reserve draw, real signed
-                  receipt — and settled against your Dodo test reserve.{" "}
+                  receipt — and settled against your Prava test reserve.{" "}
                   <strong className="text-foreground">No {merchantLabel} order was placed</strong>, so there is no
                   merchant order id. Switch to Live Mode on the cart page to place a real order.
                 </span>
@@ -469,7 +469,7 @@ export default function PurchaseJobPage() {
                 value={
                   result.paymentStatus === "captured"
                     ? isTestRun
-                      ? "Captured (Dodo test reserve)"
+                      ? "Captured (Prava test reserve)"
                       : "Captured"
                     : "Not charged"
                 }

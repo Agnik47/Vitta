@@ -3,7 +3,7 @@
 //
 // The watch does not implement any purchasing of its own. When it fires it calls the same
 // startPurchaseJob() the cart's "Proceed to purchase" button calls, so the mandate gate, cart
-// verification, Dodo draw and receipt signing are all the real, single, audited path — the sniper
+// verification, Prava draw and receipt signing are all the real, single, audited path — the sniper
 // only decides WHEN to pull the trigger, never what the trigger does.
 //
 // Store shape (Map + JSON file, load-at-init) deliberately mirrors lib/purchase-job.ts.

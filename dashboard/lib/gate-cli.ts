@@ -57,7 +57,7 @@ function gateCliEntryPoint(): string {
 }
 
 /**
- * The spawned `gate` CLI needs the same DODO_* vars the CLI reads when a human runs it directly
+ * The spawned `gate` CLI needs the same PRAVA_* vars the CLI reads when a human runs it directly
  * from a shell that's sourced `.env` — but the dashboard's own Next.js process may never have
  * loaded that file (no dashboard/.env.local exists on every machine this runs on). Rather than
  * assume the parent process's env already has these, read the root .env explicitly and merge it
@@ -65,7 +65,7 @@ function gateCliEntryPoint(): string {
  * .env format (see CLAUDE.md's own `.env.example`), no quoting/multiline support needed.
  */
 // Exported so lib/agent-cli.ts can spawn dist/cli/agent.js with the same real env resolution,
-// rather than re-deriving this DODO_*-loading logic a second time.
+// rather than re-deriving this PRAVA_*-loading logic a second time.
 export function loadRootEnvOverrides(): Record<string, string> {
   const envPath = path.join(getDataDir(), ".env");
   if (!existsSync(envPath)) return {};

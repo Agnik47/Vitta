@@ -14,6 +14,24 @@ Mandate Gate moves that boundary *outside* the model entirely. A pure, determini
 
 ---
 
+## User and problem
+
+Vitta is for people who let an AI agent prepare grocery purchases but need a deterministic, signed boundary between an agent's intent and any spend. It prevents a browser agent from exceeding the merchant, amount, transaction-count, and expiry limits that its owner explicitly approved.
+
+## Prava integration and current checkout boundary
+
+Vitta creates a Prava sandbox mandate-setup session for the signed cap. The owner completes Prava's passkey approval, then each permitted draw mints a merchant- and amount-scoped, single-use Prava credential with the Vitta run ID as Prava's idempotency reference. Prava is therefore the authorization rail, not a decorative button.
+
+Prava's documented Browser Harness currently supports Shopify, not Blinkit. This repository cannot present Prava's credential at Blinkit's checkout today. Blinkit checkout is consequently a separately disclosed simulation/test step; no receipt or demo should claim that Prava paid a Blinkit order until a supported token-presenting integration is implemented.
+
+## What existed before this hackathon vs. what was built during it
+
+Before Aug 1, 2026: the mandate/policy engine, Ed25519 signing, receipt chain, webcmd/Blinkit integration, dashboard, and the Dodo test integration. During Aug 1–2, 2026: the Prava REST integration, Prava ledger tests, schema migration, and hackathon disclosure material. `demo/mandate-gate-fallback-2026-07-29.mp4` predates the hackathon and depicts the old Dodo flow; it must be replaced with a Prava-flow recording or clearly retained only as a historical artifact.
+
+## What worked, what did not, and what we learned
+
+The documented Prava session, mandate lookup, remaining-balance, idempotent charge, and session-revoke APIs fit the ledger boundary and are covered by mocked unit tests. A direct Prava-to-Blinkit payment did not work because the documented Prava Browser Harness is Shopify-only. The important lesson is that authorization evidence is not a completed merchant transaction: the UI and demo must preserve that distinction.
+
 ## Live demo (84 seconds)
 
 The full end-to-end flow — mandate creation, real Dodo funding, a live merchant search, a policy DENY, a policy ALLOW with a placed order, receipt generation, and tamper detection — runs in under 90 seconds. A fallback video is committed at `demo/mandate-gate-fallback-2026-07-29.mp4`.

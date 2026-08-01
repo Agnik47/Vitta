@@ -28,7 +28,7 @@ function makeMandate(scopeOverrides: Partial<Mandate['scope']> = {}, signWithBad
       expires_at: FUTURE_EXPIRY,
       ...scopeOverrides,
     },
-    reserve: { type: 'dodo_credit_test', blocked_inr: 800, ref: 'cks_test' },
+    reserve: { type: 'prava_mandate_sandbox', blocked_inr: 800, ref: 'mdt_test' },
   };
   const sig = sign(unsigned, signWithBadKey ? otherKeyPair.privateKey : privateKey);
   return { ...unsigned, sig };

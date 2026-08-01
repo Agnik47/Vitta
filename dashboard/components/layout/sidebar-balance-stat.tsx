@@ -10,7 +10,7 @@ type MandateApiResponse = { mandate: Mandate | null; balance: Balance };
 const POLL_INTERVAL_MS = 4000;
 
 /**
- * Always-visible reserve balance, pinned to the sidebar footer — real Dodo
+ * Always-visible reserve balance, pinned to the sidebar footer — real Prava
  * data, no need to navigate to "/" just to see it. See DESIGN.md § Layout
  * System.
  */

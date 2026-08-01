@@ -1,4 +1,4 @@
-// Phase 2 — will subscribe to Dodo's dispute.* webhooks and bundle
+// Phase 2 — will subscribe to Prava's dispute.* webhooks and bundle
 // {mandate, GateEvent, receipt, trace, dispute payload} into one file.
 // Not implemented in Phase 1. See docs/01-ARCHITECTURE.md § Phase 2.
 

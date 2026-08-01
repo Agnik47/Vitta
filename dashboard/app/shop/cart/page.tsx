@@ -327,12 +327,12 @@ export default function CartPage() {
                       {mode === "LIVE" ? (
                         <>
                           If it passes, {MERCHANT_LABEL[MERCHANT]}&apos;s real checkout is driven to a{" "}
-                          <strong className="text-foreground">real placed order</strong> and your Dodo reserve is
+                          <strong className="text-foreground">real placed order</strong> and your Prava reserve is
                           drawn.
                         </>
                       ) : (
                         <>
-                          If it passes, it settles against your real Dodo <strong className="text-foreground">test
+                          If it passes, it settles against your real Prava <strong className="text-foreground">test
                           reserve</strong> and signs a receipt marked TEST.{" "}
                           <strong className="text-foreground">No {MERCHANT_LABEL[MERCHANT]} order is placed.</strong>
                         </>

@@ -2,7 +2,7 @@
 //
 // Both modes run the IDENTICAL pipeline: real search, real add-to-cart against the real merchant
 // cart, real cart verification, real mandate signature/expiry/cap checks through decide(), real
-// reserve balance read, real Dodo draw, real signed + chain-linked receipt. Nothing is stubbed,
+// reserve balance read, real Prava draw, real signed + chain-linked receipt. Nothing is stubbed,
 // mocked, or bypassed in either mode, and there is exactly one decision path (CLAUDE.md rule 8).
 //
 // The single difference is whether the MERCHANT's own checkout is driven to a placed order:
@@ -12,7 +12,7 @@
 //          existing behaviour and is completely unchanged.
 //
 //   TEST — the merchant's checkout is NOT driven. The run stops after the mandate authorizes the
-//          spend, settles against the real Dodo test-mode reserve, and signs a receipt marked TEST
+//          spend, settles against the real Prava test-mode reserve, and signs a receipt marked TEST
 //          carrying NO merchant order id, because no merchant order exists.
 //
 // Why TEST mode is needed at all: Blinkit's payment step requires a human (UPI QR scanned on a
@@ -22,8 +22,8 @@
 // behaviour but makes the end-to-end flow undemonstrable. TEST mode exercises every part this
 // project actually owns without needing a phone in someone's hand.
 //
-// NOTE on the word "test": every Dodo call in this repo is already test-mode-only and always has
-// been (CLAUDE.md hard rule 1) — LIVE mode does not mean live money at Dodo. The distinction here is
+// NOTE on the word "test": every Prava call in this repo is already test-mode-only and always has
+// been (CLAUDE.md hard rule 1) — LIVE mode does not mean live money at Prava. The distinction here is
 // purely about the MERCHANT side.
 
 export type ExecutionMode = 'TEST' | 'LIVE';

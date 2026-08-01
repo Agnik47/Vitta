@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * The product's honesty requirement made visible: every real payment call in
- * this build targets Dodo's test-mode host, never live money. Styled as a
+ * this build targets Prava's test-mode host, never live money. Styled as a
  * stamped seal (dashed rule, not a solid fill) rather than a leftover warning
  * banner — see dashboard/DESIGN.md § Layout System.
  */

@@ -3,7 +3,7 @@
 // Why this exists: `next start` does not reliably load `.env.local` into `process.env` for the
 // running server in this setup (verified — the startup log shows no "Environments" line, and
 // `process.env.ANAKIN_API_KEY` came back undefined inside a route while the same key worked fine
-// from a plain script). `lib/gate-cli.ts` already hit this exact problem with the DODO_* vars and
+// from a plain script). `lib/gate-cli.ts` already hit this exact problem with the PRAVA_* vars and
 // solved it by parsing the env file directly; this is the same fix, shared.
 //
 // Precedence: a real `process.env` value always wins (so a deploy that sets vars properly is

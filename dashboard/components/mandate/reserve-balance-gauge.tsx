@@ -1,7 +1,7 @@
 type Balance = { available: true; balanceInr: number } | { available: false; reason: string } | null;
 
 /**
- * Reserve remaining against the mandate's own cap — real Dodo balance, real
+ * Reserve remaining against the mandate's own cap — real Prava balance, real
  * cap, a straight linear fill rather than a shadow-heavy stat card. Replaces
  * the old ReserveBalanceCard. See DESIGN.md § Page-by-page.
  */
@@ -29,7 +29,7 @@ export function ReserveBalanceGauge({ balance, capInr }: { balance: Balance; cap
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-[11px] tracking-wide text-ink-faint uppercase">Reserve balance (Dodo, test mode)</span>
+        <span className="text-[11px] tracking-wide text-ink-faint uppercase">Reserve balance (Prava, test mode)</span>
         {capInr ? (
           <span className="font-mono text-[11px] tabular-nums text-ink-faint">of ₹{capInr.toLocaleString("en-IN")} cap</span>
         ) : null}

@@ -36,7 +36,7 @@ export interface AgentBuyInput {
   minCartInr?: number;
   maxCartInr?: number;
   mandateId?: string;
-  /** TEST settles against the real Dodo test reserve without driving the merchant's checkout; LIVE
+  /** TEST settles against the real Prava test reserve without driving the merchant's checkout; LIVE
    *  walks the real checkout to a placed order. Every step before the commit is identical. */
   mode?: ExecutionMode;
 }

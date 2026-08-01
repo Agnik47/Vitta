@@ -26,6 +26,6 @@ export interface GateEvent {
   code?: DenyCode; // only set when verdict === 'DENY'
   amount_inr?: number;
   run_id?: string; // webcmd's runId, once bound
-  reserve_ref?: string; // Dodo checkout-session / credit-entitlement reference
+  reserve_ref?: string; // Prava checkout-session / credit-entitlement reference
   trace_digest?: string; // sha256 of webcmd's --trace artifact, only on ALLOW
 }

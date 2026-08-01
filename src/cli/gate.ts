@@ -15,7 +15,7 @@ import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '..
 import type { Receipt } from '../receipt/schema';
 import { buildAndSignAuthorization, type TransactionAuthorization } from '../receipt/authorization';
 import { parseExecutionMode, receiptExecutionMode } from '../receipt/execution-mode';
-import { DodoCreditLedger } from '../ledger/DodoCreditLedger';
+import { PravaLedger } from '../ledger/PravaLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
 import { resolveCartTotalInr, type CheckoutRow, type CartLineRow } from '../webcmd/cart-total';
 import {
@@ -118,7 +118,7 @@ function cmdMandateCreate(args: string[]): void {
     // Not funded yet — gate fund is a separate step (docs/01-ARCHITECTURE.md's own data flow
     // treats create and fund as two commands) and is itself blocked on Phase 1c. blocked_inr: 0 /
     // ref: '' is this codebase's "unfunded" sentinel state until Ledger.fund() is real.
-    reserve: { type: 'dodo_credit_test', blocked_inr: 0, ref: '' },
+    reserve: { type: 'prava_mandate_sandbox', blocked_inr: 0, ref: '' },
   };
   const sig = sign(unsigned, privateKey);
   const mandate: Mandate = { ...unsigned, sig };
@@ -186,7 +186,7 @@ function cmdReceiptShow(args: string[]): void {
   console.log(`✓ RECEIPT ${receipt.receipt_id} signed\n`);
   console.log(`  mandate  ${receipt.mandate_hash}        cart     ${receipt.cart.merchant} · ${receipt.cart.items} items · ₹${formatInr(receipt.cart.total_inr)}`);
   console.log(`  payment  ${receipt.payment.rail} · ${receipt.payment.status}`);
-  console.log(`  mode     ${mode}${mode === 'TEST' ? ' — settled against the Dodo test reserve; no merchant order was placed' : ''}`);
+  console.log(`  mode     ${mode}${mode === 'TEST' ? ' — settled against the Prava sandbox reserve; no merchant order was placed' : ''}`);
   console.log(`  run      ${receipt.execution.command} · ${receipt.execution.run_id}`);
   const orderSuffix = receipt.evidence.network_order_id ? ` · order #${receipt.evidence.network_order_id}` : '';
   console.log(`  evidence trace ${receipt.evidence.trace_digest}${orderSuffix}`);
@@ -226,7 +226,7 @@ function cmdVerify(args: string[]): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// gate fund — fund a mandate's reserve via Dodo Payments credit top-up
+// gate fund — fund a mandate's reserve via Prava sandbox checkout or attach an approved reserve
 // ---------------------------------------------------------------------------------------------
 
 async function cmdFund(args: string[]): Promise<void> {
@@ -251,7 +251,7 @@ async function cmdFund(args: string[]): Promise<void> {
     throw new Error(`Existing mandate ${mandateId}'s signature does not verify — refusing to fund a mandate that may have been tampered with.`);
   }
 
-  const ledger = new DodoCreditLedger();
+  const ledger = new PravaLedger();
   const { privateKey } = getOrCreateKeyPair('issuer');
 
   if (auto) {
@@ -298,13 +298,13 @@ async function cmdFund(args: string[]): Promise<void> {
 
     console.log(`✓ MANDATE ${mandateId} auto-funded — ₹${formatInr(newBalanceInr)} (was ₹${formatInr(currentBalanceInr)})`);
     console.log(`  reserve reference ${mandate.reserve.ref}`);
-    console.log(`  real balance read from Dodo after the credit`);
+    console.log(`  real balance read from Prava after the credit`);
     return;
   }
 
   if (existingReserveRef) {
     if (flags.amount) {
-      throw new Error('--amount and --reserve-ref are mutually exclusive: --reserve-ref attaches an already-funded reserve, whose real balance is read from Dodo rather than asserted locally.');
+      throw new Error('--amount and --reserve-ref are mutually exclusive: --reserve-ref attaches an already-funded reserve, whose real balance is read from Prava rather than asserted locally.');
     }
     // Read the REAL balance rather than trusting the ref. This is what makes attaching an existing
     // reserve safe: a typo'd, unpaid, or wrong-customer ref fails loudly here instead of producing
@@ -321,14 +321,14 @@ async function cmdFund(args: string[]): Promise<void> {
 
     const funded: Omit<Mandate, 'sig'> = {
       ...existingUnsigned,
-      reserve: { type: 'dodo_credit_test', blocked_inr: balanceInr, ref: existingReserveRef },
+      reserve: { type: 'prava_mandate_sandbox', blocked_inr: balanceInr, ref: existingReserveRef },
     };
     const updatedMandate: Mandate = { ...funded, sig: sign(funded, privateKey) };
     saveMandate(updatedMandate);
 
     console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(balanceInr)} (existing reserve)`);
     console.log(`  reserve reference ${existingReserveRef}`);
-    console.log(`  real balance read from Dodo — no new checkout needed`);
+    console.log(`  real balance read from Prava — no new checkout needed`);
     return;
   }
 
@@ -340,7 +340,7 @@ async function cmdFund(args: string[]): Promise<void> {
   // Update and re-sign the mandate with the new reserve
   const funded: Omit<Mandate, 'sig'> = {
     ...existingUnsigned,
-    reserve: { type: 'dodo_credit_test', blocked_inr: amountInr, ref: reserveRef },
+    reserve: { type: 'prava_mandate_sandbox', blocked_inr: amountInr, ref: reserveRef },
   };
   const sig = sign(funded, privateKey);
   const updatedMandate: Mandate = { ...funded, sig };
@@ -349,9 +349,9 @@ async function cmdFund(args: string[]): Promise<void> {
   console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(amountInr)}`);
   console.log(`  reserve reference ${reserveRef}`);
   if (checkoutUrl) {
-    console.log(`  checkout required: complete the Dodo Payments purchase at ${checkoutUrl}`);
+    console.log(`  checkout required: complete the Prava checkout at ${checkoutUrl}`);
   } else {
-    console.log(`  checkout required: open your browser to complete the Dodo Payments purchase before running commands`);
+    console.log(`  checkout required: open your browser to complete the Prava checkout before running commands`);
   }
 }
 
@@ -554,7 +554,7 @@ async function cmdRun(args: string[]): Promise<void> {
 
   // Call decide()
   const now = new Date();
-  const ledger = new DodoCreditLedger();
+  const ledger = new PravaLedger();
   let ledgerBalanceInr = 0;
   try {
     if (mandate.reserve.ref) {
@@ -568,7 +568,7 @@ async function cmdRun(args: string[]): Promise<void> {
     // exhausted mandate: decide() returns OVER_TOTAL_CAP and the operator reads
     // "cart ₹179 · mandate ₹500 · over by ₹179" — arithmetic that cannot be true unless the
     // balance was 0. Hit for real on 2026-07-31 by running `node dist/cli/gate.js` without the
-    // DODO_* vars loaded (the CLI expects a shell that has sourced .env; use
+    // PRAVA_* vars loaded (the CLI expects a shell that has sourced .env; use
     // `node --env-file=.env` otherwise). The verdict stays fail-closed either way — this only
     // makes the cause visible instead of costing a demo several minutes of misdiagnosis.
     ledgerBalanceInr = 0;
@@ -658,12 +658,12 @@ async function cmdRun(args: string[]): Promise<void> {
   }
 
   // Two independent, both-real facts, kept separate rather than conflated into one artifact:
-  //   1. TRANSACTION AUTHORIZATION — decide() said ALLOW and the real Dodo reserve balance already
+  //   1. TRANSACTION AUTHORIZATION — decide() said ALLOW and the real Prava reserve balance already
   //      read (ledgerBalanceInr) covers this cart. True right now, before the browser touches
   //      anything. Signed and saved immediately below, BEFORE execute() runs.
   //   2. MERCHANT CONFIRMATION + the real Receipt — only real once the merchant itself proves an
   //      order exists (evaluateCommitProof). draw()/recordDraw()/buildAndSignReceipt() stay exactly
-  //      where they always were: gated on that proof, never moved earlier. Moving the real Dodo
+  //      where they always were: gated on that proof, never moved earlier. Moving the real Prava
   //      draw() before merchant confirmation would recreate ADR-013's exact failure — draw() is an
   //      immediate, real ledger debit here, not a reversible authorization hold, so a merchant that
   //      never confirms would leave the reserve genuinely short for nothing.
@@ -689,9 +689,9 @@ async function cmdRun(args: string[]): Promise<void> {
   // TEST mode settles here, WITHOUT driving the merchant's checkout.
   //
   // Everything above this point ran identically to LIVE: the real cart was read from the merchant,
-  // the real mandate's signature/expiry/caps were checked by the one real decide(), the real Dodo
-  // reserve balance was read, and a real signed authorization was written. Below, the Dodo draw and
-  // the signed, chain-linked receipt are also real — the Dodo side has always been test-mode-only
+  // the real mandate's signature/expiry/caps were checked by the one real decide(), the real Prava
+  // reserve balance was read, and a real signed authorization was written. Below, the Prava draw and
+  // the signed, chain-linked receipt are also real — the Prava side has always been sandbox-only
   // (CLAUDE.md hard rule 1), so nothing about it changes between modes.
   //
   // What is deliberately NOT done: execute() is never called, so webcmd never walks Blinkit's
@@ -714,7 +714,7 @@ async function cmdRun(args: string[]): Promise<void> {
         authorization_id: authorization.authorization_id,
         mandate_hash: sha256Hex(mandate),
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
-        payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
+        payment: { rail: 'prava_sandbox', reserve_ref: mandate.reserve.ref, status: 'authorized' },
         execution: { command: fullCommand, run_id: runId, profile: '', mode: 'TEST' },
         // No trace digest: no browser command was run, so there is no trace to digest. Empty is the
         // truthful value here, not a placeholder standing in for something that exists.
@@ -726,7 +726,7 @@ async function cmdRun(args: string[]): Promise<void> {
     saveReceipt(testReceipt);
 
     console.log(`✓ SETTLED IN TEST MODE · ${site}`);
-    console.log(`  reserve drawn ₹${formatInr(cartAmountInr)} from the real Dodo test reserve`);
+    console.log(`  reserve drawn ₹${formatInr(cartAmountInr)} from the real Prava sandbox reserve`);
     console.log(`  NO MERCHANT ORDER PLACED — ${site}'s checkout was not driven in test mode`);
     console.log(`✓ ${fullCommand} executed · runId ${runId}`);
     console.log(`  receipt ${testReceipt.receipt_id}`);
@@ -813,7 +813,7 @@ async function cmdRun(args: string[]): Promise<void> {
         authorization_id: authorization.authorization_id,
         mandate_hash: sha256Hex(mandate),
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
-        payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
+        payment: { rail: 'prava_sandbox', reserve_ref: mandate.reserve.ref, status: 'authorized' },
         execution: { command: fullCommand, run_id: runId, profile: '', mode: 'LIVE' },
         evidence: {
           trace_digest: result.traceDigest,

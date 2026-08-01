@@ -4,7 +4,7 @@
 // Hard boundary (CLAUDE.md rule 2, ADR-015): this file orchestrates: it decides WHAT to run and
 // WHEN, never WHETHER a spend is allowed. Every money-moving or browser-driving step is a spawn of
 // the real `gate`/`search` CLIs via gate-spawn.ts — this file never imports src/policy/decide.ts,
-// src/webcmd/executor.ts, or DodoCreditLedger directly, and contains no model/LLM call of any kind.
+// src/webcmd/executor.ts, or PravaCreditLedger directly, and contains no model/LLM call of any kind.
 // The one judgement call a human makes — which product — already happened before this runs; nothing
 // here second-guesses it.
 //
@@ -516,7 +516,7 @@ export class PurchaseAgent {
       'done',
       commitResult.receiptId
         ? mode === 'TEST'
-          ? 'Reserve drawn from the real Dodo test reserve'
+          ? 'Reserve drawn from the real Prava test reserve'
           : 'Reserve drawn'
         : 'Nothing drawn (hand-off merchant, no order id to draw against)',
     );
@@ -563,7 +563,7 @@ export class PurchaseAgent {
       'commit',
       'running',
       mode === 'TEST'
-        ? `Settling against the Dodo test reserve — ${merchant}'s checkout is not driven in test mode`
+        ? `Settling against the Prava test reserve — ${merchant}'s checkout is not driven in test mode`
         : `Placing the real ${merchant} order`,
     );
     // The command is identical in both modes — `place-order --confirm` is what decide() evaluates,

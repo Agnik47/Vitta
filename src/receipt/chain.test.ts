@@ -14,7 +14,7 @@ function baseFields(overrides: Partial<Omit<Receipt, 'sig' | 'signed_at'>> = {})
     authorization_id: 'auth_1',
     mandate_hash: 'sha256:deadbeef',
     cart: { merchant: 'blinkit', items: 7, total_inr: 1412 },
-    payment: { rail: 'dodo_test', reserve_ref: 'cks_test', status: 'captured' },
+    payment: { rail: 'prava_sandbox', reserve_ref: 'mdt_test', status: 'authorized' },
     execution: { command: 'blinkit/place-order', run_id: 'run_1', profile: 'hack' },
     evidence: { trace_digest: 'sha256:abc123' },
     prev_receipt_hash: CHAIN_HEAD_HASH,

@@ -3,7 +3,7 @@
 // The Purchase Mode toggle's state, shared across the whole shop flow.
 //
 // Both modes run the identical pipeline — real search, real add-to-cart, real cart verification,
-// real mandate gate, real Dodo test-reserve draw, real signed receipt. The ONLY difference is
+// real mandate gate, real Prava test-reserve draw, real signed receipt. The ONLY difference is
 // whether the merchant's own checkout is driven to a placed order. See
 // src/receipt/execution-mode.ts for the authoritative explanation.
 //
@@ -80,7 +80,7 @@ export const MODE_META: Record<ExecutionMode, { label: string; dot: string; blur
   TEST: {
     label: "Test Mode",
     dot: "🟢",
-    blurb: "Settles against your real Dodo test reserve. No merchant order is placed.",
+    blurb: "Settles against your real Prava test reserve. No merchant order is placed.",
   },
   LIVE: {
     label: "Live Mode",

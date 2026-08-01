@@ -131,7 +131,7 @@ export interface LedgerEntry {
 // Belt-and-suspenders idempotency guard for Ledger.draw() (docs/02-DODO-INTEGRATION.md's open
 // question on request-side idempotency_key support). The caller (Phase 1f's CLI wiring) must call
 // this BEFORE Ledger.draw() — see docs/common/02-DECISIONS.md ADR-004 for the ledger.jsonl entry
-// shape and why this check lives here instead of inside DodoCreditLedger.
+// shape and why this check lives here instead of inside PravaCreditLedger.
 export function hasAlreadyDrawn(runId: string, ledgerPath = './ledger.jsonl'): boolean {
   if (!existsSync(ledgerPath)) return false;
   const lines = readFileSync(ledgerPath, 'utf-8').split('\n').filter(Boolean);

@@ -27,7 +27,7 @@ const figtree = Figtree({
 
 export const metadata: Metadata = {
   title: "Vitta — AI Spending Policy Dashboard",
-  description: "Real-time view of mandate state, gate decisions, and receipts. Powered by Dodo Payments test mode.",
+  description: "Real-time view of mandate state, gate decisions, and receipts. Powered by Prava sandbox mandates.",
 };
 
 export default function RootLayout({
