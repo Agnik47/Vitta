@@ -201,6 +201,53 @@ async function searchBigBasket(query: string): Promise<MerchantSearchResult> {
   return { merchant: "bigbasket", ok: true, products };
 }
 
+export type ProductDetailResult =
+  | { ok: true; product: LiveProduct }
+  | { ok: false; error: string; authRequired?: boolean };
+
+/**
+ * Reads ONE Blinkit product's live price by id, rather than re-running a search and hoping the
+ * product still ranks in the returned rows. A watched product can drop off page one when ranking
+ * shifts or stock blips, which a search-based check would report as "gone" even though the product
+ * is fine and its price is perfectly readable. `blinkit product <id>` is a real access:'read'
+ * manifest command keyed only on the id, so it answers the actual question.
+ *
+ * Also sidesteps lib/product-sources' 5-minute result cache by construction — that cache wraps
+ * searchMerchant(), which this path never touches. A price watch that re-read a cached price would
+ * be watching the past.
+ */
+export async function getBlinkitProductDetail(productId: string): Promise<ProductDetailResult> {
+  const res = await runSearchCli(["blinkit", "product", productId]);
+  if (!res.ok) return { ok: false, error: res.message ?? "Product lookup failed", authRequired: res.authRequired };
+
+  const rows = Array.isArray(res.rows) ? (res.rows as Record<string, unknown>[]) : [];
+  if (rows.length === 0) return { ok: false, error: `Blinkit returned no product for id ${productId}` };
+
+  const r = rows[0];
+  const av = parseAvailability(r.available);
+  const priceInr = num(r.price);
+  // A zero price is not a price. Blinkit returning one means the row didn't carry what we asked
+  // for — reporting that honestly matters more here than anywhere else in this file, because a
+  // sniper comparing 0 against any target would fire instantly on garbage.
+  if (priceInr <= 0) return { ok: false, error: `Blinkit returned no usable price for id ${productId}` };
+
+  return {
+    ok: true,
+    product: {
+      merchant: "blinkit",
+      productId: String(r.productId ?? productId),
+      name: String(r.name ?? "Unnamed product"),
+      brand: r.brand ? String(r.brand) : undefined,
+      priceInr,
+      mrpInr: r.mrp !== undefined && r.mrp !== null ? num(r.mrp) : undefined,
+      imageUrl: r.imageUrl ? String(r.imageUrl) : undefined,
+      available: av.available,
+      availabilityLabel: av.label,
+      url: r.url ? String(r.url) : undefined,
+    },
+  };
+}
+
 const SEARCH_FNS: Record<LiveMerchant, (query: string) => Promise<MerchantSearchResult>> = {
   blinkit: searchBlinkit,
   zepto: searchZepto,

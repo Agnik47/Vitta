@@ -8,9 +8,11 @@ import {
   Activity,
   BookOpen,
   Columns3,
+  Crosshair,
   History,
   LayoutDashboard,
   Receipt as ReceiptIcon,
+  ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
   Store,
@@ -34,10 +36,12 @@ import { cn } from "@/lib/utils";
 const SHOP_NAV = [
   { href: "/shop", label: "Search & compare", icon: Store },
   { href: "/shop/cart", label: "Cart", icon: ShoppingCart, cartBadge: true },
+  { href: "/shop/sniper", label: "Price sniper", icon: Crosshair },
 ];
 
 const REAL_NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/mandate", label: "Mandate", icon: ShieldCheck },
   { href: "/events", label: "Decisions", icon: Activity },
   { href: "/receipts", label: "Proof chain", icon: ReceiptIcon },
   { href: "/docs", label: "Docs", icon: BookOpen },

@@ -24,6 +24,7 @@ dist/
 /events.jsonl
 /ledger.jsonl
 /dashboard/purchase_jobs_store.json
+/dashboard/sniper_watches_store.json
 
 # manifest.json is deliberately NOT gitignored, unlike the runtime data above — see
 # docs/OUTCOME.md Phase 1f. It's a relatively stable cache of external reference data (webcmd's

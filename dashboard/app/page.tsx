@@ -28,8 +28,15 @@ function NoMandateState() {
         </div>
       </div>
 
+      <Link
+        href="/mandate"
+        className="bg-seal px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+      >
+        Issue a mandate
+      </Link>
+
       <div className="w-full bg-surface-sunken px-3 py-2.5">
-        <p className="mb-1.5 text-xs text-ink-faint">Issue a mandate from the CLI:</p>
+        <p className="mb-1.5 text-xs text-ink-faint">Or from the CLI, which does exactly the same thing:</p>
         <div className="flex items-center gap-2">
           <Terminal className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
           <code className="font-mono text-sm text-foreground">gate mandate create</code>

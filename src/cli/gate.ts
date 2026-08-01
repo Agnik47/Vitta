@@ -46,13 +46,9 @@ async function main(): Promise<void> {
         return await cmdRun(rest);
       case 'fund':
         return await cmdFund(rest);
-      case 'sniper':
-        // Dynamically import so we don't load sniper dependencies for basic gate commands
-        const { cmdSniper } = await import('./sniper.js');
-        return await cmdSniper(rest);
       default:
         console.error(`Unknown command: ${command ?? '(none)'}`);
-        console.error('Usage: gate <scan|mandate|receipt|verify|run|fund|sniper> ...');
+        console.error('Usage: gate <scan|mandate|receipt|verify|run|fund> ...');
         process.exitCode = 1;
     }
   } catch (err) {

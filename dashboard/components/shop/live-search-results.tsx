@@ -13,9 +13,10 @@
 // multi-item, multi-merchant search session all funnels through one cart, not a side-channel
 // selection per product.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, ImageOff, Loader2, PackageSearch, TriangleAlert } from "lucide-react";
+import { Crosshair, ExternalLink, ImageOff, Loader2, PackageSearch, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { CreateWatchDialog, type WatchTarget } from "@/components/shop/create-watch-dialog";
 import { useCart } from "@/lib/cart-context";
 import { MERCHANT_LABEL, type ShopMerchant } from "@/lib/shop-catalog";
 import { canAddToCart, type AddToCartMerchant } from "@/lib/product-ref";
@@ -78,12 +79,18 @@ function ProductImage({ product }: { product: LiveProduct }) {
 function ProductCard({
   product,
   cheapest,
+  onWatch,
 }: {
   product: LiveProduct;
   cheapest: boolean;
+  onWatch: (target: WatchTarget) => void;
 }) {
   const { addItem } = useCart();
   const [adding, setAdding] = useState(false);
+
+  // Only Blinkit can actually be bought by this project, and a watch that could never fire a real
+  // purchase would be theatre. An id is required too — it's what the price check is keyed on.
+  const watchable = product.merchant === "blinkit" && !!product.productId;
 
   // Whether this specific result can actually reach webcmd's add-to-cart — Blinkit needs an id,
   // Zepto needs a product URL. Checked up front so an unusable card says why instead of failing
@@ -160,7 +167,26 @@ function ProductCard({
           </div>
         )}
 
-        <div className="mt-auto flex items-center gap-2 pt-1">
+        <div className="mt-auto flex flex-col gap-2 pt-1">
+          {watchable && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onWatch({
+                  productId: product.productId,
+                  productName: product.name,
+                  currentPriceInr: product.priceInr,
+                });
+              }}
+              className="w-full justify-center gap-1.5 border border-dashed border-border text-xs text-muted-foreground hover:text-seal"
+            >
+              <Crosshair className="size-3.5" strokeWidth={1.75} />
+              Watch price
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -183,6 +209,7 @@ function ProductCard({
               <ExternalLink className="size-3" strokeWidth={1.75} />
             </a>
           )}
+          </div>
         </div>
       </div>
     </div>
@@ -211,6 +238,7 @@ export function LiveSearchResults({
 }) {
   const [slots, setSlots] = useState<Record<LiveMerchant, Slot>>(() => loadingSlots(merchants));
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
+  const [watchTarget, setWatchTarget] = useState<WatchTarget | null>(null);
   // Bumped per query so a slow response from a superseded search can't overwrite a newer one.
   const generation = useRef(0);
 
@@ -311,10 +339,20 @@ export function LiveSearchResults({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {products.map((p) => {
             const key = productKey(p);
-            return <ProductCard key={key} product={p} cheapest={key === cheapestKey} />;
+            return (
+              <ProductCard key={key} product={p} cheapest={key === cheapestKey} onWatch={setWatchTarget} />
+            );
           })}
         </div>
       )}
+
+      <CreateWatchDialog
+        target={watchTarget}
+        open={watchTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setWatchTarget(null);
+        }}
+      />
 
       {allDone && products.length === 0 && failures.length < merchants.length && (
         <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border px-6 py-12 text-center">
