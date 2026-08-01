@@ -15,6 +15,9 @@ export interface MerchantProfile {
   productRefKind: 'id' | 'url' | 'id-or-url';
   /** Per-command quantity ceiling from each site's own manifest args. */
   maxQuantity: number;
+  /** True if the merchant has a clear-cart command in its webcmd manifest. Defaults to true;
+   *  set to false if not available. */
+  supportsClearCart?: boolean;
   /** A precondition that must hold before this merchant can return anything real, checked with a
    *  real read command — not a guess. Absent means no known precondition. */
   precondition?: {
@@ -32,6 +35,7 @@ export const MERCHANT_PROFILES: Record<PurchaseMerchant, MerchantProfile> = {
     site: 'blinkit',
     productRefKind: 'id',
     maxQuantity: 12,
+    supportsClearCart: false,
   },
   zepto: {
     site: 'zepto',

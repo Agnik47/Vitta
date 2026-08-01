@@ -271,7 +271,7 @@ export class PurchaseAgent {
     // reported ALLOW/committed. Combined with the next finding below, this silently inflated a
     // human-approved ₹160 cart into a real ₹354 one. Never trust the report alone — read the real
     // cart back and require it to show zero items before adding anything on top of it.
-    if (input.clearCartFirst) {
+    if (input.clearCartFirst && profile.supportsClearCart !== false) {
       this.emit('clear-cart', 'running', `Clearing any existing ${merchant} cart from a previous session`);
       const CLEAR_CART_MAX_ATTEMPTS = 3;
       let cartConfirmedEmpty = false;
@@ -301,6 +301,8 @@ export class PurchaseAgent {
         );
       }
       this.emit('clear-cart', 'done', 'Cart cleared and confirmed empty by a real read');
+    } else if (input.clearCartFirst) {
+      this.emit('clear-cart', 'skipped', `${merchant} does not have a clear-cart command`);
     } else {
       this.emit('clear-cart', 'skipped', 'Already cleared earlier this session');
     }
