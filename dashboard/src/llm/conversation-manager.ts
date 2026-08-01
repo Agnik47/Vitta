@@ -173,7 +173,7 @@ export class ConversationManager {
 
   getLastCommand(
     sessionId: string
-  ): (typeof ConversationState.prototype.context.commandHistory)[0] | undefined {
+  ): ConversationState['context']['commandHistory'][0] | undefined {
     const state = this.getConversation(sessionId);
     if (state && state.context.commandHistory.length > 0) {
       return state.context.commandHistory[

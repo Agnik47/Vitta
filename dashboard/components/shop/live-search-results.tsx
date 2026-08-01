@@ -13,7 +13,7 @@
 // multi-item, multi-merchant search session all funnels through one cart, not a side-channel
 // selection per product.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, ImageOff, Loader2, PackageSearch, TriangleAlert } from "lucide-react";
+import { Check, ExternalLink, ImageOff, Loader2, PackageSearch, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/lib/cart-context";
@@ -84,6 +84,7 @@ function ProductCard({
 }) {
   const { addItem } = useCart();
   const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
 
   // Whether this specific result can actually reach webcmd's add-to-cart — Blinkit needs an id,
   // Zepto needs a product URL. Checked up front so an unusable card says why instead of failing
@@ -104,6 +105,7 @@ function ProductCard({
       toast.error("Could not add to real cart", { description: result.message });
       return;
     }
+    setAdded(true);
     toast.success(`Added to real ${MERCHANT_LABEL[product.merchant]} cart`, {
       description: `${product.name} — ₹${product.priceInr.toLocaleString("en-IN")}`,
     });
@@ -163,12 +165,18 @@ function ProductCard({
         <div className="mt-auto flex items-center gap-2 pt-1">
           <Button
             size="sm"
-            variant="outline"
-            disabled={!product.available || adding || !addable.ok}
+            variant={added ? "secondary" : "outline"}
+            disabled={!product.available || adding || !addable.ok || added}
             onClick={handleAdd}
-            className="flex-1"
+            className={`flex-1 transition-all duration-300 ${added ? "bg-allow/10 text-allow border-allow/30 hover:bg-allow/10 disabled:opacity-100" : ""}`}
           >
-            {adding ? "Adding…" : "Add to cart"}
+            {adding ? (
+              <><Loader2 className="mr-1.5 size-3.5 animate-spin" /> Adding…</>
+            ) : added ? (
+              <><Check className="mr-1.5 size-3.5" /> Added</>
+            ) : (
+              "Add to cart"
+            )}
           </Button>
           {product.url && (
             <a
