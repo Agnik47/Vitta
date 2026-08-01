@@ -9,7 +9,7 @@
 // There is no local estimate to disagree with the truth anymore.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Loader2, Minus, Plus, RefreshCw, ShieldCheck, ShoppingCart, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Minus, Plus, RefreshCw, ShieldCheck, ShoppingCart, Trash, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -38,9 +38,10 @@ const MERCHANT = "blinkit" as const;
 
 export default function CartPage() {
   const router = useRouter();
-  const { lines, totalInr, itemCount, syncing, error, setQuantity, removeItem, refresh } = useCart();
+  const { lines, totalInr, itemCount, syncing, error, setQuantity, removeItem, clear, refresh } = useCart();
   const { mode } = useExecutionMode();
   const [starting, setStarting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [minCartInr, setMinCartInr] = useState<number | null>(null);
 
   useEffect(() => {
@@ -72,6 +73,17 @@ export default function CartPage() {
   async function handleRemove(productId: string) {
     const result = await removeItem(productId, MERCHANT);
     if (!result.ok) toast.error("Could not remove from the real cart", { description: result.message });
+  }
+
+  async function handleClear() {
+    setClearing(true);
+    const result = await clear();
+    setClearing(false);
+    if (!result.ok) {
+      toast.error("Could not clear the real cart", { description: result.message });
+    } else {
+      toast.success("Real Blinkit cart cleared");
+    }
   }
 
   async function handleProceed() {
@@ -231,7 +243,52 @@ export default function CartPage() {
                 </div>
               </div>
 
-              <AlertDialog>
+              <div className="flex items-center gap-2">
+                {/* Clear cart — confirmation required, this wipes the real Blinkit cart */}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      disabled={syncing || clearing || lines.length === 0}
+                      className="text-deny border-deny/40 hover:bg-deny/5 hover:text-deny"
+                    >
+                      {clearing ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" /> Clearing…
+                        </>
+                      ) : (
+                        <>
+                          <Trash className="size-4" />
+                          Clear cart
+                        </>
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2">
+                        <AlertTriangle className="size-4 text-deny" strokeWidth={2} />
+                        Clear the real {MERCHANT_LABEL[MERCHANT]} cart?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This removes every item from your real {MERCHANT_LABEL[MERCHANT]} cart right now. No money
+                        moves — it only empties the cart so you can start fresh. This cannot be undone from here.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleClear}
+                        className="bg-deny text-white hover:bg-deny/90"
+                      >
+                        Yes, clear the cart
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="lg" disabled={!canProceed || starting}>
                     {starting ? (
@@ -287,6 +344,7 @@ export default function CartPage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              </div>
             </div>
           </div>
         </div>

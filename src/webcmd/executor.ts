@@ -93,7 +93,7 @@ export function execute(site: string, command: string, args: string[], presetRun
       // re-read cart to confirm) run 70-90s end to end. Found live: a real add-to-cart hit exactly
       // this ceiling and was killed mid-confirmation. Raised here, not in each adapter, since this
       // is the one real spawn point for every write command.
-      env: { ...process.env, WEBCMD_BROWSER_COMMAND_TIMEOUT: process.env.WEBCMD_BROWSER_COMMAND_TIMEOUT ?? '220' },
+      env: { ...process.env, WEBCMD_BROWSER_COMMAND_TIMEOUT: process.env.WEBCMD_BROWSER_COMMAND_TIMEOUT ?? '600' },
     });
     let stdout = '';
     let stderr = '';

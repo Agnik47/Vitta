@@ -63,7 +63,7 @@ export async function syncCartQuantity(
   merchant: AddToCartMerchant,
   productRef: string,
   desiredQuantity: number,
-  timeoutMs = 180_000
+  timeoutMs = 660_000
 ): Promise<CartSyncResult> {
   if (!Number.isInteger(desiredQuantity) || desiredQuantity < 0 || desiredQuantity > MAX_QUANTITY) {
     return { ok: false, message: `quantity must be a whole number between 0 and ${MAX_QUANTITY}` };
@@ -127,7 +127,7 @@ export async function syncCartQuantity(
  * a clear that reports success over a non-empty cart is a failure mode this project has already hit
  * for real.
  */
-export async function clearRealCart(merchant: AddToCartMerchant, timeoutMs = 180_000): Promise<CartSyncResult> {
+export async function clearRealCart(merchant: AddToCartMerchant, timeoutMs = 660_000): Promise<CartSyncResult> {
   if (merchant !== "blinkit") {
     return { ok: false, message: `${merchant} has no clear-cart command available.` };
   }
