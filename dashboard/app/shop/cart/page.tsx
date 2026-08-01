@@ -132,7 +132,7 @@ export default function CartPage() {
       />
 
       {error && (
-        <div className="mb-4 flex items-start gap-2.5 border border-deny/30 bg-deny/5 px-3 py-2.5 text-xs text-muted-foreground">
+        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-deny/30 bg-deny/5 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-deny" strokeWidth={1.75} />
           <span>{error}</span>
         </div>
@@ -146,11 +146,11 @@ export default function CartPage() {
         />
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="border border-border bg-card">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             {lines.map((line) => (
               <div
                 key={line.productId}
-                className="flex items-center justify-between gap-4 border-t border-border px-4 py-3 first:border-t-0"
+                className="flex items-center justify-between gap-4 border-t border-border px-5 py-4 transition-colors first:border-t-0 hover:bg-muted/20"
               >
                 <div className="min-w-0 flex-1">
                   <span className="truncate text-sm font-medium text-foreground">{line.name}</span>
@@ -160,34 +160,34 @@ export default function CartPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 border border-border">
+                <div className="flex items-center gap-1 rounded-full border border-border bg-background p-0.5">
                   <button
                     onClick={() => handleQuantity(line.productId, line.quantity - 1)}
                     disabled={syncing}
-                    className="flex size-7 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                    className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
                     aria-label="Decrease quantity"
                   >
                     <Minus className="size-3" strokeWidth={2} />
                   </button>
-                  <span className="w-8 text-center font-mono text-sm tabular-nums">{line.quantity}</span>
+                  <span className="w-7 text-center font-mono text-sm tabular-nums">{line.quantity}</span>
                   <button
                     onClick={() => handleQuantity(line.productId, Math.min(12, line.quantity + 1))}
                     disabled={syncing || line.quantity >= 12}
-                    className="flex size-7 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                    className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
                     aria-label="Increase quantity"
                   >
                     <Plus className="size-3" strokeWidth={2} />
                   </button>
                 </div>
 
-                <div className="w-20 shrink-0 text-right font-mono text-sm font-medium tabular-nums text-foreground">
+                <div className="w-20 shrink-0 text-right font-heading text-[15px] font-bold tabular-nums text-foreground">
                   ₹{line.lineTotalInr.toLocaleString("en-IN")}
                 </div>
 
                 <button
                   onClick={() => handleRemove(line.productId)}
                   disabled={syncing}
-                  className="shrink-0 text-ink-faint transition-colors hover:text-deny disabled:opacity-40"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-deny/10 hover:text-deny disabled:opacity-40"
                   aria-label="Remove item"
                 >
                   <Trash2 className="size-4" strokeWidth={1.75} />
@@ -196,7 +196,7 @@ export default function CartPage() {
             ))}
           </div>
 
-          <div className="flex items-center justify-between gap-3 border border-border bg-card px-4 py-2.5 text-xs">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-xs">
             <div className="flex items-center gap-2">
               {syncing ? (
                 <>
@@ -218,7 +218,7 @@ export default function CartPage() {
             <button
               onClick={() => void refresh()}
               disabled={syncing}
-              className="flex shrink-0 items-center gap-1 text-ink-faint transition-colors hover:text-foreground disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1 text-ink-faint transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
             >
               <RefreshCw className={`size-3 ${syncing ? "animate-spin" : ""}`} strokeWidth={2} />
               Refresh
@@ -232,13 +232,17 @@ export default function CartPage() {
             onItemAdded={() => void refresh()}
           />
 
-          <div className="flex flex-col gap-3 border border-border bg-surface-sunken px-4 py-3">
-            <ExecutionModeToggle className="border-b border-border pb-3" />
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="border-b border-border bg-muted/30 px-5 py-4">
+              <ExecutionModeToggle />
+            </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5">
               <div>
-                <div className="text-[10px] tracking-widest text-ink-faint uppercase">Cart total</div>
-                <div className="font-heading text-2xl font-semibold tabular-nums text-foreground">
+                <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Cart total
+                </div>
+                <div className="mt-0.5 font-heading text-3xl font-bold tracking-tight tabular-nums text-foreground">
                   ₹{totalInr.toLocaleString("en-IN")}
                 </div>
               </div>
@@ -251,7 +255,7 @@ export default function CartPage() {
                       size="lg"
                       variant="outline"
                       disabled={syncing || clearing || lines.length === 0}
-                      className="text-deny border-deny/40 hover:bg-deny/5 hover:text-deny"
+                      className="rounded-lg text-deny border-deny/40 hover:bg-deny/5 hover:text-deny"
                     >
                       {clearing ? (
                         <>
@@ -290,7 +294,7 @@ export default function CartPage() {
 
                 <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="lg" disabled={!canProceed || starting}>
+                  <Button size="lg" className="rounded-lg px-6" disabled={!canProceed || starting}>
                     {starting ? (
                       <>
                         <Loader2 className="size-4 animate-spin" /> Starting…

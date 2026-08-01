@@ -55,6 +55,14 @@ export interface RawSearchResponse {
 // cutting it close. execFile kills the child and reports `error.killed` on timeout; that case
 // must produce an honest "timed out" message, not silently fall through to an empty `{}` parse
 // that looks identical to "the merchant genuinely returned nothing."
+/** webcmd colours its own output, so a failure message arriving here can carry terminal escape
+ *  codes. Rendered in a browser those become literal "\e[2m" garbage in an error banner — the same
+ *  bug lib/gate-cli.ts already strips at its own spawn boundary. Stripped here for the same reason:
+ *  this is the point where CLI text stops being terminal output and becomes UI copy. */
+function stripAnsi(text: string): string {
+  return text.replace(/(?:\x1b|\\e|\\x1b)\[[0-9;]*m/g, "");
+}
+
 export function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSearchResponse> {
   return new Promise((resolve) => {
     execFile(
@@ -77,16 +85,20 @@ export function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSea
           // cause of every card showing a bare "unknown error" with the real reason discarded.
           resolve({
             ok: false,
-            message: error?.message?.trim() || stderr.trim() || "search.js produced no output and no error was reported",
+            message: stripAnsi(
+              error?.message?.trim() || stderr.trim() || "search.js produced no output and no error was reported"
+            ),
           });
           return;
         }
         try {
-          resolve(JSON.parse(trimmedStdout) as RawSearchResponse);
+          const parsed = JSON.parse(trimmedStdout) as RawSearchResponse;
+          if (!parsed.ok && typeof parsed.message === "string") parsed.message = stripAnsi(parsed.message);
+          resolve(parsed);
         } catch {
           resolve({
             ok: false,
-            message: stderr.trim() || error?.message?.trim() || "search.js produced unparseable output",
+            message: stripAnsi(stderr.trim() || error?.message?.trim() || "search.js produced unparseable output"),
           });
         }
       }

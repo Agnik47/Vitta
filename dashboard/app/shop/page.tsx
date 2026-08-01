@@ -58,19 +58,13 @@ export default function ShopPage() {
         description="Search a product for real, live results across every marketplace this project has a real integration with."
       />
 
-      <div className="mb-5 flex items-center gap-2.5 border border-border bg-card px-4 py-2.5">
-        <Zap className="size-3.5 shrink-0 text-allow" strokeWidth={2} />
-        <p className="text-xs text-muted-foreground">
+      <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-allow/20 bg-allow/5 px-4 py-3">
+        <Zap className="mt-0.5 size-3.5 shrink-0 text-allow" strokeWidth={2} />
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
           Every card is a real listing fetched live from that marketplace — no mock data, and prices
           are never merged or estimated across merchants. A merchant that returns nothing or errors
           says so honestly rather than showing a placeholder.
         </p>
-      </div>
-
-      {/* Shown here, at the start of the workflow, so the mode is a deliberate choice made BEFORE
-          building a cart — not something noticed for the first time at the confirm dialog. */}
-      <div className="mb-5 border border-border bg-card px-4 py-3">
-        <ExecutionModeToggle />
       </div>
 
       <form
@@ -78,86 +72,117 @@ export default function ShopPage() {
           e.preventDefault();
           handleSearch();
         }}
-        className="mb-6 flex flex-col gap-3"
+        className="mb-6 overflow-hidden rounded-xl border border-border bg-card"
       >
-        <div className="flex max-w-lg items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.75} />
-            <Input
-              value={queryInput}
-              onChange={(e) => setQueryInput(e.target.value)}
-              placeholder="Search atta, biscuits, cookies…"
-              className="pl-9"
-            />
-          </div>
-          <Button type="submit" disabled={!queryInput.trim() || rangeInverted || noMerchantsSelected}>
-            Search
-          </Button>
+        {/* Shown here, at the start of the workflow, so the mode is a deliberate choice made BEFORE
+            building a cart — not something noticed for the first time at the confirm dialog. */}
+        <div className="border-b border-border bg-muted/30 px-5 py-4">
+          <ExecutionModeToggle />
         </div>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-32">
-            <label className="text-[11px] tracking-wide text-ink-faint uppercase">Min ₹</label>
-            <Input
-              type="number"
-              min={1}
-              value={minInput}
-              onChange={(e) => setMinInput(e.target.value)}
-              placeholder="any"
-              className="mt-1.5"
-            />
-          </div>
-          <div className="w-32">
-            <label className="text-[11px] tracking-wide text-ink-faint uppercase">Max ₹</label>
-            <Input
-              type="number"
-              min={1}
-              value={maxInput}
-              onChange={(e) => setMaxInput(e.target.value)}
-              placeholder="any"
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] tracking-wide text-ink-faint uppercase">Marketplaces</label>
-            <div className="mt-1.5 flex items-center gap-3">
-              {ALL_MERCHANTS.map((merchant) => (
-                <label key={merchant} className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={merchantsInput.includes(merchant)}
-                    onChange={() => toggleMerchant(merchant)}
-                    className="size-3.5 accent-[var(--seal)]"
-                  />
-                  {MERCHANT_LABEL[merchant]}
-                </label>
-              ))}
+        <div className="flex flex-col gap-4 px-5 py-5">
+          <div className="flex max-w-xl items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-faint" strokeWidth={1.75} />
+              <Input
+                value={queryInput}
+                onChange={(e) => setQueryInput(e.target.value)}
+                placeholder="Search atta, biscuits, cookies…"
+                className="h-11 rounded-lg pl-10 text-[15px]"
+              />
             </div>
+            <Button
+              type="submit"
+              size="lg"
+              className="h-11 rounded-lg px-6"
+              disabled={!queryInput.trim() || rangeInverted || noMerchantsSelected}
+            >
+              Search
+            </Button>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 pb-2.5 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={watchInput}
-              onChange={(e) => setWatchInput(e.target.checked)}
-              className="size-3.5 accent-[var(--seal)]"
-            />
-            Keep watching for a match
-          </label>
+
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+            <div className="w-28">
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Min ₹</label>
+              <Input
+                type="number"
+                min={1}
+                value={minInput}
+                onChange={(e) => setMinInput(e.target.value)}
+                placeholder="any"
+                className="mt-1.5 rounded-lg"
+              />
+            </div>
+            <div className="w-28">
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Max ₹</label>
+              <Input
+                type="number"
+                min={1}
+                value={maxInput}
+                onChange={(e) => setMaxInput(e.target.value)}
+                placeholder="any"
+                className="mt-1.5 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                Marketplaces
+              </label>
+              <div className="mt-1.5 flex items-center gap-2">
+                {ALL_MERCHANTS.map((merchant) => {
+                  const on = merchantsInput.includes(merchant);
+                  return (
+                    <label
+                      key={merchant}
+                      className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                        on
+                          ? "border-seal/40 bg-seal/10 text-seal"
+                          : "border-border text-muted-foreground hover:bg-muted/40"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggleMerchant(merchant)}
+                        className="sr-only"
+                      />
+                      <span className={`size-1.5 rounded-full ${on ? "bg-seal" : "bg-ink-faint/40"}`} />
+                      {MERCHANT_LABEL[merchant]}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <label
+              className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                watchInput
+                  ? "border-seal/40 bg-seal/10 text-seal"
+                  : "border-border text-muted-foreground hover:bg-muted/40"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={watchInput}
+                onChange={(e) => setWatchInput(e.target.checked)}
+                className="sr-only"
+              />
+              <span className={`size-1.5 rounded-full ${watchInput ? "bg-seal" : "bg-ink-faint/40"}`} />
+              Keep watching for a match
+            </label>
+          </div>
+
+          {rangeInverted && (
+            <p className="text-xs text-deny">Min ₹ is above Max ₹ — nothing could ever match that range.</p>
+          )}
+          {noMerchantsSelected && <p className="text-xs text-deny">Select at least one marketplace to search.</p>}
+
+          <p className="max-w-2xl text-[13px] leading-relaxed text-ink-faint">
+            The budget range filters real results only — it never invents a match. &ldquo;Keep watching&rdquo;
+            re-checks these marketplaces on an interval while this page stays open and surfaces anything that
+            comes into range; it never buys on its own, since every purchase in this project needs your
+            explicit confirmation first.
+          </p>
         </div>
-
-        {rangeInverted && (
-          <p className="text-xs text-deny">Min ₹ is above Max ₹ — nothing could ever match that range.</p>
-        )}
-        {noMerchantsSelected && (
-          <p className="text-xs text-deny">Select at least one marketplace to search.</p>
-        )}
-
-        <p className="max-w-2xl text-xs text-ink-faint">
-          The budget range filters real results only — it never invents a match. &ldquo;Keep watching&rdquo;
-          re-checks these marketplaces on an interval while this page stays open and surfaces anything that
-          comes into range; it never buys on its own, since every purchase in this project needs your
-          explicit confirmation first.
-        </p>
       </form>
 
       {active ? (
@@ -169,18 +194,18 @@ export default function ShopPage() {
           merchants={active.merchants}
         />
       ) : (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border px-6 py-20 text-center">
+        <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed border-border bg-muted/10 px-6 py-20 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/shop_empty_state.jpg"
             alt="Search empty state"
-            className="w-48 h-48 rounded-xl object-cover shadow-sm opacity-90 grayscale-[0.2]"
+            className="size-44 rounded-2xl object-cover opacity-90 grayscale-[0.25]"
           />
-          <div className="max-w-[280px]">
-            <h3 className="font-heading text-lg font-semibold text-foreground">
+          <div className="max-w-[300px]">
+            <h3 className="font-heading text-xl font-bold tracking-tight text-foreground">
               What are you looking for?
             </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
               Search for any grocery item to compare live prices across Zepto, Blinkit, and BigBasket.
             </p>
           </div>

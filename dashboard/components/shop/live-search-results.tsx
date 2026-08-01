@@ -122,24 +122,24 @@ function ProductCard({
       : null;
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-ink-faint">
-      <div className="relative">
+    <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:border-ink-faint/50 hover:shadow-md">
+      <div className="relative overflow-hidden">
         <ProductImage product={product} />
         <span
-          className={`absolute top-2 left-2 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${MERCHANT_BADGE[product.merchant]}`}
+          className={`absolute top-2.5 left-2.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${MERCHANT_BADGE[product.merchant]}`}
         >
           {MERCHANT_LABEL[product.merchant]}
         </span>
         {discount !== null && (
-          <span className="absolute top-2 right-2 rounded bg-allow px-1.5 py-0.5 text-[10px] font-bold text-white">
+          <span className="absolute top-2.5 right-2.5 rounded-full bg-allow px-2 py-0.5 text-[10px] font-bold text-white">
             {discount}% OFF
           </span>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
+      <div className="flex flex-1 flex-col gap-2 p-3.5">
         {cheapest && (
-          <span className="w-fit rounded border border-allow/40 bg-allow/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-allow uppercase">
+          <span className="w-fit rounded-full border border-allow/40 bg-allow/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-allow uppercase">
             Lowest price
           </span>
         )}
@@ -150,7 +150,7 @@ function ProductCard({
         {product.brand && <div className="-mt-1 text-xs text-muted-foreground">{product.brand}</div>}
 
         <div className="flex items-baseline gap-2">
-          <span className="font-mono text-base font-semibold tabular-nums text-foreground">
+          <span className="font-heading text-lg font-bold tracking-tight tabular-nums text-foreground">
             ₹{product.priceInr.toLocaleString("en-IN")}
           </span>
           {product.mrpInr !== undefined && product.mrpInr > product.priceInr && (
@@ -180,7 +180,7 @@ function ProductCard({
                   currentPriceInr: product.priceInr,
                 });
               }}
-              className="w-full justify-center gap-1.5 border border-dashed border-border text-xs text-muted-foreground hover:text-seal"
+              className="w-full justify-center gap-1.5 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:border-seal/40 hover:bg-seal/5 hover:text-seal"
             >
               <Crosshair className="size-3.5" strokeWidth={1.75} />
               Watch price
@@ -192,7 +192,7 @@ function ProductCard({
             variant="outline"
             disabled={!product.available || adding || !addable.ok}
             onClick={handleAdd}
-            className="flex-1"
+            className="flex-1 rounded-lg"
           >
             {adding ? "Adding…" : "Add to cart"}
           </Button>
@@ -203,7 +203,7 @@ function ProductCard({
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               title={`View on ${MERCHANT_LABEL[product.merchant]}`}
-              className="flex shrink-0 items-center gap-1 rounded border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               View
               <ExternalLink className="size-3" strokeWidth={1.75} />

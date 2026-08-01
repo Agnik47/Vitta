@@ -85,10 +85,34 @@ function normalizeLine(row: Record<string, unknown>): RealCartLine | null {
  * legitimately includes "there is nothing in the cart". Treating that as a failure was what made an
  * emptied cart look like a broken read.
  */
+/** Turns a raw webcmd failure into one sentence a person can act on. Presentation only — it never
+ *  changes what happened, and the underlying read still failed exactly as it did. Without this the
+ *  cart banner renders webcmd's own multi-line diagnostic verbatim, which is unreadable and reads
+ *  like a crash rather than "the browser couldn't reach Blinkit just now". */
+function readableCartError(raw: string, merchant: AddToCartMerchant): string {
+  const name = merchant.charAt(0).toUpperCase() + merchant.slice(1);
+  if (/ERR_ABORTED|ERR_NETWORK|ERR_CONNECTION|navigation failed|net::/i.test(raw)) {
+    return `Couldn't reach ${name} just now — the browser navigation was interrupted. Nothing was changed; hit Refresh to try again.`;
+  }
+  if (/timed out/i.test(raw)) {
+    return `${name} took too long to respond. Nothing was changed; hit Refresh to try again.`;
+  }
+  if (/auth|login|not.?logged.?in/i.test(raw)) {
+    return `Not signed in to ${name} — sign in to that account, then hit Refresh.`;
+  }
+  // Unrecognized shape: show the first line only. The full text is still in the server logs, and a
+  // wall of stack-trace in a banner helps nobody.
+  return raw.split("\n")[0].trim() || `Could not read the real ${name} cart.`;
+}
+
 export async function readRealCart(merchant: AddToCartMerchant, timeoutMs = 90_000): Promise<ReadRealCartResult> {
   const raw = await runSearchCli([merchant, "cart"], timeoutMs);
   if (!raw.ok) {
-    return { ok: false, message: raw.message ?? "Could not read the real cart", authRequired: raw.authRequired };
+    return {
+      ok: false,
+      message: readableCartError(raw.message ?? "", merchant),
+      authRequired: raw.authRequired,
+    };
   }
 
   const rows = Array.isArray(raw.rows) ? (raw.rows as Array<Record<string, unknown>>) : [];

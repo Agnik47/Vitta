@@ -179,46 +179,46 @@ export function CreateWatchDialog({
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] tracking-wide text-ink-faint uppercase">Buy at or below ₹</label>
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Buy at or below ₹</label>
               <Input
                 type="number"
                 min={1}
                 value={targetPrice}
                 onChange={(e) => setTargetPrice(e.target.value)}
                 placeholder="399"
-                className="mt-1.5"
+                className="mt-1.5 rounded-lg"
               />
             </div>
             <div>
-              <label className="text-[11px] tracking-wide text-ink-faint uppercase">Quantity</label>
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Quantity</label>
               <Input
                 type="number"
                 min={1}
                 max={12}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="mt-1.5"
+                className="mt-1.5 rounded-lg"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-[11px] tracking-wide text-ink-faint uppercase">From</label>
-              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1.5" />
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">From</label>
+              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1.5 rounded-lg" />
             </div>
             <div>
-              <label className="text-[11px] tracking-wide text-ink-faint uppercase">Until</label>
-              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1.5" />
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Until</label>
+              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1.5 rounded-lg" />
             </div>
             <div>
-              <label className="text-[11px] tracking-wide text-ink-faint uppercase">Check every (min)</label>
+              <label className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Check every (min)</label>
               <Input
                 type="number"
                 min={MIN_INTERVAL_MINUTES}
                 value={intervalMinutes}
                 onChange={(e) => setIntervalMinutes(e.target.value)}
-                className="mt-1.5"
+                className="mt-1.5 rounded-lg"
               />
             </div>
           </div>
@@ -234,8 +234,8 @@ export function CreateWatchDialog({
           </p>
 
           <div>
-            <div className="text-[11px] tracking-wide text-ink-faint uppercase">Mode when it fires</div>
-            <div className="mt-1.5 inline-flex border border-border bg-card p-0.5">
+            <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Mode when it fires</div>
+            <div className="mt-1.5 inline-flex rounded-full border border-border bg-background p-1">
               {(["TEST", "LIVE"] as ExecutionMode[]).map((m) => (
                 <button
                   key={m}
@@ -244,11 +244,11 @@ export function CreateWatchDialog({
                     setMode(m);
                     setAcknowledged(false);
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ${
                     mode === m
                       ? m === "LIVE"
-                        ? "bg-deny/15 text-deny"
-                        : "bg-allow/15 text-allow"
+                        ? "bg-deny/15 text-deny shadow-sm"
+                        : "bg-allow/15 text-allow shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -261,7 +261,7 @@ export function CreateWatchDialog({
           </div>
 
           {mode === "LIVE" && (
-            <label className="flex cursor-pointer items-start gap-2.5 border border-deny/30 bg-deny/5 px-3 py-2.5">
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-deny/30 bg-deny/5 px-4 py-3">
               <input
                 type="checkbox"
                 checked={acknowledged}
