@@ -816,8 +816,18 @@ function requireFlag(flags: Record<string, string>, name: string): string {
   return value;
 }
 
-/** Parses an "HH:MM" (24-hour) time into an ISO 8601 timestamp for today, in local time —
- * consistent with renderConsent()'s toLocaleTimeString() display, which also uses local time. */
+/** Parses an "HH:MM" (24-hour) time into an ISO 8601 timestamp, in local time — consistent with
+ * renderConsent()'s toLocaleTimeString() display, which also uses local time.
+ *
+ * Real bug found live, 2026-08-01: this used to always mean "today at HH:MM" with no check that
+ * the result is actually in the future. A mandate created after its own expiry time-of-day had
+ * already passed (e.g. creating one at 20:00 with --expires 18:00, or simply picking the CLI back
+ * up the next calendar day) was born already-expired, with no warning anywhere — decide()'s
+ * fail-closed EXPIRED check then correctly denied it, but every write (including ₹0 actions like
+ * add-to-cart) looked broken with no indication that "create a new mandate" was the actual fix.
+ * If the given time-of-day has already passed, roll to the same time tomorrow instead — matches
+ * what a person typing a daily cutoff actually means, and a mandate is never handed back dead on
+ * arrival. */
 function parseExpiryTime(timeStr: string): string {
   const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr);
   if (!match) throw new Error(`--expires must be in HH:MM (24-hour) format, got "${timeStr}"`);
@@ -826,6 +836,10 @@ function parseExpiryTime(timeStr: string): string {
   if (hours > 23 || minutes > 59) throw new Error(`--expires "${timeStr}" is not a valid time`);
   const expiry = new Date();
   expiry.setHours(hours, minutes, 0, 0);
+  if (expiry.getTime() <= Date.now()) {
+    expiry.setDate(expiry.getDate() + 1);
+    console.error(`  (--expires ${timeStr} has already passed today — mandate will expire tomorrow at ${timeStr} instead)`);
+  }
   return expiry.toISOString();
 }
 

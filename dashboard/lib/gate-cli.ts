@@ -19,6 +19,39 @@ export interface GateCliResult {
   exitCode: number;
 }
 
+// The real `gate` CLI colors its DENY/ALLOW/STEP_UP output for a terminal (src/cli/ui.ts) — raw
+// \x1b[..m escape codes. Found live, 2026-08-01: a DENY reached the browser as literal garbled
+// escape-code text in a toast ("Could not add to real cart" showing "\x1b[31m\x1b[1mDENY..."),
+// because nothing between the spawned CLI and the JSON response ever stripped them. Every route
+// reads stdout/stderr through this one function, so stripping here fixes it everywhere at once.
+const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_PATTERN, "");
+}
+
+// Known decide()/gate.ts deny/failure shapes, mapped to plain language a shopper (not a CLI
+// operator) can act on. Purely a display translation — the real verdict/code always comes from
+// the one real decide() call inside gate.ts; nothing here re-decides anything (CLAUDE.md rule 8 /
+// ADR-015 still holds — this only rewrites how an existing denial is described).
+export function friendlyGateFailureMessage(raw: string): string {
+  if (/No mandates found/i.test(raw)) {
+    return "No spending mandate exists yet — create one before adding items to the cart.";
+  }
+  if (/·\s*EXPIRED\b/.test(raw)) {
+    return "Your spending mandate has expired — create a new mandate before adding items to the cart.";
+  }
+  if (/·\s*BAD_SIGNATURE\b/.test(raw)) {
+    return "Your mandate's signature failed verification — create a new mandate before continuing.";
+  }
+  if (/·\s*MERCHANT_NOT_ALLOWED\b/.test(raw)) {
+    return "This merchant isn't included in your current mandate's scope.";
+  }
+  if (/·\s*TXN_LIMIT_REACHED\b/.test(raw)) {
+    return "This mandate has reached its maximum number of transactions — create a new mandate to continue.";
+  }
+  return raw;
+}
+
 function gateCliEntryPoint(): string {
   return path.join(getDataDir(), "dist", "cli", "gate.js");
 }
@@ -74,14 +107,14 @@ export function runGateCli(argv: string[], timeoutMs = 60_000): Promise<GateCliR
         if (error && (error as NodeJS.ErrnoException & { killed?: boolean }).killed) {
           resolve({
             ok: false,
-            stdout,
+            stdout: stripAnsi(stdout),
             stderr: `gate CLI timed out after ${Math.round(timeoutMs / 1000)}s — the browser action may still be in progress; check events.jsonl before retrying`,
             exitCode: 124,
           });
           return;
         }
         const exitCode = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-        resolve({ ok: exitCode === 0, stdout, stderr, exitCode });
+        resolve({ ok: exitCode === 0, stdout: stripAnsi(stdout), stderr: stripAnsi(stderr), exitCode });
       }
     );
   });

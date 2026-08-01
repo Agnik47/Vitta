@@ -14,6 +14,15 @@ export interface CliResult {
   timedOut: boolean;
 }
 
+// gate.ts colors its output for a terminal (src/cli/ui.ts, raw \x1b[..m escapes) — strip it here so
+// a DENY/failure that flows through PurchaseAgent's describeFailure() into a job event and then the
+// dashboard never shows garbled escape-code text (same real bug as dashboard/lib/gate-cli.ts's
+// runGateCli, found live 2026-08-01, fixed at both real CLI-spawn boundaries).
+const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_PATTERN, '');
+}
+
 import fs from 'node:fs';
 
 /** Reads the project-root `.env` file (key=value lines, # comments, blank lines) and returns a
@@ -65,7 +74,7 @@ function runCli(cliName: 'gate' | 'search', argv: string[], timeoutMs: number): 
       (error, stdout, stderr) => {
         const timedOut = Boolean(error && (error as NodeJS.ErrnoException & { killed?: boolean }).killed);
         const exitCode = error && typeof error.code === 'number' ? error.code : error ? 1 : 0;
-        resolve({ ok: exitCode === 0 && !timedOut, stdout, stderr, exitCode, timedOut });
+        resolve({ ok: exitCode === 0 && !timedOut, stdout: stripAnsi(stdout), stderr: stripAnsi(stderr), exitCode, timedOut });
       },
     );
   });

@@ -1,11 +1,18 @@
-// Real, ₹0-cost webcmd add-to-cart — routed through the real `gate` CLI (never webcmd directly)
-// so it still passes through decide() and lands a real GateEvent, same as every other write in
-// this project. See ADR-015 / CLAUDE.md rule 8.
+// Legacy "add N of this product" endpoint, now implemented on top of the synchronized cart layer.
 //
-// The product reference each merchant wants differs (id vs URL) and is resolved by
-// lib/product-ref.ts, which also does the host validation — see that file for why a plain regex
-// was wrong here.
-import { runGateCli } from "@/lib/gate-cli";
+// It used to call `gate run -- webcmd blinkit add-to-cart --quantity N` directly. That command is
+// ADDITIVE, so this route was one of the two sources of the dashboard/Blinkit cart divergence: a
+// retry, a double-click, or a re-submit silently multiplied the real quantity while the dashboard's
+// local copy incremented once. Rather than delete the route (and risk a caller elsewhere quietly
+// 404ing), it now resolves the real current quantity first and writes an ABSOLUTE destination via
+// lib/cart-sync.ts — so even a duplicated request can only ever land the cart where it was asked to
+// be, and the caller gets the verified real cart back.
+//
+// Prefer POST /api/shop/cart-sync for new code: it states the target quantity outright, which is
+// fully idempotent. This route's "add one more" contract is inherently relative and is kept only
+// for compatibility.
+import { syncCartQuantity } from "@/lib/cart-sync";
+import { quantityOf, readRealCart } from "@/lib/real-cart";
 import { isAddToCartMerchant, resolveProductRef, type AddToCartMerchant } from "@/lib/product-ref";
 
 export async function POST(req: Request) {
@@ -46,25 +53,22 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, message: resolved.message }, { status: 400 });
   }
 
-  const qty = typeof quantity === "number" && Number.isInteger(quantity) ? quantity : 1;
-  // Blinkit and Zepto cap at 12, BigBasket at 20 (manifest). 12 is the safe common ceiling.
-  if (qty < 1 || qty > 12) {
+  const addQuantity = typeof quantity === "number" && Number.isInteger(quantity) ? quantity : 1;
+  if (addQuantity < 1 || addQuantity > 12) {
     return Response.json({ ok: false, message: "quantity must be between 1 and 12" }, { status: 400 });
   }
 
-  // All three add-to-cart commands accept --quantity (verified in manifest.json; an earlier
-  // comment here claiming zepto/bigbasket lacked it was simply wrong).
-  const result = await runGateCli(
-    ["run", "--", "webcmd", site, "add-to-cart", resolved.arg, "--quantity", String(qty)],
-    120_000 // a real browser add-to-cart measured 20-40s per merchant; 60s was too tight
-  );
+  // Resolve "add N" against the REAL cart rather than assuming it starts wherever the caller thinks.
+  const before = await readRealCart(site);
+  if (!before.ok) {
+    return Response.json({ ok: false, message: before.message }, { status: 502 });
+  }
+  const target = Math.min(quantityOf(before.cart, resolved.arg) + addQuantity, 12);
 
+  const result = await syncCartQuantity(site, resolved.arg, target);
   if (!result.ok) {
-    return Response.json(
-      { ok: false, message: result.stdout.trim() || result.stderr.trim() || "gate run failed" },
-      { status: 422 }
-    );
+    return Response.json({ ok: false, message: result.message, cart: result.cart }, { status: 422 });
   }
 
-  return Response.json({ ok: true, raw: result.stdout.trim(), ref: resolved.arg });
+  return Response.json({ ok: true, ref: resolved.arg, quantity: result.quantity, cart: result.cart });
 }

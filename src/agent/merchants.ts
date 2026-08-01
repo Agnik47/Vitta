@@ -18,6 +18,11 @@ export interface MerchantProfile {
   /** True if the merchant has a clear-cart command in its webcmd manifest. Defaults to true;
    *  set to false if not available. */
   supportsClearCart?: boolean;
+  /** True if the merchant has a command that sets a cart line to an EXACT quantity (rather than
+   *  only adding on top of what's there). When true, the agent states absolute destinations, which
+   *  is idempotent and survives retries; when false it must fall back to the additive add-to-cart,
+   *  which is only correct from a known-empty cart. */
+  supportsAbsoluteQuantity?: boolean;
   /** A precondition that must hold before this merchant can return anything real, checked with a
    *  real read command — not a guess. Absent means no known precondition. */
   precondition?: {
@@ -35,7 +40,17 @@ export const MERCHANT_PROFILES: Record<PurchaseMerchant, MerchantProfile> = {
     site: 'blinkit',
     productRefKind: 'id',
     maxQuantity: 12,
-    supportsClearCart: false,
+    // True as of 2026-08-01: packaged webcmd genuinely has no Blinkit clear-cart, so this was false
+    // and the pipeline's clear step always skipped — which is how a previous session's real items
+    // survived into a later purchase (a human-approved ₹160/4-item cart checked out as ₹354/10).
+    // This repo now ships a real one (webcmd-adapters/blinkit/clear-cart.js, verified live), so the
+    // clear step runs for real. It is still gated on a verified-empty read-back, not on the
+    // command's own success report — see PurchaseAgent Step 1.
+    supportsClearCart: true,
+    // Blinkit's packaged add-to-cart is ADDITIVE (`quantity: current + quantity`), so building a
+    // cart with it is only correct from a known-empty start and breaks on any retry. This repo's
+    // set-cart-quantity adapter states an absolute destination instead, which is idempotent.
+    supportsAbsoluteQuantity: true,
   },
   zepto: {
     site: 'zepto',

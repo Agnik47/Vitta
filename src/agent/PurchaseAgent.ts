@@ -307,27 +307,28 @@ export class PurchaseAgent {
       this.emit('clear-cart', 'skipped', 'Already cleared earlier this session');
     }
 
-    // Step 2 — add every line to the real cart, one real webcmd call per item. Fails closed on the
-    // first item that doesn't add — a partially-added cart must not proceed to checkout, since the
-    // human approved the WHOLE set, not whichever items happened to add successfully.
+    // Step 2 — put every line in the real cart at the EXACT quantity the human approved. Fails
+    // closed on the first item that doesn't land — a partially-built cart must not proceed to
+    // checkout, since the human approved the WHOLE set, not whichever items happened to succeed.
+    //
+    // Absolute vs additive matters here for a real, already-observed reason: Blinkit's packaged
+    // add-to-cart does `quantity: current + quantity`, so it is only correct starting from a cart
+    // known to be empty. Any retry, or a clear step that silently didn't empty the cart, quietly
+    // multiplied the real quantities — that combination is exactly how a human-approved ₹160/4-item
+    // cart became a real ₹354/10-item one. Stating the destination instead of the distance makes
+    // this step idempotent: running it twice leaves the same cart.
     for (const item of items) {
-      this.emit('add-to-cart', 'running', `Adding ${item.productName} (×${item.quantity})`);
-      const addResult = await runGate([
-        'run',
-        '--',
-        'webcmd',
-        merchant,
-        'add-to-cart',
-        item.productRef,
-        '--quantity',
-        String(Math.min(item.quantity, profile.maxQuantity)),
-      ]);
+      const quantity = Math.min(item.quantity, profile.maxQuantity);
+      this.emit('add-to-cart', 'running', `Setting ${item.productName} to ×${quantity}`);
+      const addResult = profile.supportsAbsoluteQuantity
+        ? await runGate(['run', '--', 'webcmd', merchant, 'set-cart-quantity', item.productRef, '--quantity', String(quantity)])
+        : await runGate(['run', '--', 'webcmd', merchant, 'add-to-cart', item.productRef, '--quantity', String(quantity)]);
       if (!addResult.ok) {
         const detail = describeFailure(addResult, 'add-to-cart failed');
         this.emit('add-to-cart', 'failed', `${item.productName}: ${detail}`);
         return this.fail(startedAt, merchant, items, `Could not add ${item.productName} to the cart: ${detail}`);
       }
-      this.emit('add-to-cart', 'done', `${item.productName} added`);
+      this.emit('add-to-cart', 'done', `${item.productName} ×${quantity} in cart`);
     }
 
     // Step 3 — verify the REAL cart, not the optimistic add-to-cart responses.

@@ -3466,6 +3466,28 @@
     "siteSession": null
   },
   {
+    "command": "blinkit/clear-cart",
+    "site": "blinkit",
+    "name": "clear-cart",
+    "aliases": [],
+    "description": "Remove every line from the current Blinkit cart",
+    "access": "write",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "status",
+      "removed",
+      "remaining",
+      "payable",
+      "message"
+    ],
+    "domain": "blinkit.com",
+    "example": "webcmd blinkit clear-cart -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
     "command": "blinkit/location",
     "site": "blinkit",
     "name": "location",
@@ -3518,7 +3540,7 @@
     "site": "blinkit",
     "name": "place-order",
     "aliases": [],
-    "description": "Submit the visible Blinkit final order/payment action. Requires --confirm.",
+    "description": "Advance the Blinkit checkout and submit the final order/payment action. Requires --confirm.",
     "access": "write",
     "strategy": "cookie",
     "browser": true,
@@ -3532,6 +3554,16 @@
         "choices": [],
         "default": false,
         "help": "Required acknowledgement that this may place/pay for a real order"
+      },
+      {
+        "name": "advance-only",
+        "type": "bool",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": false,
+        "help": "Walk the checkout up to the payment step and report it, without ever clicking a paying button"
       }
     ],
     "columns": [
@@ -3674,6 +3706,52 @@
     ],
     "domain": "blinkit.com",
     "example": "webcmd blinkit search <query> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "blinkit/set-cart-quantity",
+    "site": "blinkit",
+    "name": "set-cart-quantity",
+    "aliases": [],
+    "description": "Set a Blinkit cart line to an exact quantity (0 removes it)",
+    "access": "write",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "productId",
+        "type": "string",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Blinkit product id"
+      },
+      {
+        "name": "quantity",
+        "type": "int",
+        "required": true,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": null,
+        "help": "Exact quantity to end up with (0-12; 0 removes the item)"
+      }
+    ],
+    "columns": [
+      "status",
+      "productId",
+      "previousQuantity",
+      "quantity",
+      "itemCount",
+      "itemsTotal",
+      "payable",
+      "message"
+    ],
+    "domain": "blinkit.com",
+    "example": "webcmd blinkit set-cart-quantity <productId> --quantity <quantity> -f yaml",
     "defaultFormat": null,
     "siteSession": null
   },

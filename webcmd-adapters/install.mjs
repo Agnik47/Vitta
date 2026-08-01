@@ -26,10 +26,13 @@ function packagedBlinkitDir() {
 const targetDir = path.join(userClis, 'blinkit');
 fs.mkdirSync(targetDir, { recursive: true });
 
-// The override itself.
-const override = path.join(here, 'blinkit', 'place-order.js');
-fs.copyFileSync(override, path.join(targetDir, 'place-order.js'));
-console.log(`installed  ${path.join(targetDir, 'place-order.js')}`);
+// place-order.js OVERRIDES a packaged command; the other two ADD commands Blinkit has no packaged
+// equivalent for (set-cart-quantity, clear-cart) — webcmd loads every .js in this directory, so a
+// new filename registers a new command rather than shadowing one. See each file's own header.
+for (const file of ['place-order.js', 'set-cart-quantity.js', 'clear-cart.js']) {
+  fs.copyFileSync(path.join(here, 'blinkit', file), path.join(targetDir, file));
+  console.log(`installed  ${path.join(targetDir, file)}`);
+}
 
 // Its sibling dependency, taken from whatever webcmd version is installed right now.
 const packaged = packagedBlinkitDir();

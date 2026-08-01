@@ -1532,3 +1532,99 @@ confirmation screen.
 ⚠️ **The dashboard's execute route already passes `--confirm`.** Its "Confirm & execute real
 purchase" button is now genuinely capable of placing real Cash-on-Delivery orders — previously it
 always failed harmlessly at "Proceed To Pay". Treat that button as live from now on.
+
+---
+
+# Addendum — 2026-08-01: One cart, not two — Blinkit is now the single source of truth
+
+**Status:** ✅ All cart primitives built and verified live · ⏳ full purchase run with the new cart layer not yet re-run
+
+## The two bugs behind "it keeps adding the product again and again"
+
+Both were real, both are fixed, and they compounded each other.
+
+**Bug 1 — every mandate on disk had expired.** The newest expired `2026-07-31T18:29Z`; it was
+`2026-08-01T06:29Z`. `gate.ts` always uses the most recently created mandate, so `decide()`
+fail-closed DENYed every write with `EXPIRED` — including ₹0 actions like add-to-cart. Root cause was
+in mandate *creation*, not policy: `parseExpiryTime()` interpreted `--expires HH:MM` as "today at
+HH:MM" with no future check, so a mandate created after that time-of-day had already passed was born
+already-expired, silently. Now rolls to the next day and says so on stderr.
+
+**Bug 2 — the dashboard and Blinkit kept two independent carts.** The dashboard held optimistic
+quantities in sessionStorage and merely *fired* a real add-to-cart alongside them. They diverged
+immediately and permanently because:
+
+- `blinkit add-to-cart --quantity N` is **additive** — its own write step is
+  `quantity: current + quantity` (packaged `clis/blinkit/add-to-cart.js`). Every click, retry or
+  re-submit multiplied the real quantity while the local copy incremented once.
+- Blinkit had **no remove, no decrement, and no clear-cart command at all**. The real cart could only
+  ever grow; previous sessions' items were invisible to the local model and impossible to remove.
+
+Observed live: dashboard ₹165 vs real cart ₹330; a human-approved ₹160/4-item purchase was really
+₹354/10 items. Real cart at the start of this session: **₹640 across 6 items** (MyFitness ×4, Amul ×2)
+from repeated additive adds of one click each.
+
+## What was built
+
+**Two new webcmd adapters** (`webcmd-adapters/blinkit/`, installed to `~/.webcmd/clis/blinkit/`):
+
+| Command | What it adds |
+|---|---|
+| `blinkit set-cart-quantity <id> --quantity N` | Sets a line to an **exact** quantity; `0` removes it. The missing primitive — packaged Blinkit could only add. |
+| `blinkit clear-cart` | Empties the cart. Reports `remaining` from a real read-back, so callers gate on the verified count, not the command's own success. |
+
+Both use the *same* localStorage + `SYNC_CART` write path the packaged add-to-cart already uses — no
+new transport, no private API. Additive user-local adapters (new commands, not overrides of packaged
+ones); the installed package is untouched and `webcmd adapter reset blinkit` undoes it. Same
+sanctioned mechanism as ADR-016's place-order override. Manifest regenerated: **807 commands**.
+
+**A synchronized cart layer** (`dashboard/lib/real-cart.ts` + `cart-sync.ts` + `/api/shop/cart-sync`).
+Every mutation is: read real cart → compute delta → write an **absolute** destination → re-read →
+verify → only then update the UI. `dashboard/lib/cart-context.tsx` is now a pure mirror: it contains
+no local quantity arithmetic at all, and `lines`/`totalInr`/`itemCount` are only ever written from a
+verified merchant read.
+
+**Why absolute rather than a delta-sized add.** The literal reading of "apply the delta" is
+`add-to-cart --quantity <delta>`, which is only correct if the cart is exactly as it was read a moment
+ago — any retry or slow round-trip makes it silently wrong, and it compounds. An absolute write is
+**idempotent**: applying "quantity = 3" twice leaves 3, not 6. The delta is still computed (it decides
+whether to write at all) but the write states the destination, not the distance.
+
+## Real verification — every result below is from a live run
+
+| Check | Result |
+|---|---|
+| Decrement existing line | MyFitness `4 → 1`, verified by independent cart read |
+| Remove line (`--quantity 0`) | Amul `2 → 0`, cart `₹640/6 items → ₹147/1 item` |
+| Create new line at exact qty | `0 → 2` via `gate run`, real `ALLOW`, cart ₹199/3 |
+| **Idempotency (the reported bug)** | POST set-qty 3 → `prev 1 → 3`, ₹493. **Identical request repeated → `prev 3 → 3`, `changed:false`, ₹493 unchanged.** Old path would have given 6 / ₹934. |
+| Decrement via route | `3 → 1`, ₹493 → ₹199 |
+| `clear-cart` via gate | real `ALLOW`, then verified `₹0 / 0 items` |
+| Dashboard vs Blinkit | Both paths independently report `₹199 · 3 items`, same two lines, same quantities |
+| Mandate-expiry fix | New mandate `mnd_msa005uo46bd5a235a6c` (₹500 cap, expires 23:55), funded from existing paid reserve `cks_0NkEvKofSCvb33CvbrQVl` — real Dodo balance **₹1,170**, no new payment |
+| `npm test` / `tsc --noEmit` | **127/127 pass**, clean on root + dashboard |
+
+## Also fixed — the garbled error text
+
+`gate.ts` colors its output for a terminal (`src/cli/ui.ts`, raw `\x1b[..m`), and the dashboard piped
+that straight into a browser toast, so a DENY rendered as escape-code garbage. Stripped at both real
+CLI-spawn boundaries (`dashboard/lib/gate-cli.ts`, `src/agent/gate-spawn.ts`) plus a
+`friendlyGateFailureMessage()` that turns known deny codes (EXPIRED, BAD_SIGNATURE,
+MERCHANT_NOT_ALLOWED, TXN_LIMIT_REACHED, no-mandate) into plain, actionable sentences.
+
+## Agent pipeline consequences
+
+`MERCHANT_PROFILES.blinkit` now has `supportsClearCart: true` (the clear step used to always skip —
+that is how a previous session's items survived into a later purchase) and a new
+`supportsAbsoluteQuantity: true`. `PurchaseAgent` Step 2 now states absolute quantities, so building
+the cart is idempotent rather than only correct from a known-empty start.
+
+## Honest gaps
+
+- **Only Blinkit is synchronized.** Zepto/BigBasket have no absolute-quantity command, so
+  `cart-sync.ts` fails closed for them rather than silently falling back to an additive add — an
+  additive write dressed up as a synchronized one would be worse hidden than absent.
+- **No full purchase run since these changes.** The cart layer is verified; the end-to-end
+  `place-order --confirm` path with it has not been re-run (that needs explicit authorization).
+- The `MANDATE_GATE` ANSI/expiry fixes and the cart layer are independent — either alone would not
+  have made add-to-cart work.
