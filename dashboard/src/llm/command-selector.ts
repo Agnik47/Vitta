@@ -88,7 +88,7 @@ Respond with JSON containing:
 }`;
 
     const response = await this.groq.parseJsonResponse<WebcmdSelection>({
-      model: 'mixtral-8x7b-32768',
+      model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: systemPrompt }],
       temperature: 0.1,
     });
@@ -120,7 +120,7 @@ Does this command match the user intent? Respond with JSON:
       confidence: number;
       feedback: string;
     }>({
-      model: 'mixtral-8x7b-32768',
+      model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: validationPrompt }],
       temperature: 0.1,
     });
@@ -168,7 +168,7 @@ Which option is more appropriate for the user's intent? Respond with JSON:
       confidence: number;
       reasoning: string;
     }>({
-      model: 'mixtral-8x7b-32768',
+      model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: tiebreakPrompt }],
       temperature: 0.1,
     });

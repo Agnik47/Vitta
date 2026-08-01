@@ -110,15 +110,17 @@ export default function AIAssistantPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
       {/* Header */}
-      <div className="border-b border-slate-700 bg-slate-800/50 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="text-2xl">🤖</div>
+      <div className="border-b border-white/10 bg-black/20 backdrop-blur-sm px-8 py-6 shadow-lg">
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
+          <div className="text-4xl">🛒</div>
           <div>
-            <h1 className="text-2xl font-bold text-white">Vitta AI Assistant</h1>
-            <p className="text-sm text-slate-400">
-              Ask me to search products, add to cart, or place orders
+            <h1 className="text-3xl font-bold text-white tracking-tight">
+              Vitta AI Shopping Assistant
+            </h1>
+            <p className="text-sm text-purple-200 mt-1">
+              Your smart shopping companion - Just ask naturally!
             </p>
           </div>
         </div>
@@ -127,89 +129,134 @@ export default function AIAssistantPage() {
       {/* Messages Area */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-6 space-y-4"
+        className="flex-1 overflow-y-auto px-8 py-8"
       >
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400">
-            <div className="text-6xl mb-4">👋</div>
-            <h2 className="text-2xl font-semibold mb-2 text-white">
-              Welcome to Vitta AI
-            </h2>
-            <p className="text-center max-w-md">
-              Try asking me things like: "Search for milk", "Add curd to my
-              cart", "Show my cart", or "Place my order"
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-md rounded-lg px-4 py-3 ${
-                msg.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-br-none'
-                  : 'bg-slate-700 text-slate-100 rounded-bl-none'
-              }`}
-            >
-              <p className="text-sm">{msg.content}</p>
-              <p
-                className={`text-xs mt-1 ${
-                  msg.role === 'user'
-                    ? 'text-blue-100'
-                    : 'text-slate-400'
-                }`}
-              >
-                {msg.timestamp.toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+        <div className="max-w-5xl mx-auto space-y-6">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-white/70 py-20">
+              <div className="text-7xl mb-6">🎯</div>
+              <h2 className="text-3xl font-semibold mb-4 text-white">
+                Welcome to Vitta AI
+              </h2>
+              <p className="text-center text-lg max-w-2xl leading-relaxed mb-6">
+                I can help you shop across multiple platforms. Try asking:
               </p>
-            </div>
-          </div>
-        ))}
-
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-slate-700 text-slate-100 rounded-lg rounded-bl-none px-4 py-3">
-              <div className="flex gap-2">
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                <div
-                  className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                  style={{ animationDelay: '0.1s' }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
-                  style={{ animationDelay: '0.2s' }}
-                ></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-3xl">
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 border border-white/20">
+                  <p className="text-white">💡 "Search for organic milk on Blinkit"</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 border border-white/20">
+                  <p className="text-white">💡 "Show me my cart"</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 border border-white/20">
+                  <p className="text-white">💡 "Add paneer to cart"</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 border border-white/20">
+                  <p className="text-white">💡 "Find butter on Zepto"</p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div ref={messagesEndRef} />
+          {messages.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-3xl rounded-2xl px-6 py-4 shadow-lg ${
+                  msg.role === 'user'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                    : 'bg-white/95 text-gray-800 border border-white/20'
+                }`}
+              >
+                <p className="text-base leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </p>
+                <p
+                  className={`text-xs mt-2 ${
+                    msg.role === 'user'
+                      ? 'text-blue-100'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  {msg.timestamp.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-white/95 text-gray-800 rounded-2xl px-6 py-4 shadow-lg border border-white/20">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1.5">
+                    <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce"></div>
+                    <div
+                      className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce"
+                      style={{ animationDelay: '0.15s' }}
+                    ></div>
+                    <div
+                      className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce"
+                      style={{ animationDelay: '0.3s' }}
+                    ></div>
+                  </div>
+                  <span className="text-sm text-gray-600">Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-slate-700 bg-slate-800/50 p-6">
-        <div className="flex gap-3">
+      <div className="border-t border-white/10 bg-black/20 backdrop-blur-sm px-8 py-6">
+        <div className="max-w-5xl mx-auto flex gap-4">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-            placeholder="Ask me to search, add to cart, or place an order..."
-            className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400"
+            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+            placeholder="Ask me anything about shopping..."
+            className="flex-1 bg-white/10 backdrop-blur-sm text-white rounded-xl px-6 py-4 text-base outline-none focus:ring-2 focus:ring-purple-400 placeholder-white/50 border border-white/20 transition-all"
             disabled={isLoading}
           />
           <button
             onClick={handleSendMessage}
             disabled={isLoading || !inputValue.trim()}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-3 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl px-8 py-4 font-semibold text-base disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl disabled:hover:shadow-lg"
           >
-            {isLoading ? '⏳' : '📤'}
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <svg
+                  className="animate-spin h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              </span>
+            ) : (
+              <span>Send 🚀</span>
+            )}
           </button>
         </div>
       </div>
