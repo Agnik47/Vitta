@@ -6,7 +6,10 @@
 // Usage:
 //   node dist/cli/agent.js buy --merchant blinkit \
 //     --items '[{"productRef":"171258","productName":"Maggi Masala","quantity":1}]' \
-//     [--clear-cart] [--min-cart 150] [--max-cart 2000] [--mandate mnd_...]
+//     [--clear-cart] [--min-cart 150] [--max-cart 2000] [--mandate mnd_...] [--mode test|live]
+//
+// `--mode` selects the settlement path (src/receipt/execution-mode.ts). Defaults to LIVE, matching
+// `gate run`, so every invocation written before this flag existed behaves exactly as it did.
 //
 // `--items` carries every line for the one real checkout this job will perform — a Purchase Job is
 // always scoped to a single merchant (a real checkout can't span two marketplaces), but a
@@ -20,6 +23,7 @@
 // the same object, only that they're the same file on disk).
 import { PurchaseAgent, type PurchaseInput, type PurchaseItem, type PurchaseStepEvent } from '../agent/PurchaseAgent';
 import { isPurchaseMerchant } from '../agent/merchants';
+import { parseExecutionMode } from '../receipt/execution-mode';
 import { loadAllMandates } from './store';
 
 function parseArgs(argv: string[]): { positionals: string[]; flags: Record<string, string | boolean> } {
@@ -85,6 +89,15 @@ async function cmdBuy(argv: string[]): Promise<void> {
   const clearCartFirst = flags['clear-cart'] === true;
   const mandateId = typeof flags.mandate === 'string' ? flags.mandate : resolveMostRecentMandateId();
 
+  // Throws on an unrecognized value rather than guessing — an unreadable mode must never quietly
+  // become LIVE and place a real order.
+  let mode;
+  try {
+    mode = parseExecutionMode(typeof flags.mode === 'string' ? flags.mode : undefined);
+  } catch (err) {
+    fail((err as Error).message);
+  }
+
   const input: PurchaseInput = {
     merchant,
     items,
@@ -92,6 +105,7 @@ async function cmdBuy(argv: string[]): Promise<void> {
     minCartInr: minCartInr !== undefined && Number.isFinite(minCartInr) ? minCartInr : undefined,
     maxCartInr: maxCartInr !== undefined && Number.isFinite(maxCartInr) ? maxCartInr : undefined,
     mandateId,
+    mode,
   };
 
   const agent = new PurchaseAgent((event: PurchaseStepEvent) => {

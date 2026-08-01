@@ -14,6 +14,7 @@ import { decide } from '../policy/decide';
 import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '../receipt/chain';
 import type { Receipt } from '../receipt/schema';
 import { buildAndSignAuthorization, type TransactionAuthorization } from '../receipt/authorization';
+import { parseExecutionMode, receiptExecutionMode } from '../receipt/execution-mode';
 import { DodoCreditLedger } from '../ledger/DodoCreditLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
 import { resolveCartTotalInr, type CheckoutRow, type CartLineRow } from '../webcmd/cart-total';
@@ -185,9 +186,11 @@ function cmdReceiptShow(args: string[]): void {
   if (!receiptId) throw new Error('Usage: gate receipt show <receipt_id>');
   const receipt = loadReceipt(receiptId);
 
+  const mode = receiptExecutionMode(receipt.execution.mode);
   console.log(`✓ RECEIPT ${receipt.receipt_id} signed\n`);
   console.log(`  mandate  ${receipt.mandate_hash}        cart     ${receipt.cart.merchant} · ${receipt.cart.items} items · ₹${formatInr(receipt.cart.total_inr)}`);
   console.log(`  payment  ${receipt.payment.rail} · ${receipt.payment.status}`);
+  console.log(`  mode     ${mode}${mode === 'TEST' ? ' — settled against the Dodo test reserve; no merchant order was placed' : ''}`);
   console.log(`  run      ${receipt.execution.command} · ${receipt.execution.run_id}`);
   const orderSuffix = receipt.evidence.network_order_id ? ` · order #${receipt.evidence.network_order_id}` : '';
   console.log(`  evidence trace ${receipt.evidence.trace_digest}${orderSuffix}`);
@@ -384,18 +387,29 @@ async function cmdRun(args: string[]): Promise<void> {
   const site = webcmdArgs[1];
   const command = webcmdArgs[2];
   const rawCmdArgs = webcmdArgs.slice(3);
-  // --run-id is a gate-CLI-level flag (Beat 8's idempotency-retry test), not a webcmd argument —
-  // strip it out before anything is passed through to the real webcmd process.
+  // --run-id and --mode are gate-CLI-level flags, not webcmd arguments — strip them out before
+  // anything is passed through to the real webcmd process.
   let explicitRunId: string | undefined;
+  let modeFlag: string | undefined;
   const cmdArgs: string[] = [];
   for (let i = 0; i < rawCmdArgs.length; i++) {
     if (rawCmdArgs[i] === '--run-id') {
       explicitRunId = rawCmdArgs[i + 1];
       i++;
+    } else if (rawCmdArgs[i] === '--mode') {
+      modeFlag = rawCmdArgs[i + 1];
+      i++;
     } else {
       cmdArgs.push(rawCmdArgs[i]);
     }
   }
+  // `--mode` may also appear before the `--` separator (gate run --mode test -- webcmd ...), which
+  // reads more naturally since it governs the gate, not the merchant command.
+  const preSeparator = args.slice(0, dashDashIndex);
+  const preModeIdx = preSeparator.indexOf('--mode');
+  if (preModeIdx !== -1) modeFlag = preSeparator[preModeIdx + 1];
+  // Throws on an unrecognized value rather than guessing — see parseExecutionMode.
+  const executionMode = parseExecutionMode(modeFlag);
   const fullCommand = `${site}/${command}`;
 
   // Load the most recent mandate
@@ -676,6 +690,55 @@ async function cmdRun(args: string[]): Promise<void> {
   console.log(`  ${site} · ₹${formatInr(cartAmountInr)} · reserve verified ₹${formatInr(ledgerBalanceInr)}`);
   console.log('  no money moved yet — awaiting merchant confirmation');
 
+  // TEST mode settles here, WITHOUT driving the merchant's checkout.
+  //
+  // Everything above this point ran identically to LIVE: the real cart was read from the merchant,
+  // the real mandate's signature/expiry/caps were checked by the one real decide(), the real Dodo
+  // reserve balance was read, and a real signed authorization was written. Below, the Dodo draw and
+  // the signed, chain-linked receipt are also real — the Dodo side has always been test-mode-only
+  // (CLAUDE.md hard rule 1), so nothing about it changes between modes.
+  //
+  // What is deliberately NOT done: execute() is never called, so webcmd never walks Blinkit's
+  // checkout and no merchant order is created. The receipt therefore carries execution.mode 'TEST'
+  // and NO network_order_id/commit_proof, because there is no merchant confirmation to record.
+  //
+  // This does not weaken ADR-013. That rule — never sign a receipt claiming an order the merchant
+  // didn't confirm — is about not making a FALSE claim. A TEST receipt makes no such claim: it says
+  // "TEST" inside its own signed body, and the absence of an order id is the honest, readable
+  // consequence. The LIVE branch below is byte-for-byte unchanged and still fails closed.
+  if (executionMode === 'TEST') {
+    if (mandate.reserve.ref) {
+      await ledger.draw(mandate.reserve.ref, cartAmountPaise, runId);
+    }
+    recordDraw({ runId, reserveRef: mandate.reserve.ref, amountInrPaise: cartAmountPaise, ts: new Date().toISOString() });
+
+    const testReceipt: Receipt = buildAndSignReceipt(
+      {
+        receipt_id: generateId('rcp'),
+        authorization_id: authorization.authorization_id,
+        mandate_hash: sha256Hex(mandate),
+        cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
+        payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
+        execution: { command: fullCommand, run_id: runId, profile: '', mode: 'TEST' },
+        // No trace digest: no browser command was run, so there is no trace to digest. Empty is the
+        // truthful value here, not a placeholder standing in for something that exists.
+        evidence: { trace_digest: '' },
+        prev_receipt_hash: allReceipts.length === 0 ? CHAIN_HEAD_HASH : sha256Hex(allReceipts[allReceipts.length - 1]),
+      },
+      gatePrivateKey,
+    );
+    saveReceipt(testReceipt);
+
+    console.log(`✓ SETTLED IN TEST MODE · ${site}`);
+    console.log(`  reserve drawn ₹${formatInr(cartAmountInr)} from the real Dodo test reserve`);
+    console.log(`  NO MERCHANT ORDER PLACED — ${site}'s checkout was not driven in test mode`);
+    console.log(`✓ ${fullCommand} executed · runId ${runId}`);
+    console.log(`  receipt ${testReceipt.receipt_id}`);
+    console.log(`  amount ₹${formatInr(cartAmountInr)}`);
+    console.log(`  execution mode TEST`);
+    return;
+  }
+
   try {
     const result = await execute(site, command, cmdArgs, runId);
 
@@ -755,7 +818,7 @@ async function cmdRun(args: string[]): Promise<void> {
         mandate_hash: sha256Hex(mandate),
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
         payment: { rail: 'dodo_test', reserve_ref: mandate.reserve.ref, status: 'captured' },
-        execution: { command: fullCommand, run_id: runId, profile: '' },
+        execution: { command: fullCommand, run_id: runId, profile: '', mode: 'LIVE' },
         evidence: {
           trace_digest: result.traceDigest,
           network_order_id: networkOrderId,

@@ -27,6 +27,8 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import { MinCartBanner } from "@/components/shop/min-cart-banner";
 import { useCart } from "@/lib/cart-context";
+import { useExecutionMode, MODE_META } from "@/lib/execution-mode";
+import { ExecutionModeToggle } from "@/components/shop/execution-mode-toggle";
 import { MERCHANT_LABEL } from "@/lib/shop-catalog";
 import { getShopSessionId } from "@/lib/shop-session";
 import type { Mandate } from "@/lib/types";
@@ -37,6 +39,7 @@ const MERCHANT = "blinkit" as const;
 export default function CartPage() {
   const router = useRouter();
   const { lines, totalInr, itemCount, syncing, error, setQuantity, removeItem, refresh } = useCart();
+  const { mode } = useExecutionMode();
   const [starting, setStarting] = useState(false);
   const [minCartInr, setMinCartInr] = useState<number | null>(null);
 
@@ -95,6 +98,7 @@ export default function CartPage() {
           minCartInr,
           mandateId: mandate?.mandate_id,
           confirm: true,
+          mode,
         }),
       });
       const json = await res.json();
@@ -217,6 +221,8 @@ export default function CartPage() {
           />
 
           <div className="flex flex-col gap-3 border border-border bg-surface-sunken px-4 py-3">
+            <ExecutionModeToggle className="border-b border-border pb-3" />
+
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[10px] tracking-widest text-ink-faint uppercase">Cart total</div>
@@ -243,20 +249,41 @@ export default function CartPage() {
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
-                      <AlertTriangle className="size-4 text-deny" strokeWidth={2} />
-                      This moves real (test-mode) money
+                      <AlertTriangle
+                        className={`size-4 ${mode === "LIVE" ? "text-deny" : "text-step-up"}`}
+                        strokeWidth={2}
+                      />
+                      {mode === "LIVE" ? "This places a real order" : "This draws from your test reserve"}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      This checks out your real {MERCHANT_LABEL[MERCHANT]} cart —{" "}
+                      <span className="mb-2 block">
+                        Running in <strong className="text-foreground">{MODE_META[mode].dot} {MODE_META[mode].label}</strong>.
+                      </span>
+                      This adds your real {MERCHANT_LABEL[MERCHANT]} cart —{" "}
                       <strong className="font-mono text-foreground">₹{totalInr.toLocaleString("en-IN")}</strong> across{" "}
-                      {itemCount} item(s), exactly as listed above — and, if your mandate&apos;s real policy check allows
-                      it, places a real order and draws from your real Dodo reserve. It runs to completion with no
-                      further confirmation from you. Continue?
+                      {itemCount} item(s), exactly as listed above — verifies it, and runs your mandate&apos;s real
+                      policy check.{" "}
+                      {mode === "LIVE" ? (
+                        <>
+                          If it passes, {MERCHANT_LABEL[MERCHANT]}&apos;s real checkout is driven to a{" "}
+                          <strong className="text-foreground">real placed order</strong> and your Dodo reserve is
+                          drawn.
+                        </>
+                      ) : (
+                        <>
+                          If it passes, it settles against your real Dodo <strong className="text-foreground">test
+                          reserve</strong> and signs a receipt marked TEST.{" "}
+                          <strong className="text-foreground">No {MERCHANT_LABEL[MERCHANT]} order is placed.</strong>
+                        </>
+                      )}{" "}
+                      It runs to completion with no further confirmation from you. Continue?
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleProceed}>Yes, start the real purchase</AlertDialogAction>
+                    <AlertDialogAction onClick={handleProceed}>
+                      {mode === "LIVE" ? "Yes, place a real order" : "Yes, run in test mode"}
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Search, Zap } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { ExecutionModeToggle } from "@/components/shop/execution-mode-toggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LiveSearchResults, type BudgetRange } from "@/components/shop/live-search-results";
@@ -64,6 +65,12 @@ export default function ShopPage() {
           are never merged or estimated across merchants. A merchant that returns nothing or errors
           says so honestly rather than showing a placeholder.
         </p>
+      </div>
+
+      {/* Shown here, at the start of the workflow, so the mode is a deliberate choice made BEFORE
+          building a cart — not something noticed for the first time at the confirm dialog. */}
+      <div className="mb-5 border border-border bg-card px-4 py-3">
+        <ExecutionModeToggle />
       </div>
 
       <form

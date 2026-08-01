@@ -28,6 +28,8 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/page-header";
 import { Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
+import { ExecutionModeBadge } from "@/components/shop/execution-mode-toggle";
+import type { ExecutionMode } from "@/lib/execution-mode";
 import { MERCHANT_LABEL } from "@/lib/shop-catalog";
 
 interface StepEvent {
@@ -55,6 +57,7 @@ interface ResultEvent {
   paymentStatus?: "captured" | "not_charged";
   failureReason?: string;
   completedAt?: string;
+  mode?: ExecutionMode;
 }
 
 interface JobPoll {
@@ -65,6 +68,9 @@ interface JobPoll {
   result?: ResultEvent;
   startedAt: string;
   finishedAt?: string;
+  /** The mode this JOB was started with — not whatever the toggle currently says. A result page
+   *  reopened after the toggle was flipped must still describe the run that actually happened. */
+  mode?: ExecutionMode;
 }
 
 interface ReceiptVerification {
@@ -322,11 +328,20 @@ export default function PurchaseJobPage() {
       ? MERCHANT_LABEL[result.merchant as keyof typeof MERCHANT_LABEL]
       : (result?.merchant ?? "—");
 
+  // The mode the RUN used. Prefers the result (the agent reports what it actually did) over the
+  // job's recorded input, and never falls back to the live toggle — a page reopened after the
+  // toggle was flipped must still describe the run that happened.
+  const runMode: ExecutionMode | undefined = result?.mode ?? job.mode;
+  const isTestRun = runMode === "TEST";
+
   // The three real, independent milestones this job can reach — never inferred beyond what the
   // real result/state actually says.
   const authorized = Boolean(result?.authorizationId);
+  // In TEST mode no merchant order exists by design, so this milestone is never claimed — showing
+  // it as reached would assert exactly the thing test mode deliberately does not do.
   const merchantConfirmed =
-    Boolean(result?.receiptId) || Boolean(result?.ok && !result?.awaitingMerchantConfirmation && authorized);
+    !isTestRun &&
+    (Boolean(result?.receiptId) || Boolean(result?.ok && !result?.awaitingMerchantConfirmation && authorized));
   const receiptReady = Boolean(result?.receiptId);
   const awaitingConfirmation = Boolean(result?.awaitingMerchantConfirmation);
 
@@ -335,7 +350,9 @@ export default function PurchaseJobPage() {
   let bannerLabel = "Purchase failed";
   if (receiptReady) {
     bannerTone = "allow";
-    bannerLabel = "VERIFIED SUCCESS";
+    // Never just "VERIFIED SUCCESS" for a test run — the word success without the qualifier would
+    // read as "an order was placed", which is precisely what did not happen.
+    bannerLabel = isTestRun ? "TEST MODE — settled, no merchant order placed" : "VERIFIED SUCCESS";
   } else if (awaitingConfirmation) {
     bannerTone = "waiting";
     bannerLabel = "Authorized — waiting for merchant confirmation";
@@ -353,11 +370,16 @@ export default function PurchaseJobPage() {
 
       <div className="flex flex-col gap-4">
         <Panel>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div className="text-sm font-semibold text-foreground">Execution Progress Timeline</div>
-            <span className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-              State: {job.state ?? "PENDING"}
-            </span>
+            <div className="flex items-center gap-2">
+              {/* The mode this run used — read from the job, never from the live toggle, so
+                  reopening this page after flipping the toggle still describes what happened. */}
+              {runMode && <ExecutionModeBadge mode={runMode} />}
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                State: {job.state ?? "PENDING"}
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -405,18 +427,53 @@ export default function PurchaseJobPage() {
               <MilestoneBadge
                 achieved={merchantConfirmed}
                 pending={awaitingConfirmation}
-                label="Merchant Order Confirmed"
+                label={isTestRun ? "Merchant Order Confirmed (not applicable in test mode)" : "Merchant Order Confirmed"}
                 pendingLabel="Waiting for Merchant Confirmation"
               />
               <MilestoneBadge achieved={receiptReady} label="Receipt Generated" />
             </div>
 
+            {isTestRun && (
+              <div className="mb-5 flex items-start gap-2.5 border border-allow/30 bg-allow/5 px-3 py-2.5 text-xs text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-allow" strokeWidth={1.75} />
+                <span>
+                  This run executed the full pipeline — real cart, real mandate check, real reserve draw, real signed
+                  receipt — and settled against your Dodo test reserve.{" "}
+                  <strong className="text-foreground">No {merchantLabel} order was placed</strong>, so there is no
+                  merchant order id. Switch to Live Mode on the cart page to place a real order.
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
               <Field label="Marketplace" value={merchantLabel} />
               <Field label="Product" value={result.productName ?? "—"} />
               <Field label="Amount" value={result.finalAmountInr !== undefined ? rupees(result.finalAmountInr) : "—"} />
-              <Field label="Order ID" value={result.orderId ?? (result.commitProof ? `(${result.commitProof})` : "not yet provided by merchant")} />
-              <Field label="Payment status" value={result.paymentStatus === "captured" ? "Captured" : "Not charged"} />
+              <Field
+                label="Execution mode"
+                value={runMode ? <ExecutionModeBadge mode={runMode} /> : "—"}
+              />
+              <Field
+                label="Order ID"
+                value={
+                  result.orderId ??
+                  (result.commitProof
+                    ? `(${result.commitProof})`
+                    : isTestRun
+                      ? "none — test mode places no order"
+                      : "not yet provided by merchant")
+                }
+              />
+              <Field
+                label="Payment status"
+                value={
+                  result.paymentStatus === "captured"
+                    ? isTestRun
+                      ? "Captured (Dodo test reserve)"
+                      : "Captured"
+                    : "Not charged"
+                }
+              />
               <Field label="Gate verdict" value={result.verdict ?? "—"} />
               <Field
                 label="Receipt"

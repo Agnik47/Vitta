@@ -100,6 +100,15 @@ export function ReceiptEntry({
           {" · "}
           <span className="capitalize">{receipt.payment.status}</span>
         </Field>
+        {/* Absent mode means LIVE — every receipt written before this field existed attested to a
+            real merchant order. Shown on every receipt so the two can never be confused. */}
+        <Field label="Execution mode">
+          {(receipt.execution.mode ?? "LIVE") === "TEST" ? (
+            <span className="text-allow">🟢 TEST — no merchant order placed</span>
+          ) : (
+            <span className="text-deny">🔴 LIVE — real merchant order</span>
+          )}
+        </Field>
       </div>
 
       {/* ── Signature strip ── */}

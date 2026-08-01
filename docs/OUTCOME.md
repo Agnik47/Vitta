@@ -1628,3 +1628,86 @@ the cart is idempotent rather than only correct from a known-empty start.
   `place-order --confirm` path with it has not been re-run (that needs explicit authorization).
 - The `MANDATE_GATE` ANSI/expiry fixes and the cart layer are independent — either alone would not
   have made add-to-cart work.
+
+---
+
+# Addendum — 2026-08-01 (later): Purchase Mode toggle — TEST vs LIVE
+
+**Status:** ✅ Built and verified live end to end in TEST mode · LIVE path provably untouched
+
+## Why
+
+Live Mode works (verified earlier: real cart → real mandate gate → real Blinkit checkout), but it
+cannot finish unattended. Blinkit's payment step needs a human — a UPI QR scanned on a phone — and
+Cash-on-Delivery is intermittently unavailable: a real run this session reached "Select Payment
+Method" with COD showing *"This payment method is not available at the moment"*, so the adapter
+correctly stopped at `action_required` and refused to sign anything. Correct behaviour, but it makes
+the end-to-end flow undemonstrable without a phone in someone's hand.
+
+TEST mode exercises every part this project actually owns, unattended.
+
+## The one difference
+
+Both modes run the **identical** pipeline through a single decision path. What differs is only
+whether the merchant's own checkout is driven:
+
+| Step | TEST | LIVE |
+|---|---|---|
+| Search, clear-cart, add-to-cart, cart verification | real | real |
+| `decide()` — signature, expiry, merchant, caps, txn limit | real | real |
+| Dodo reserve balance read | real | real |
+| Merchant checkout driven to a placed order | **no** | yes |
+| Dodo reserve draw | real (test credits) | real (test credits) |
+| Signed, chain-linked receipt | real, marked `TEST` | real, marked `LIVE` |
+
+Nothing is mocked or bypassed in either mode. Note that "LIVE" never meant live money at Dodo —
+every Dodo call in this repo is test-mode-only and always has been (CLAUDE.md hard rule 1). The
+distinction is purely merchant-side.
+
+## Honesty design — how a TEST receipt cannot be mistaken for a real order
+
+- `Receipt.execution.mode` is `'TEST' | 'LIVE'`, **inside the signed body**, so it is as
+  tamper-evident as the amount.
+- A TEST receipt carries **no** `network_order_id` and **no** `commit_proof`, because no merchant
+  order exists to name. ADR-013 is unchanged for LIVE (exactly one proof field still required); a
+  TEST receipt simply never makes the claim, rather than making a false one.
+- The result page does not light the "Merchant Order Confirmed" milestone in TEST mode, and the
+  success banner reads *"TEST MODE — settled, no merchant order placed"*, never bare "VERIFIED
+  SUCCESS".
+- Receipts written before this field existed read as LIVE by definition — every one of them attested
+  to a real merchant order (`receiptExecutionMode()`).
+
+## Fail-closed defaults
+
+- `gate run` / `agent buy` default to **LIVE** when `--mode` is absent, so every pre-existing script
+  behaves exactly as before.
+- The dashboard defaults to **TEST** and always sends the mode explicitly — a browser click must
+  never place a real order because a mode was omitted somewhere in the chain.
+- An unrecognized mode **throws** rather than defaulting either way (`parseExecutionMode`), and
+  `/api/shop/purchase-run` rejects it with 400. Verified: `"sandbox"` → refused.
+
+## Real verification — live runs
+
+| Check | Result |
+|---|---|
+| `gate run --mode test` direct | real `ALLOW` ₹281 → `SETTLED IN TEST MODE` → receipt `rcp_msa3ells21fcda8c5b58` |
+| Dodo reserve, run 1 | **₹1,170 → ₹889** — exact ₹281 real test-credit draw |
+| Full dashboard job (`POST /api/shop/purchase-run`, `mode:"TEST"`) | reached `RECEIPT_READY`, `ok:true`, receipt `rcp_msa3pg829fdfb4519749`, `orderId: none` |
+| Dodo reserve, run 2 | **₹889 → ₹608** — exact ₹281 again |
+| Receipt contents | `mode TEST — settled against the Dodo test reserve; no merchant order was placed` |
+| `gate verify` | `✓ signature valid · chain intact` |
+| Merchant cart after a TEST run | unchanged at ₹281 — the checkout genuinely was not driven |
+| Invalid mode via API | `400 mode must be "TEST" or "LIVE"` |
+| Missing `confirm` | still refused, unchanged |
+| `npm test` / `tsc --noEmit` | **127/127**, clean on root + dashboard |
+
+## LIVE path is provably untouched
+
+The complete set of deleted lines in `src/cli/gate.ts` for this change is three: two comment lines
+(reworded) and `execution: {...}` (which gained `mode: 'LIVE'`). The LIVE branch's
+`execute()` → `evaluateCommitProof()` → fail-closed → `draw()` → `buildAndSignReceipt()` sequence is
+byte-for-byte unchanged. The TEST branch is a guarded early return placed *after* the authorization
+is signed, so it cannot alter LIVE control flow.
+
+**Not re-run this session, deliberately:** a LIVE `--confirm` order. The user asked for it to be left
+alone, and its last real run is documented above.

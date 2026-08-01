@@ -22,6 +22,10 @@ export interface AgentBuyItem {
   quantity: number;
 }
 
+/** Which settlement path a run takes. Mirrors src/receipt/execution-mode.ts by hand, following this
+ *  app's existing convention of not importing src/ types directly (see lib/types.ts's header). */
+export type ExecutionMode = "TEST" | "LIVE";
+
 export interface AgentBuyInput {
   merchant: "blinkit" | "zepto" | "bigbasket";
   /** Every line to add before this job's one real checkout — a job is always scoped to a single
@@ -32,6 +36,9 @@ export interface AgentBuyInput {
   minCartInr?: number;
   maxCartInr?: number;
   mandateId?: string;
+  /** TEST settles against the real Dodo test reserve without driving the merchant's checkout; LIVE
+   *  walks the real checkout to a placed order. Every step before the commit is identical. */
+  mode?: ExecutionMode;
 }
 
 /** One decoded NDJSON line from the agent CLI — either a step event or the terminal result. Kept as
@@ -61,6 +68,10 @@ export function runAgentBuy(input: AgentBuyInput, onLine: (line: AgentLine) => v
   if (input.minCartInr !== undefined) argv.push("--min-cart", String(input.minCartInr));
   if (input.maxCartInr !== undefined) argv.push("--max-cart", String(input.maxCartInr));
   if (input.mandateId) argv.push("--mandate", input.mandateId);
+  // Always sent explicitly. The CLI's own default is LIVE (so pre-existing scripts are unaffected),
+  // but a dashboard click must never fall through to placing a real order because a mode was
+  // omitted somewhere in the chain — the caller states it every time.
+  argv.push("--mode", (input.mode ?? "TEST").toLowerCase());
 
   return new Promise((resolve) => {
     const proc = spawn(process.execPath, [agentCliEntryPoint(), ...argv], {

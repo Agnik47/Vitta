@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppNavbar } from "@/components/layout/app-navbar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CartProvider } from "@/lib/cart-context";
+import { ExecutionModeProvider } from "@/lib/execution-mode";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -44,7 +45,8 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <CartProvider>
+          <ExecutionModeProvider>
+            <CartProvider>
             <TooltipProvider delayDuration={200}>
               <SidebarProvider style={{ "--sidebar-width": "15rem" } as React.CSSProperties}>
                 <AppSidebar />
@@ -57,7 +59,8 @@ export default function RootLayout({
               </SidebarProvider>
             </TooltipProvider>
             <Toaster position="bottom-right" />
-          </CartProvider>
+            </CartProvider>
+          </ExecutionModeProvider>
         </ThemeProvider>
       </body>
     </html>

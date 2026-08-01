@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, message: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { sessionId, merchant, items, minCartInr, maxCartInr, mandateId, confirm } = (body ?? {}) as {
+  const { sessionId, merchant, items, minCartInr, maxCartInr, mandateId, confirm, mode } = (body ?? {}) as {
     sessionId?: unknown;
     merchant?: unknown;
     items?: unknown;
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
     maxCartInr?: unknown;
     mandateId?: unknown;
     confirm?: unknown;
+    mode?: unknown;
   };
 
   if (!isValidShopSessionId(sessionId)) {
@@ -33,6 +34,14 @@ export async function POST(req: Request) {
   if (!isAddToCartMerchant(merchant)) {
     return Response.json({ ok: false, message: "merchant must be one of blinkit, zepto, bigbasket" }, { status: 400 });
   }
+  // Fails closed on an unrecognized mode rather than defaulting — a typo'd or tampered value must
+  // never silently resolve to LIVE and place a real order. Absent is allowed and means TEST, the
+  // safer of the two for a request arriving from a browser.
+  if (mode !== undefined && mode !== "TEST" && mode !== "LIVE") {
+    return Response.json({ ok: false, message: 'mode must be "TEST" or "LIVE"' }, { status: 400 });
+  }
+  const executionMode: "TEST" | "LIVE" = mode === "LIVE" ? "LIVE" : "TEST";
+
   if (confirm !== true) {
     // Fail closed: this pipeline ends in real money moving. No default, no implicit yes — the same
     // rule every other execute-shaped route in this dashboard already enforces.
@@ -82,9 +91,10 @@ export async function POST(req: Request) {
     minCartInr: min,
     maxCartInr: max,
     mandateId: mandate,
+    mode: executionMode,
   });
 
-  return Response.json({ ok: true, jobId: job.id });
+  return Response.json({ ok: true, jobId: job.id, mode: executionMode });
 }
 
 export async function GET(req: Request) {
@@ -106,5 +116,8 @@ export async function GET(req: Request) {
     result: job.result,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
+    // The mode this job was STARTED with. The result carries the agent's own report too; the page
+    // prefers that and falls back to this, so a still-running job can already show its mode.
+    mode: job.input.mode,
   });
 }

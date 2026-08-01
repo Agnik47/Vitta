@@ -15,6 +15,7 @@ import { runGate, runSearch } from './gate-spawn';
 import { MERCHANT_PROFILES, type PurchaseMerchant } from './merchants';
 import { parseCommitOutput } from './parse-commit-output';
 import { withRetry } from './retry';
+import { DEFAULT_EXECUTION_MODE, type ExecutionMode } from '../receipt/execution-mode';
 
 /** One line to add to the merchant's real cart before checkout. A "Purchase Job" is always scoped
  *  to a single merchant (a real checkout can't span two marketplaces), but a merchant's cart is
@@ -44,6 +45,10 @@ export interface PurchaseInput {
    *  (`gate fund <mandateId> --auto`). `gate run` itself resolves the mandate on its own (the most
    *  recently created one), so this is never required for the commit step, only for topping it up. */
   mandateId?: string;
+  /** TEST or LIVE — see src/receipt/execution-mode.ts. Affects ONLY the commit step: every earlier
+   *  step (clear-cart, add-to-cart, cart verification, order-value check) runs identically against
+   *  the real merchant either way, and the mandate gate evaluates the same real cart in both. */
+  mode?: ExecutionMode;
 }
 
 export type PurchaseStepName =
@@ -73,6 +78,9 @@ export interface PurchaseStepEvent {
 export interface PurchaseResult {
   ok: boolean;
   merchant: PurchaseMerchant;
+  /** Which settlement path this run took. Always reported so a result can never be read without
+   *  knowing whether a real merchant order was placed. */
+  mode: ExecutionMode;
   /** Human-readable summary — the one item's name, or "<first item> and N more". */
   productName: string;
   /** Every line this run tried to add, for a UI that wants the full breakdown rather than the
@@ -203,6 +211,10 @@ async function findRealTopUp(
 
 export class PurchaseAgent {
   private events: PurchaseStepEvent[] = [];
+  /** Set once at the top of run(). An agent instance is created per run (see src/cli/agent.ts), so
+   *  this is per-run state, not shared — it exists so every early-return path reports the mode
+   *  without threading it through each one. */
+  private mode: ExecutionMode = DEFAULT_EXECUTION_MODE;
 
   constructor(private readonly onEvent?: (event: PurchaseStepEvent) => void) {}
 
@@ -216,6 +228,7 @@ export class PurchaseAgent {
     return {
       ok: false,
       merchant,
+      mode: this.mode,
       productName: summaryName(items),
       items,
       // Every fail() call site is a pre-authorization failure (precondition/clear-cart/add-to-cart/
@@ -234,6 +247,8 @@ export class PurchaseAgent {
   async run(input: PurchaseInput): Promise<PurchaseResult> {
     const startedAt = nowIso();
     const { merchant, items } = input;
+    const mode = input.mode ?? DEFAULT_EXECUTION_MODE;
+    this.mode = mode;
     const productName = summaryName(items);
     const profile = MERCHANT_PROFILES[merchant];
 
@@ -380,7 +395,7 @@ export class PurchaseAgent {
     // under-funded reserve (see gate-spawn.ts / gate.ts's `fund --auto`, itself hard-capped at the
     // mandate's own signed limit — this can never spend past what the human already authorized).
     let commitAttempt = 0;
-    let commitResult = await this.attemptCommit(merchant);
+    let commitResult = await this.attemptCommit(merchant, mode);
     while (
       commitResult.verdict === 'DENY' &&
       commitResult.denyCode === 'OVER_TOTAL_CAP' &&
@@ -401,7 +416,7 @@ export class PurchaseAgent {
         break;
       }
       this.emit('fund', 'done', 'Reserve topped up within the mandate cap');
-      commitResult = await this.attemptCommit(merchant);
+      commitResult = await this.attemptCommit(merchant, mode);
     }
 
     // CRITICAL — the exact ADR-013 lesson, applied at this layer: `verdict === 'ALLOW'` means the
@@ -423,6 +438,7 @@ export class PurchaseAgent {
       return {
         ok: false,
         merchant,
+        mode,
         productName,
         items,
         verdict: commitResult.verdict,
@@ -465,6 +481,7 @@ export class PurchaseAgent {
       return {
         ok: false,
         merchant,
+        mode,
         productName,
         items,
         verdict: 'ALLOW',
@@ -480,10 +497,29 @@ export class PurchaseAgent {
       };
     }
 
-    this.emit('merchant-confirm', 'done', commitResult.orderId ? `Order #${commitResult.orderId} confirmed` : 'Order confirmed');
+    // In TEST mode no merchant order exists, and this step must say so plainly rather than reusing
+    // the "Order confirmed" wording — the entire point of the mode being visible is that a reader
+    // can never mistake a test settlement for a real order.
+    this.emit(
+      'merchant-confirm',
+      mode === 'TEST' ? 'skipped' : 'done',
+      mode === 'TEST'
+        ? `No merchant order placed — ${merchant}'s checkout is not driven in test mode`
+        : commitResult.orderId
+          ? `Order #${commitResult.orderId} confirmed`
+          : 'Order confirmed',
+    );
     // draw()/recordDraw() already happened inside gate.ts's single CLI call by the time we observe
     // genuinelyCompleted — this step honestly reports a fact we now know is true, not a new action.
-    this.emit('draw', 'done', commitResult.receiptId ? 'Reserve drawn' : 'Nothing drawn (hand-off merchant, no order id to draw against)');
+    this.emit(
+      'draw',
+      'done',
+      commitResult.receiptId
+        ? mode === 'TEST'
+          ? 'Reserve drawn from the real Dodo test reserve'
+          : 'Reserve drawn'
+        : 'Nothing drawn (hand-off merchant, no order id to draw against)',
+    );
     this.emit(
       'confirm',
       'done',
@@ -493,6 +529,7 @@ export class PurchaseAgent {
     return {
       ok: true,
       merchant,
+      mode,
       productName,
       items,
       verdict: 'ALLOW',
@@ -510,7 +547,7 @@ export class PurchaseAgent {
     };
   }
 
-  private async attemptCommit(merchant: PurchaseMerchant): Promise<{
+  private async attemptCommit(merchant: PurchaseMerchant, mode: ExecutionMode): Promise<{
     verdict?: 'ALLOW' | 'DENY' | 'STEP_UP';
     denyCode?: string;
     overBy?: number;
@@ -522,8 +559,17 @@ export class PurchaseAgent {
     handoffUrl?: string;
     raw: string;
   }> {
-    this.emit('commit', 'running', `Placing the real ${merchant} order`);
-    const result = await runGate(['run', '--', 'webcmd', merchant, 'place-order', '--confirm']);
+    this.emit(
+      'commit',
+      'running',
+      mode === 'TEST'
+        ? `Settling against the Dodo test reserve — ${merchant}'s checkout is not driven in test mode`
+        : `Placing the real ${merchant} order`,
+    );
+    // The command is identical in both modes — `place-order --confirm` is what decide() evaluates,
+    // so the mandate gate sees exactly the same request either way. `--mode` is a gate-level flag
+    // that only governs whether gate.ts drives the merchant's checkout after authorizing.
+    const result = await runGate(['run', '--mode', mode.toLowerCase(), '--', 'webcmd', merchant, 'place-order', '--confirm']);
     const raw = (result.stdout + '\n' + result.stderr).trim();
     return { ...parseCommitOutput(result.stdout), raw };
   }

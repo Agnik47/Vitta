@@ -59,7 +59,11 @@ export interface Receipt {
   mandate_hash: string;
   cart: { merchant: string; items: number; total_inr: number };
   payment: { rail: 'dodo_test'; reserve_ref: string; status: 'captured' };
-  execution: { command: string; run_id: string; profile: string };
+  // `mode` distinguishes a receipt whose merchant order was really placed (LIVE) from one that
+  // settled against the Dodo test reserve without placing an order (TEST). Optional for backward
+  // compatibility: receipts written before the mode existed are LIVE by definition. Mirrors
+  // src/receipt/schema.ts by hand, per this file's existing convention.
+  execution: { command: string; run_id: string; profile: string; mode?: "TEST" | "LIVE" };
   evidence: { trace_digest: string; network_order_id?: string; commit_proof?: string };
   prev_receipt_hash: string;
   signed_at: string;
