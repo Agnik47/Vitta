@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppNavbar } from "@/components/layout/app-navbar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CartProvider } from "@/lib/cart-context";
+import { AIChatbot } from "@/components/shared/ai-chatbot";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -57,6 +58,7 @@ export default function RootLayout({
               </SidebarProvider>
             </TooltipProvider>
             <Toaster position="bottom-right" />
+            <AIChatbot />
           </CartProvider>
         </ThemeProvider>
       </body>
