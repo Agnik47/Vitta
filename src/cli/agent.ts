@@ -25,6 +25,7 @@ import { PurchaseAgent, type PurchaseInput, type PurchaseItem, type PurchaseStep
 import { isPurchaseMerchant } from '../agent/merchants';
 import { parseExecutionMode } from '../receipt/execution-mode';
 import { loadAllMandates } from './store';
+import { DiscoveryAgent } from '../agent/DiscoveryAgent';
 
 function parseArgs(argv: string[]): { positionals: string[]; flags: Record<string, string | boolean> } {
   const positionals: string[] = [];
@@ -117,10 +118,62 @@ async function cmdBuy(argv: string[]): Promise<void> {
   if (!result.ok) process.exitCode = 1;
 }
 
+async function cmdFindAndBuy(argv: string[]): Promise<void> {
+  const { flags } = parseArgs(argv);
+  
+  const query = typeof flags.query === 'string' ? flags.query : undefined;
+  if (!query) fail('--query is required');
+  
+  const maxPriceInr = typeof flags['max-price'] === 'string' ? Number(flags['max-price']) : undefined;
+  
+  const discoveryAgent = new DiscoveryAgent((event: any) => {
+    process.stdout.write(JSON.stringify({ type: 'step', ...event }) + '\n');
+  });
+
+  const bestMatch = await discoveryAgent.findBestMatch(query, maxPriceInr);
+  
+  if (!bestMatch) {
+    fail(`Could not find any suitable match for "${query}"`);
+  }
+
+  // Hand off to PurchaseAgent
+  const mandateId = typeof flags.mandate === 'string' ? flags.mandate : resolveMostRecentMandateId();
+  let mode;
+  try {
+    mode = parseExecutionMode(typeof flags.mode === 'string' ? flags.mode : undefined);
+  } catch (err) {
+    fail((err as Error).message);
+  }
+
+  const input: PurchaseInput = {
+    merchant: bestMatch.merchant,
+    items: [{
+      productRef: bestMatch.productRef,
+      productName: bestMatch.productName,
+      quantity: 1
+    }],
+    clearCartFirst: true,
+    mandateId,
+    mode,
+  };
+
+  const agent = new PurchaseAgent((event: PurchaseStepEvent) => {
+    process.stdout.write(JSON.stringify({ type: 'step', ...event }) + '\n');
+  });
+
+  const result = await agent.run(input);
+  process.stdout.write(JSON.stringify({ type: 'result', ...result }) + '\n');
+  if (!result.ok) process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   if (command === 'buy') {
     await cmdBuy(rest);
+    return;
+  }
+  if (command === 'find-and-buy') {
+    await cmdFindAndBuy(rest);
     return;
   }
   fail(`Unknown agent command "${command}". Usage: agent buy --merchant <m> --product <ref> [...]`);

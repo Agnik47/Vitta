@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "dodo-knowledge": {
+    "prava-knowledge": {
       "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
         "mcp-remote@latest",
-        "https://knowledge.dodopayments.com/mcp"
+        "https://knowledge.pravapayments.com/mcp"
       ],
       "env": {}
     }

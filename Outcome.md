@@ -5,7 +5,7 @@
 Rules for using this file:
 
 1. **Every entry gets a timestamp and a status.** Status is one of: ✅ Done as spec'd · ⚠️ Done with deviation (explain) · ❌ Blocked (explain what's needed) · ⏭ Skipped (explain why).
-2. **Deviations are not failures — undocumented deviations are.** If Dodo's real API returned a different field name than the doc assumed, that's expected and fine; just write it down and fix the doc.
+2. **Deviations are not failures — undocumented deviations are.** If Prava's real API returned a different field name than the doc assumed, that's expected and fine; just write it down and fix the doc.
 3. **Copy real terminal output in, don't paraphrase it.** "It worked" is not a log entry. The actual pasted output is.
 4. Keep entries in chronological order, oldest first.
 
@@ -19,17 +19,17 @@ Rules for using this file:
 - [x] Repo structure created matching `01-ARCHITECTURE.md`
 - [x] `tsc --noEmit` passes
 - [x] `.env.example` + `.gitignore` in place
-- [x] `dodopayments` SDK installed
+- [x] `pravapayments` SDK installed
 
 **What actually happened / deviations:**
 
-Ran `npm init -y`, then `npm install --save-dev typescript ts-node @types/node` and `npm install dodopayments`. Created the full `src/` tree from `01-ARCHITECTURE.md` § Repo layout: every Phase 1 file (`src/mandate/*`, `src/policy/*`, `src/ledger/*`, `src/receipt/*`, `src/webcmd/*`, `src/cli/*`) got a one-line comment header only, per the Phase 0 prompt's literal instruction ("Do not implement any real logic yet"). The four Phase 2-4 stub files got their real stub content from `01-ARCHITECTURE.md` § What is a stub (typed classes, each throwing `Not implemented — see docs/01-ARCHITECTURE.md`).
+Ran `npm init -y`, then `npm install --save-dev typescript ts-node @types/node` and `npm install pravapayments`. Created the full `src/` tree from `01-ARCHITECTURE.md` § Repo layout: every Phase 1 file (`src/mandate/*`, `src/policy/*`, `src/ledger/*`, `src/receipt/*`, `src/webcmd/*`, `src/cli/*`) got a one-line comment header only, per the Phase 0 prompt's literal instruction ("Do not implement any real logic yet"). The four Phase 2-4 stub files got their real stub content from `01-ARCHITECTURE.md` § What is a stub (typed classes, each throwing `Not implemented — see docs/01-ARCHITECTURE.md`).
 
 **Deviation 1 — `src/events/GateEvent.ts` got real content, not a comment stub.** The literal Phase 0 instruction says every file gets a one-line comment, which would include this one. I deviated because `01-ARCHITECTURE.md` explicitly calls `GateEvent` "the one contract everything else is built around... populate every field in Phase 1... never restructure it later," gives its complete type definition already, has zero implementation dependencies (pure types, no logic), and — most concretely — the parallel-development docs already written in `docs/common/03-INTERFACES.md` and `05-PHASE-OWNERSHIP.md` tell Agent B to expect this file created for real in Phase 0. Leaving it as a comment would have made those already-published docs wrong on Agent B's very first pull. Writing an interface/type-only file has zero runtime logic, so this doesn't violate "scaffolding only."
 
 **Deviation 2 — fixed a real spec inconsistency in `01-ARCHITECTURE.md`.** While writing `GateEvent.ts`, found that `05-DEMO-SCRIPT.md` Beat 8 requires a DENY with code `ALREADY_EXECUTED` (the idempotency-replay check), but the `DenyCode` union in `01-ARCHITECTURE.md` didn't include that value. Added `'ALREADY_EXECUTED'` to the union in `01-ARCHITECTURE.md` and to `GateEvent.ts` to match, per `CLAUDE.md` rule 6 (fix the doc when reality — here, cross-spec consistency — shows it was wrong).
 
-**Deviation 3 — corrected `docs/common/03-INTERFACES.md`'s ownership note for the `Ledger` interface.** It previously said "Agent A defines (Phase 0) / Agent B implements (Phase 1c)." Re-checking `docs/PROMPTS.md` Phase 1c's actual instructions shows `src/ledger/Ledger.ts` (the interface itself, not just `DodoCreditLedger`) is explicitly a Phase 1c deliverable owned by Agent B — Phase 0 doesn't touch it. Fixed the registry row and left `Ledger.ts` as a one-line comment stub, consistent with every other Phase 1 file.
+**Deviation 3 — corrected `docs/common/03-INTERFACES.md`'s ownership note for the `Ledger` interface.** It previously said "Agent A defines (Phase 0) / Agent B implements (Phase 1c)." Re-checking `docs/PROMPTS.md` Phase 1c's actual instructions shows `src/ledger/Ledger.ts` (the interface itself, not just `PravaCreditLedger`) is explicitly a Phase 1c deliverable owned by Agent B — Phase 0 doesn't touch it. Fixed the registry row and left `Ledger.ts` as a one-line comment stub, consistent with every other Phase 1 file.
 
 **TypeScript toolchain finding (real, not from the spec's guesses):** `npm install typescript` resolved to `typescript@7.0.2` (the new native/Go-ported compiler). Two real incompatibilities surfaced against it:
 1. `moduleResolution: "node"` is rejected outright — TS 7 removed the legacy `node10` resolution mode. Fixed by using `"module": "node16"` / `"moduleResolution": "node16"` in `tsconfig.json`.
@@ -39,7 +39,7 @@ Resolution: pinned `typescript` to `5.9.3` (latest stable 5.x), which `ts-node` 
 
 **Second real finding — `node --test` directory-argument bug (or at least, surprising behavior) on Node 22.18.0 / Windows.** The Phase 0 prompt's own suggested pattern (`node:test` + `node --test`) needed one adjustment: passing an explicit directory (`node --test ./src` or `node --test src`) fails with `Cannot find module '...\src'` — Node tries to run the directory as if it were the main entry script rather than using it as a recursive test-discovery root. This reproduces with or without `--require ts-node/register`, so it isn't a `ts-node` issue. Fix: omit the path argument entirely — `node --test` with no path already recursively discovers `**/*.test.ts` under the current working directory (and correctly skips `node_modules`). Final `package.json` test script: `"test": "node --require ts-node/register --test"`.
 
-**Installed versions (for reference):** `typescript@5.9.3`, `ts-node@10.9.2` (latest), `dodopayments@2.43.0`, Node `v22.18.0`, npm `11.6.2`.
+**Installed versions (for reference):** `typescript@5.9.3`, `ts-node@10.9.2` (latest), `pravapayments@2.43.0`, Node `v22.18.0`, npm `11.6.2`.
 
 **Verification run:**
 ```
@@ -141,16 +141,16 @@ Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc 
 
 ---
 
-## Phase 1c — Dodo Payments integration
+## Phase 1c — Prava Payments integration
 
-**Status:** ✅ Provisioning + live verification complete — B-001 fully cleared. Real money-path proven end to end in test mode: product → checkout → paid → `credit.added` webhook → 100000 credits readable via the read-only key. `src/ledger/DodoCreditLedger.ts` implementation itself still not written (deliberately out of scope for this session — see below).
+**Status:** ✅ Provisioning + live verification complete — B-001 fully cleared. Real money-path proven end to end in test mode: product → checkout → paid → `credit.added` webhook → 100000 credits readable via the read-only key. `src/ledger/PravaCreditLedger.ts` implementation itself still not written (deliberately out of scope for this session — see below).
 **Timestamp:** 2026-07-29 (later same day), Agent A
 
-- [x] Dodo test-mode account confirmed to exist (user screenshot, Settings → Promotions)
-- [x] All required API keys/IDs obtained — `DODO_API_KEY` (write) and `DODO_API_KEY_READONLY` were both already present in `.env` (found populated this session; `04-BLOCKERS.md`/this file's earlier entry were stale — only `DODO_CREDIT_ENTITLEMENT_ID` and the Product were genuinely still missing). Both keys verified live this session (see below). `DODO_WEBHOOK_SECRET` remains empty — out of scope for this session's task, still optional per `docs/02-DODO-INTEGRATION.md`.
+- [x] Prava test-mode account confirmed to exist (user screenshot, Settings → Promotions)
+- [x] All required API keys/IDs obtained — `PRAVA_API_KEY` (write) and `PRAVA_API_KEY_READONLY` were both already present in `.env` (found populated this session; `04-BLOCKERS.md`/this file's earlier entry were stale — only `PRAVA_CREDIT_ENTITLEMENT_ID` and the Product were genuinely still missing). Both keys verified live this session (see below). `PRAVA_WEBHOOK_SECRET` remains empty — out of scope for this session's task, still optional per `docs/02-PRAVA-INTEGRATION.md`.
 - [x] Credit Entitlement created for real via `client.creditEntitlements.create()`: `cde_0NkBmcWcZ3I79sHr1UZCx`, name "Agent Spend Credits", `unit: "INR paise"`, `precision: 0` (see design decision below)
 - [x] Top-up Product created for real via `client.products.create()`, credit entitlement attached: `pdt_0NkBmcZQJLSicxFMHlNHX`, name "Agent Spend Credits Top-Up", one-time price ₹1,000.00 (100000 paise), 100000 credits granted on purchase
-- [x] `fund()`-shaped Checkout Session created for real via `client.checkoutSessions.create()`: `cks_0NkBmhmGVSy7WTCPOd8oh` → `https://test.checkout.dodopayments.com/session/cks_0NkBmhmGVSy7WTCPOd8oh`
+- [x] `fund()`-shaped Checkout Session created for real via `client.checkoutSessions.create()`: `cks_0NkBmhmGVSy7WTCPOd8oh` → `https://test.checkout.pravapayments.com/session/cks_0NkBmhmGVSy7WTCPOd8oh`
 - [x] Test purchase completed — **done by the user, not the agent** (completing a hosted checkout means entering card/UPI details, a prohibited agent action even in test mode). Paid with the test Visa `4576238912771450`. Session actually used: `cks_0NkBw28CUxmbI2KsSdVFu` (the third session minted — see the price-reduction note below; the first two went stale unused).
 - [x] Entitlement confirmed present in that customer's credit entitlements, **read with the read-only key** — real output below. Customer created by the purchase: `cus_0NkBwH3N9Ld41wgNzK6ty`. Balance: `100000` credits (= ₹1,000.00 of reserve at 1 credit = 1 paise), `overage: 0`.
 - [x] `balance()` field name — **CONFIRMED against a real live balance.** The field is `balance` (the doc's original guess was right), reached via `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })`. **But its TYPE is not what the SDK's own types claim — see the finding below.**
@@ -159,9 +159,9 @@ Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc 
 
 **What actually happened / deviations:**
 
-**Correction to this file's own earlier entry.** The previous Phase 1c status (and `docs/common/04-BLOCKERS.md` B-001) said `DODO_API_KEY_READONLY` was still missing. It was not — `.env` already had a real value on that line when this session started; only the comment above it hadn't been updated. Ran a live probe (`creditEntitlements.retrieve()` with the read-only key → succeeded; `creditEntitlements.create()` with the same key → `401`) to confirm it's genuinely scoped read-only, not just present. Lesson for whoever picks this up next: trust `.env`'s actual contents over a blocker doc's prose when they disagree, then verify live either way.
+**Correction to this file's own earlier entry.** The previous Phase 1c status (and `docs/common/04-BLOCKERS.md` B-001) said `PRAVA_API_KEY_READONLY` was still missing. It was not — `.env` already had a real value on that line when this session started; only the comment above it hadn't been updated. Ran a live probe (`creditEntitlements.retrieve()` with the read-only key → succeeded; `creditEntitlements.create()` with the same key → `401`) to confirm it's genuinely scoped read-only, not just present. Lesson for whoever picks this up next: trust `.env`'s actual contents over a blocker doc's prose when they disagree, then verify live either way.
 
-**Real design decision — how "INR-denominated reserve credits" maps onto the SDK's actual fields.** The installed `dodopayments@2.43.0` SDK's real `CreditEntitlementCreateParams` has no `credit_type: 'fiat'` option at all (the `credit-based-billing` skill installed this session via `npx skills add dodopayments/skills` shows a `credit_type`/`unit_currency` fiat-credit example, but that field doesn't exist anywhere in the actual installed SDK types or the live API's `422` validation — skill docs and the real SDK disagree here, and the real SDK wins per `CLAUDE.md` rule 6). The only real fields are `unit` (a free-text label) and `precision` (decimal places). Chose `unit: "INR paise"`, `precision: 0` — i.e. 1 credit = 1 paise — specifically so it lines up 1:1 with the integer-paise arithmetic `docs/02-DODO-INTEGRATION.md`'s `fund()`/`draw()` sketches already use (`amountInrPaise: number`), with no rupees↔paise conversion step anywhere in `DodoCreditLedger.ts`. Whoever implements that file next should treat "credits" and "paise" as the same integer, not convert between them.
+**Real design decision — how "INR-denominated reserve credits" maps onto the SDK's actual fields.** The installed `pravapayments@2.43.0` SDK's real `CreditEntitlementCreateParams` has no `credit_type: 'fiat'` option at all (the `credit-based-billing` skill installed this session via `npx skills add pravapayments/skills` shows a `credit_type`/`unit_currency` fiat-credit example, but that field doesn't exist anywhere in the actual installed SDK types or the live API's `422` validation — skill docs and the real SDK disagree here, and the real SDK wins per `CLAUDE.md` rule 6). The only real fields are `unit` (a free-text label) and `precision` (decimal places). Chose `unit: "INR paise"`, `precision: 0` — i.e. 1 credit = 1 paise — specifically so it lines up 1:1 with the integer-paise arithmetic `docs/02-PRAVA-INTEGRATION.md`'s `fund()`/`draw()` sketches already use (`amountInrPaise: number`), with no rupees↔paise conversion step anywhere in `PravaCreditLedger.ts`. Whoever implements that file next should treat "credits" and "paise" as the same integer, not convert between them.
 
 **Real field-name correction, caught by an actual `422`, not by reading docs.** `Product`'s own id field is `product_id`, not `id` — `ProductEntitlementSummary` (a nested type in the same file) happens to have an `id` field, and a first pass at the provisioning script misread that nested interface as belonging to `Product` itself. First checkout-session attempt failed with a real `422 Failed to deserialize... missing field product_id`, which is what caught it. Fixed and reran; the entitlement/product from the failed attempt were reused (find-by-name-first logic), not duplicated — confirmed by the retry response reporting `"created": false` for both.
 
@@ -182,21 +182,21 @@ Full suite: `npm test` → 20/20 passing (9 mandate/sign + 11 decide). `npx tsc 
   },
   "checkout_session": {
     "session_id": "cks_0NkBmhmGVSy7WTCPOd8oh",
-    "checkout_url": "https://test.checkout.dodopayments.com/session/cks_0NkBmhmGVSy7WTCPOd8oh"
+    "checkout_url": "https://test.checkout.pravapayments.com/session/cks_0NkBmhmGVSy7WTCPOd8oh"
   }
 }
 ```
 Read-only key probe: `creditEntitlements.retrieve()` → `200`, real entitlement JSON back. `creditEntitlements.create()` with the same key → `401 status code (no body)`.
 
-**Cleanup:** the provisioning script (`_dodo-setup.ts`) and the read-only-key probe script (`_dodo-verify-readonly.ts`) were one-off, root-level, not part of `src/`, and deleted after use — same fixture-discipline precedent as Phase 1h's `_gen-fixtures.ts`. If this provisioning needs to be rerun (e.g. a fresh checkout session because the one above went stale), the logic is fully reconstructable from this entry: find-or-create by name via `creditEntitlements.list()`/`products.list()`, then `checkoutSessions.create({ product_cart: [{ product_id: 'pdt_0NkBmcZQJLSicxFMHlNHX', quantity: 1 }], ... })`.
+**Cleanup:** the provisioning script (`_prava-setup.ts`) and the read-only-key probe script (`_prava-verify-readonly.ts`) were one-off, root-level, not part of `src/`, and deleted after use — same fixture-discipline precedent as Phase 1h's `_gen-fixtures.ts`. If this provisioning needs to be rerun (e.g. a fresh checkout session because the one above went stale), the logic is fully reconstructable from this entry: find-or-create by name via `creditEntitlements.list()`/`products.list()`, then `checkoutSessions.create({ product_cart: [{ product_id: 'pdt_0NkBmcZQJLSicxFMHlNHX', quantity: 1 }], ... })`.
 
-**Webhook payload shapes — captured for real from `dodo wh trigger`, 2026-07-29.** Installed the Dodo CLI (`v3.4.0`) and probed five event types against a throwaway `node:http` receiver (no new deps, no express, no `standardwebhooks` — a shape probe, not a real handler; deleted after use). Four real findings, three of which contradict `docs/02-DODO-INTEGRATION.md`:
+**Webhook payload shapes — captured for real from `prava wh trigger`, 2026-07-29.** Installed the Prava CLI (`v3.4.0`) and probed five event types against a throwaway `node:http` receiver (no new deps, no express, no `standardwebhooks` — a shape probe, not a real handler; deleted after use). Four real findings, three of which contradict `docs/02-PRAVA-INTEGRATION.md`:
 
-1. **`payment.succeeded` is correct; the CLI's argument name is the odd one out.** `dodo wh trigger`'s supported-event list advertises `payment.success` and `refund.success`, but the actual JSON body's `type` field reads `payment.succeeded` / `refund.succeeded`. The doc's handler sketch (`case 'payment.succeeded'`) was right all along — the CLI's CLI-argument vocabulary and the on-the-wire `type` vocabulary simply differ. **Switch on the wire `type`, not on the CLI's arg names.**
+1. **`payment.succeeded` is correct; the CLI's argument name is the odd one out.** `prava wh trigger`'s supported-event list advertises `payment.success` and `refund.success`, but the actual JSON body's `type` field reads `payment.succeeded` / `refund.succeeded`. The doc's handler sketch (`case 'payment.succeeded'`) was right all along — the CLI's CLI-argument vocabulary and the on-the-wire `type` vocabulary simply differ. **Switch on the wire `type`, not on the CLI's arg names.**
 
-2. **`dodo wh trigger` sends NO Standard Webhooks signature headers at all.** The doc says three headers (`webhook-id`, `webhook-signature`, `webhook-timestamp`) and to dedupe on `webhook-id`. The real captured headers were only: `content-type`, `connection`, `user-agent: Bun/1.3.14`, `accept`, `host`, `accept-encoding`, `content-length`. That's it. This makes sense once you notice the `Bun/1.3.14` user-agent: offline `trigger` payloads are synthesized **locally by the CLI binary itself** and never round-trip through Dodo's servers, so nothing ever signed them. **Consequence: signature verification and `webhook-id` dedupe cannot be tested with `dodo wh trigger` — only with `dodo wh listen` against a real event.** Anyone writing the real handler must not conclude "signatures work" from a green offline test.
+2. **`prava wh trigger` sends NO Standard Webhooks signature headers at all.** The doc says three headers (`webhook-id`, `webhook-signature`, `webhook-timestamp`) and to dedupe on `webhook-id`. The real captured headers were only: `content-type`, `connection`, `user-agent: Bun/1.3.14`, `accept`, `host`, `accept-encoding`, `content-length`. That's it. This makes sense once you notice the `Bun/1.3.14` user-agent: offline `trigger` payloads are synthesized **locally by the CLI binary itself** and never round-trip through Prava's servers, so nothing ever signed them. **Consequence: signature verification and `webhook-id` dedupe cannot be tested with `prava wh trigger` — only with `prava wh listen` against a real event.** Anyone writing the real handler must not conclude "signatures work" from a green offline test.
 
-3. **The doc's `case 'CreditLedgerEntry':` event name appears to be wrong.** No credit-related event exists in the CLI's offline trigger list at all. The real dashboard's webhook event catalog (seen directly in the Dodo dashboard's "Subscribe to events" picker) lists them under a `credit` group as `credit.added`, `credit.balance_low`, `credit.deducted`, `credit.expired`, `credit.manual_adjustment` — dotted lowercase, matching every other event's convention, not a PascalCase `CreditLedgerEntry`. Not yet confirmed against a live delivered payload, so recorded as "almost certainly `credit.*`" rather than settled.
+3. **The doc's `case 'CreditLedgerEntry':` event name appears to be wrong.** No credit-related event exists in the CLI's offline trigger list at all. The real dashboard's webhook event catalog (seen directly in the Prava dashboard's "Subscribe to events" picker) lists them under a `credit` group as `credit.added`, `credit.balance_low`, `credit.deducted`, `credit.expired`, `credit.manual_adjustment` — dotted lowercase, matching every other event's convention, not a PascalCase `CreditLedgerEntry`. Not yet confirmed against a live delivered payload, so recorded as "almost certainly `credit.*`" rather than settled.
 
 4. **Minor: the CLI's offline `payment.failed` fixture is internally inconsistent.** Its envelope says `"type":"payment.failed"` but the nested `data.status` still reads `"succeeded"`, with `error_code`/`error_message` both `null`. A real failed payment would presumably not look like that. Don't write logic that trusts `data.status` based on offline fixtures.
 
@@ -236,7 +236,7 @@ Note `data.metadata` and `data.customer.customer_id` are both present on payment
 ```
 `100000` — unquoted, a JSON number. Meanwhile the **ledger entry** for the very same transaction reports `"amount": "100000"` and `"balance_after": "100000"` — quoted strings. So the same API is genuinely inconsistent between the balance object (number) and the ledger object (string), and the SDK's generated types are wrong about the balance one. **`balance()` must not assume either — coerce explicitly (`Number(x)`), and never `===`-compare a balance against a ledger amount without coercing both.** This is exactly the class of bug `CLAUDE.md` rule 6 exists to catch, and it was only visible by making the real call.
 
-**FINDING B — Standard Webhooks signature headers ARE present on live events, confirming the offline-trigger caveat above was the whole story.** The live `POST` carried `webhook-id: msg_3H9MzzHVbSUwcrGphkKn687qiIZ`, `webhook-signature: v1,Gn1KJ3JY2WKz6xZGdiilJ2nPYsKU9qMrAqLAcHlDQvg=`, `webhook-timestamp: 1785276097`, with `user-agent: Svix-Webhooks/rolling`. So Dodo's webhook delivery really is Svix-backed Standard Webhooks, exactly as `docs/02-DODO-INTEGRATION.md` says — the earlier "no signature headers" finding applies **only** to `dodo wh trigger`'s locally-synthesized offline payloads, not to real deliveries. Both halves of that had to be observed to state either correctly.
+**FINDING B — Standard Webhooks signature headers ARE present on live events, confirming the offline-trigger caveat above was the whole story.** The live `POST` carried `webhook-id: msg_3H9MzzHVbSUwcrGphkKn687qiIZ`, `webhook-signature: v1,Gn1KJ3JY2WKz6xZGdiilJ2nPYsKU9qMrAqLAcHlDQvg=`, `webhook-timestamp: 1785276097`, with `user-agent: Svix-Webhooks/rolling`. So Prava's webhook delivery really is Svix-backed Standard Webhooks, exactly as `docs/02-PRAVA-INTEGRATION.md` says — the earlier "no signature headers" finding applies **only** to `prava wh trigger`'s locally-synthesized offline payloads, not to real deliveries. Both halves of that had to be observed to state either correctly.
 
 **FINDING C — the doc's `case 'CreditLedgerEntry':` isn't wrong, it's matching the wrong field.** The real credit event has `type: "credit.added"` at the envelope level and `data.payload_type: "CreditLedgerEntry"` nested inside. Both strings are real; they live on different fields. The handler switches on `payload.type`, so it must use `'credit.added'` there — `'CreditLedgerEntry'` would only match if switching on `payload.data.payload_type`. Supersedes the "almost certainly `credit.*`" guess recorded above; now settled with a real payload.
 
@@ -256,34 +256,34 @@ Real `credit.added` body (live, abridged to the fields that matter):
     "metadata": { "purpose": "agent-spend-reserve-setup" } } }
 ```
 
-**Price reduction, and a scope-boundary note.** The product was first created at ₹1,000.00. The user asked to lower it for repeated testing, worried about spending real money. Clarified that test mode never touches real funds (the checkout page carries Dodo's own "Test Mode" badge), but lowered it anyway since a smaller number is less noisy across many demo runs: ₹1,000.00 → ₹1.00 → finally **₹42.00**, because Dodo enforces a **$0.50 USD minimum** on checkout and rejected anything below it. The real payment confirms the floor: `settlement_amount: 50`, `settlement_currency: "USD"` (i.e. exactly $0.50) against `total_amount: 4956` INR paise (₹49.56, incl. ₹7.56 GST). **Credits granted were deliberately left at 100000 throughout** — `products.update()` leaves `credit_entitlements` unchanged when the field is omitted, so the reserve stayed ₹1,000-sized while the sticker price fell. Sticker price and reserve size are independent here, which is fine for a demo but worth knowing before anyone "fixes" the apparent mismatch.
+**Price reduction, and a scope-boundary note.** The product was first created at ₹1,000.00. The user asked to lower it for repeated testing, worried about spending real money. Clarified that test mode never touches real funds (the checkout page carries Prava's own "Test Mode" badge), but lowered it anyway since a smaller number is less noisy across many demo runs: ₹1,000.00 → ₹1.00 → finally **₹42.00**, because Prava enforces a **$0.50 USD minimum** on checkout and rejected anything below it. The real payment confirms the floor: `settlement_amount: 50`, `settlement_currency: "USD"` (i.e. exactly $0.50) against `total_amount: 4956` INR paise (₹49.56, incl. ₹7.56 GST). **Credits granted were deliberately left at 100000 throughout** — `products.update()` leaves `credit_entitlements` unchanged when the field is omitted, so the reserve stayed ₹1,000-sized while the sticker price fell. Sticker price and reserve size are independent here, which is fine for a demo but worth knowing before anyone "fixes" the apparent mismatch.
 
-**Not done this session, and why:** `src/ledger/DodoCreditLedger.ts` itself (the actual `fund()`/`balance()`/`draw()`/`release()` implementation) was not started. The task this session was scoped narrowly to provisioning the entitlement/product/checkout-session and confirming the two API keys — not to writing the ledger code, per the explicit instruction that framed this session's work. B-001 is now unblocked for that follow-up work whenever it's picked up.
+**Not done this session, and why:** `src/ledger/PravaCreditLedger.ts` itself (the actual `fund()`/`balance()`/`draw()`/`release()` implementation) was not started. The task this session was scoped narrowly to provisioning the entitlement/product/checkout-session and confirming the two API keys — not to writing the ledger code, per the explicit instruction that framed this session's work. B-001 is now unblocked for that follow-up work whenever it's picked up.
 
 ---
 
-### Phase 1c follow-up — `DodoCreditLedger.ts` implemented and real-tested
+### Phase 1c follow-up — `PravaCreditLedger.ts` implemented and real-tested
 
 **Status:** ✅ Done — implemented and verified against the real account, including a real answer to the previously-open idempotency question
 **Timestamp:** 2026-07-29 (later same day), Agent B, on direct user instruction — see `docs/common/02-DECISIONS.md` ADR-006 for the full reassignment-timing reasoning
 
 - [x] `src/ledger/Ledger.ts` — was still an unimplemented comment stub despite `03-INTERFACES.md` calling it "frozen"; written for real, matches `docs/01-ARCHITECTURE.md`'s interface exactly
-- [x] `src/ledger/DodoCreditLedger.ts implements Ledger` — `fund()`, `balance()`, `draw()`, `release()` all real
+- [x] `src/ledger/PravaCreditLedger.ts implements Ledger` — `fund()`, `balance()`, `draw()`, `release()` all real
 - [x] Integration script run against the real API — output below
-- [x] `draw()` idempotency — **CONFIRMED for real**, resolving the open question both `docs/02-DODO-INTEGRATION.md` and Agent B's Phase 1d notes had left unanswered: calling `draw()` twice with the identical `runId` does **not** double-deduct.
+- [x] `draw()` idempotency — **CONFIRMED for real**, resolving the open question both `docs/02-PRAVA-INTEGRATION.md` and Agent B's Phase 1d notes had left unanswered: calling `draw()` twice with the identical `runId` does **not** double-deduct.
 
 **What actually happened / deviations:**
 
-Before writing anything, confirmed `src/ledger/DodoCreditLedger.ts` was still just a comment stub on this machine (Agent A hadn't started it) — checked specifically to avoid the exact parallel-implementation conflict `docs/common/02-DECISIONS.md` ADR-005 flagged as a rejected alternative. See ADR-006 for the full reasoning behind proceeding.
+Before writing anything, confirmed `src/ledger/PravaCreditLedger.ts` was still just a comment stub on this machine (Agent A hadn't started it) — checked specifically to avoid the exact parallel-implementation conflict `docs/common/02-DECISIONS.md` ADR-005 flagged as a rejected alternative. See ADR-006 for the full reasoning behind proceeding.
 
 Implemented against the real API shapes both agents had already found (not re-deriving anything): `client.creditEntitlements.balances.retrieve()`/`.createLedgerEntry()`, the checkout-session→payment→customer resolution chain, `environment: 'test_mode'` passed explicitly on every client construction (the live-mode-default bug found while building the dashboard, `docs/OUTCOME.md` Phase 1h addendum — this alone would have made every real call in this file fail with a misleading 401 if missed here too).
 
 **Real design decisions, none specified in any spec doc — see ADR-006 for full alternatives-considered writeups:**
-1. Env vars (`DODO_CREDIT_ENTITLEMENT_ID`, `DODO_TOPUP_PRODUCT_ID`) read lazily via a `requireEnv()` helper at each call site, not as module-level consts — caught a real bug in this session's own first integration-test attempt where import ordering silently captured `undefined` before the test script's `.env` loader had run, producing a confusing Dodo `422` ("missing field `credit_entitlement_id`") instead of a clear local error, even though the field genuinely was being sent — it was just `undefined`.
-2. `fund()` passes the same demo customer email every call rather than a hardcoded `customer_id`, relying on Dodo's documented "email finds an existing customer" behavior to reuse Agent A's already-provisioned real customer.
+1. Env vars (`PRAVA_CREDIT_ENTITLEMENT_ID`, `PRAVA_TOPUP_PRODUCT_ID`) read lazily via a `requireEnv()` helper at each call site, not as module-level consts — caught a real bug in this session's own first integration-test attempt where import ordering silently captured `undefined` before the test script's `.env` loader had run, producing a confusing Prava `422` ("missing field `credit_entitlement_id`") instead of a clear local error, even though the field genuinely was being sent — it was just `undefined`.
+2. `fund()` passes the same demo customer email every call rather than a hardcoded `customer_id`, relying on Prava's documented "email finds an existing customer" behavior to reuse Agent A's already-provisioned real customer.
 3. `fund()` creates the checkout session and returns immediately — it cannot and does not attempt to complete a real payment, since entering payment credentials is a prohibited agent action. A human completing checkout out of band is the same real constraint Agent A's own provisioning ran into, not a shortcut specific to this implementation.
 4. `credit_entitlements[].credits_amount` is overridden per-session to grant exactly `amountInrPaise` credits, independent of the top-up product's fixed ₹42 sticker price — same decoupling Agent A already established.
-5. Added `DODO_TOPUP_PRODUCT_ID=pdt_0NkBmcZQJLSicxFMHlNHX` to `.env`/`.env.example` — a new env var, not in the original spec's list, needed because `fund()` must reference the real top-up product Agent A created.
+5. Added `PRAVA_TOPUP_PRODUCT_ID=pdt_0NkBmcZQJLSicxFMHlNHX` to `.env`/`.env.example` — a new env var, not in the original spec's list, needed because `fund()` must reference the real top-up product Agent A created.
 
 **Real integration test run** (`_ledger-integration-test.ts`, root-level, deleted after use — same discipline as every prior real-verification pass this build). `fund()` can only create a session, not complete payment (see above), so this test exercises `balance()`/`draw()`/`release()` against the already-funded real demo customer (`cus_0NkBwH3N9Ld41wgNzK6ty`, 100000 paise from Agent A's Phase 1c purchase) and restores its balance afterward so no lasting change is left on the shared account:
 
@@ -314,7 +314,7 @@ release() completed (no-op, as expected)
 Credited back 10000 paise. Balance restored to: 100000 (expect 100000 )
 ```
 
-`npx tsc --noEmit` → exit 0 on the whole project throughout (root + `dashboard/`). No unit tests added — this is a live-API integration file, matching the same manual-verification pattern used for every other real Dodo/webcmd integration point in this build, per `docs/PROMPTS.md` Phase 1c's own instruction to write an integration script, not a unit-test suite, for this phase.
+`npx tsc --noEmit` → exit 0 on the whole project throughout (root + `dashboard/`). No unit tests added — this is a live-API integration file, matching the same manual-verification pattern used for every other real Prava/webcmd integration point in this build, per `docs/PROMPTS.md` Phase 1c's own instruction to write an integration script, not a unit-test suite, for this phase.
 
 **What this does and doesn't unlock:** `gate run`/`gate fund` can now be wired to real calls in `src/cli/gate.ts` (still Agent A's file, not touched here). Phase 1g (the full demo script run) still additionally needs B-002 (webcmd browser connectivity) resolved on Agent B's machine before a complete Beat 1-8 run is possible there — this phase's own scope (the ledger) is fully done and real either way.
 
@@ -336,7 +336,7 @@ Installed `@agentrhq/webcmd@0.4.3` globally (`npm i -g @agentrhq/webcmd@0.4.3`) 
 
 Given this scoping, implemented `src/webcmd/manifest.ts` for real (matches `docs/03-WEBCMD-INTEGRATION.md` § Step 1 exactly, with the `ManifestCommand` interface trimmed to the three fields actually consumed — the real payload carries 14 fields, not the 5 in the spec's sketch). Wrote `src/webcmd/manifest.manual-check.ts` (not a `*.test.ts`, so it's excluded from `npm test`'s auto-discovery — run directly via `ts-node`) and ran it for real; output below.
 
-Also implemented `src/webcmd/executor.ts`'s `execute()` matching `docs/03-WEBCMD-INTEGRATION.md` § Step 5 exactly, plus `hasAlreadyDrawn()`/`recordDraw()` — the idempotency guard against `ledger.jsonl` that `docs/PROMPTS.md` Phase 1c's prompt requires to live in this file, not in `DodoCreditLedger`. The `ledger.jsonl` entry shape (`{ runId, reserveRef, amountInrPaise, ts }`) wasn't specified anywhere in the docs, so this is a real design decision — see `docs/common/02-DECISIONS.md` ADR-004. `hasAlreadyDrawn()`/`recordDraw()` are pure filesystem logic with zero webcmd/browser dependency, so they ARE genuinely tested for real (round-trip script, output below) despite the connectivity blocker. `execute()` itself could not be exercised against a real webcmd subprocess — any real invocation would hit the same timeout the doctor check hit — so it is implemented but not verified, and Phase 1d is marked ⚠️ rather than ✅ for exactly that reason. Per `CLAUDE.md` rule 7, this is not being papered over with a fake/mocked subprocess to manufacture a passing test.
+Also implemented `src/webcmd/executor.ts`'s `execute()` matching `docs/03-WEBCMD-INTEGRATION.md` § Step 5 exactly, plus `hasAlreadyDrawn()`/`recordDraw()` — the idempotency guard against `ledger.jsonl` that `docs/PROMPTS.md` Phase 1c's prompt requires to live in this file, not in `PravaCreditLedger`. The `ledger.jsonl` entry shape (`{ runId, reserveRef, amountInrPaise, ts }`) wasn't specified anywhere in the docs, so this is a real design decision — see `docs/common/02-DECISIONS.md` ADR-004. `hasAlreadyDrawn()`/`recordDraw()` are pure filesystem logic with zero webcmd/browser dependency, so they ARE genuinely tested for real (round-trip script, output below) despite the connectivity blocker. `execute()` itself could not be exercised against a real webcmd subprocess — any real invocation would hit the same timeout the doctor check hit — so it is implemented but not verified, and Phase 1d is marked ⚠️ rather than ✅ for exactly that reason. Per `CLAUDE.md` rule 7, this is not being papered over with a fake/mocked subprocess to manufacture a passing test.
 
 **Real `webcmd doctor` output:**
 ```
@@ -469,7 +469,7 @@ tracePath:
 columns: [{"status":"action_required","logged_in":false,"site":"github", ...}]
 ```
 
-`npx tsc --noEmit` → exit 0 (root + `dashboard/`). `npm test` → 45/45 passing (unaffected). `src/webcmd/manifest.manual-check.ts` and `src/webcmd/executor.manual-check.ts` re-run clean. All temporary diagnostic scripts (`_dodo-diag.ts`, `_executor-verify.ts`, `_spawn-test.ts`) deleted after use, not committed — same discipline as every other real-verification pass this build.
+`npx tsc --noEmit` → exit 0 (root + `dashboard/`). `npm test` → 45/45 passing (unaffected). `src/webcmd/manifest.manual-check.ts` and `src/webcmd/executor.manual-check.ts` re-run clean. All temporary diagnostic scripts (`_prava-diag.ts`, `_executor-verify.ts`, `_spawn-test.ts`) deleted after use, not committed — same discipline as every other real-verification pass this build.
 
 **What this unblocks:** Phase 1g (the full Beat 1-6 rehearsal) is no longer blocked by B-002 on this machine. `gate run`/`gate fund` (Agent A's Phase 1f) can now genuinely execute a real webcmd write command with a real, correct `runId` flowing through. A live merchant-site rehearsal still needs a logged-in `webcmd profile` for whichever site is used (per `docs/03-WEBCMD-INTEGRATION.md`'s own setup note) — not attempted here, out of scope for resolving the blocker itself.
 
@@ -592,7 +592,7 @@ This phase needed more new foundational infrastructure than any prior one, becau
 - `gate mandate create` has no `--categories` or `--max-txns` flag anywhere in `docs/05-DEMO-SCRIPT.md` Beat 2 or `docs/PROMPTS.md`'s subcommand list, but `Mandate.scope` requires both. Defaulted `categories` to `["groceries"]` (the product brief's whole scenario) and `max_txns` to `1` (matching Beat 5's implied "txn 1/1"), both with optional flag overrides.
 - `gate mandate resign --cap 1500` (Beat 5) with no `--per-txn` flag: defaulted `per_txn_inr` to the new cap value. Without this, the retry in Beat 5 would still fail Rule 6 (per-txn cap), since the original mandate's `per_txn_inr` was 800.
 - `gate mandate create`'s reserve line: prints an honest "not yet funded" message rather than Beat 2's "reserve ₹800 blocked" — funding is `gate fund`, a separate command per `docs/01-ARCHITECTURE.md`'s own data flow, and it's blocked on Phase 1c regardless.
-- **Left as an explicitly open question, not guessed at**: whether `gate mandate resign` should itself top up the Dodo reserve (Beat 5's `gate run` retry shows `reserve ₹1,500 → drawn ₹1,412`, implying the reserve grew, but resign's own output line shows no reserve change, and the mechanism depends entirely on `Ledger`, which doesn't exist as code yet). Logged in `docs/agent-a/TASKS.md` as a Phase 1g item to resolve once Phase 1c is real, not resolved by guessing here.
+- **Left as an explicitly open question, not guessed at**: whether `gate mandate resign` should itself top up the Prava reserve (Beat 5's `gate run` retry shows `reserve ₹1,500 → drawn ₹1,412`, implying the reserve grew, but resign's own output line shows no reserve change, and the mechanism depends entirely on `Ledger`, which doesn't exist as code yet). Logged in `docs/agent-a/TASKS.md` as a Phase 1g item to resolve once Phase 1c is real, not resolved by guessing here.
 - `gate verify`'s failure message doesn't name the specific tampered field (Beat 7's illustrative `"tampered at field cart.total_inr"` would require diffing against a stored original, which nothing in this system keeps) — reports the failure honestly without inventing a field name.
 
 **Real CLI runs (all commands below, actually executed, not illustrative):**
@@ -613,7 +613,7 @@ $ gate receipt show rcp_ms52cnbt186a601beacb
 ✓ RECEIPT rcp_ms52cnbt186a601beacb signed
 
   mandate  sha256:4f2a9b1c...        cart     blinkit · 7 items · ₹1,412
-  payment  dodo_test · captured
+  payment  prava_test · captured
   run      blinkit/place-order · run_4821_1754000000
   evidence trace sha256:8c1d2e3f...
   prev     sha256:0000...        (chain head)
@@ -637,13 +637,13 @@ $ gate scan   # against a small local fixture manifest — see deviation 3 above
 $ gate run -- webcmd blinkit place-order --confirm
 ✗ gate run is not available yet.
   It needs src/ledger/Ledger.ts to exist as real code — Phase 1c is blocked on B-001
-  (no real Dodo test-mode account yet). src/webcmd/executor.ts is implemented but
+  (no real Prava test-mode account yet). src/webcmd/executor.ts is implemented but
   unverified against a live command — see B-002. See docs/common/04-BLOCKERS.md.
 
 $ gate fund mnd_x --amount 800
 ✗ gate fund is not available yet.
   It needs src/ledger/Ledger.ts to exist as real code — Phase 1c is blocked on B-001
-  (no real Dodo test-mode account yet). See docs/common/04-BLOCKERS.md.
+  (no real Prava test-mode account yet). See docs/common/04-BLOCKERS.md.
 ```
 
 All receipt/mandate fixtures used above were generated with the actual production signing code (`buildAndSignReceipt()`, `sign()`), never hand-typed fake JSON — then deleted after testing, along with the temporary fixture manifest.json, so no fake data lingers in the repo's gitignored runtime folders (mirroring Agent B's own fixture-cleanup practice for the dashboard).
@@ -657,7 +657,7 @@ Full suite: `npm test` → 45/45 passing (24 from Phases 1a/1b/1e + 21 new: `id`
 **Status:** 🔨 In progress — Beats 1–4 run for real and verified; Beats 5–8 deliberately not run this session (see below), not a code gap
 **Timestamp:** 2026-07-29 (later still), Agent A
 
-**What was actually run, for real, against the live stack (webcmd + real blinkit.com + real Dodo test mode):**
+**What was actually run, for real, against the live stack (webcmd + real blinkit.com + real Prava test mode):**
 
 ```
 $ gate scan
@@ -675,10 +675,10 @@ $ gate mandate create --subject "agent:grocery-runner" --cap 50 --per-txn 50 \
 $ gate fund mnd_ms5wgmdw41918f187092 --amount 200
 ✓ MANDATE mnd_ms5wgmdw41918f187092 funded — ₹200
   reserve reference cks_0NkEBgFsQ4J9Zk1Zxs4cE
-  checkout required: complete the Dodo Payments purchase at
-  https://test.checkout.dodopayments.com/session/cks_0NkEBgFsQ4J9Zk1Zxs4cE
+  checkout required: complete the Prava Payments purchase at
+  https://test.checkout.pravapayments.com/session/cks_0NkEBgFsQ4J9Zk1Zxs4cE
 
-[human completed the real Dodo test-mode checkout — real test Visa 4576238912771450 —
+[human completed the real Prava test-mode checkout — real test Visa 4576238912771450 —
  verified balance afterward: 120000 paise (₹1,200), up from the pre-existing ₹1,000]
 
 $ webcmd blinkit login --window foreground   [human completed real phone+OTP login]
@@ -711,20 +711,20 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹116
 
 **Why OVER_PER_TXN_CAP and not OVER_TOTAL_CAP:** this rehearsal's mandate was created with `--cap 50 --per-txn 50` (both equal, deliberately low, chosen to guarantee *some* real DENY without needing to know the exact cart total in advance) — Rule 6 (per-txn) fires before Rule 7 (total cap) ever gets evaluated, per `decide()`'s real rule order. This is still a fully real, live DENY — decide() genuinely refused a real ₹116 cart, and no `webcmd` subprocess was spawned on that path (confirmed by code inspection: `execute()` is only ever called inside the two ALLOW branches in `cmdRun()`, never reachable from the DENY branch). The demo script's own OVER_TOTAL_CAP scenario is just as reachable — set `--per-txn` higher than the cart and `--cap` lower — not re-run separately since the refusal mechanism (decide() denies, no execute() call) is identical either way.
 
-**Beats 5–8 (real place-order, receipt, verify, idempotency-retry): deliberately not run this session.** Beat 5 requires actually completing a real order on the live blinkit.com site — real delivery, real payment (COD or a saved card), not simulated by Dodo test mode (which only covers the mandate's own reserve accounting). The user made an explicit, informed choice not to spend real money on this rehearsal pass. This is **not a code gap** — see the 4 real bugs found and fixed below, all of which were found and fixed by actually running the live stack up through Beat 4, and the commit-path code (execute → draw → recordDraw → sign receipt) is implemented and type-checked but only exercised in the ALLOW branch of `cmdRun()` for a non-commit write (`add-to-cart`) so far, not for an actual `place-order`. Recommend running Beats 5–8 for real once during actual hackathon rehearsal (Phase 5, joint session) when a small real purchase is acceptable, or the user should tell us if there's a truly-free test path we haven't found (blinkit sandbox account, COD order that can be cancelled before dispatch, etc.).
+**Beats 5–8 (real place-order, receipt, verify, idempotency-retry): deliberately not run this session.** Beat 5 requires actually completing a real order on the live blinkit.com site — real delivery, real payment (COD or a saved card), not simulated by Prava test mode (which only covers the mandate's own reserve accounting). The user made an explicit, informed choice not to spend real money on this rehearsal pass. This is **not a code gap** — see the 4 real bugs found and fixed below, all of which were found and fixed by actually running the live stack up through Beat 4, and the commit-path code (execute → draw → recordDraw → sign receipt) is implemented and type-checked but only exercised in the ALLOW branch of `cmdRun()` for a non-commit write (`add-to-cart`) so far, not for an actual `place-order`. Recommend running Beats 5–8 for real once during actual hackathon rehearsal (Phase 5, joint session) when a small real purchase is acceptable, or the user should tell us if there's a truly-free test path we haven't found (blinkit sandbox account, COD order that can be cancelled before dispatch, etc.).
 
 **4 real bugs found and fixed while running this (all from actually executing against the live stack, not from reasoning about the code):**
 
-1. **`DodoCreditLedger.fund()` discarded `checkout_url`.** The real `checkoutSessions.create()` response is `{ session_id, checkout_url }` — `fund()` only ever extracted `session_id`, so the CLI's "open your browser to complete the purchase" message had no URL to open. `Ledger.fund()`'s return type widened to `{ reserveRef, checkoutUrl? }`; `gate fund` now prints the real URL.
+1. **`PravaCreditLedger.fund()` discarded `checkout_url`.** The real `checkoutSessions.create()` response is `{ session_id, checkout_url }` — `fund()` only ever extracted `session_id`, so the CLI's "open your browser to complete the purchase" message had no URL to open. `Ledger.fund()`'s return type widened to `{ reserveRef, checkoutUrl? }`; `gate fund` now prints the real URL.
 2. **`cmdRun()` fetched the cart total for every write command**, including `add-to-cart` — but `docs/03-WEBCMD-INTEGRATION.md`'s own command table calls `add-to-cart` "gated, but ₹0 committed until checkout." Fixed: only `place-order`/`checkout` (the actual commit action) fetches the real cart; other writes execute with `amountInr = 0` and skip the ledger draw/receipt entirely (there's nothing to draw against or receipt for a ₹0 action).
 3. **Cart JSON's real shape is a bare array of line items** (`[{ productId, name, price, quantity, total, payable, ... }]`), not an object with a top-level `total_inr`/`total` field as the original code assumed. Fixed to sum `payable`/`total` across all lines for the authoritative cart total, and derive a real item count for the receipt from the same data.
 4. **Beat 8's `--run-id <id>` retry flag was being passed straight through to `webcmd`** (which doesn't understand it and would error) instead of being intercepted by the gate CLI for the idempotency check. Fixed: `cmdRun()` now strips `--run-id` out of the args before they ever reach webcmd, and if present, checks `hasAlreadyDrawn(runId)` before any webcmd/Ledger call — denying with `ALREADY_EXECUTED` if it's already in `ledger.jsonl`, exactly as ADR-004 specifies. Not yet exercised end-to-end (needs a real Beat 5 run first to generate a real runId to retry).
 
-**Also found and fixed during payment testing (not a code bug, a process/documentation gap):** the generic Stripe test card `4242 4242 4242 4242` does **not** work on Dodo's test-mode checkout — it was rejected with a misleading-sounding "card not supported" message. Dodo's own confirmed-working test Visa for this account is `4576238912771450` (already used successfully once before, in the original Phase 1c provisioning — see that section above). Worth remembering for any future checkout in this project: **use Dodo's own test card, not a generic one from another processor.** A related near-miss: on the first checkout attempt, the human accidentally entered their own real RuPay debit card instead of the test card — it was declined (RuPay isn't in Dodo test mode's simulated network list: Visa/MasterCard/Amex/Discover/Diners/JCB/UnionPay/Link), so nothing was actually charged, but this is a reminder to always double-check which card number is being typed into a real-looking checkout form even when the URL is `test.checkout.dodopayments.com`.
+**Also found and fixed during payment testing (not a code bug, a process/documentation gap):** the generic Stripe test card `4242 4242 4242 4242` does **not** work on Prava's test-mode checkout — it was rejected with a misleading-sounding "card not supported" message. Prava's own confirmed-working test Visa for this account is `4576238912771450` (already used successfully once before, in the original Phase 1c provisioning — see that section above). Worth remembering for any future checkout in this project: **use Prava's own test card, not a generic one from another processor.** A related near-miss: on the first checkout attempt, the human accidentally entered their own real RuPay debit card instead of the test card — it was declined (RuPay isn't in Prava test mode's simulated network list: Visa/MasterCard/Amex/Discover/Diners/JCB/UnionPay/Link), so nothing was actually charged, but this is a reminder to always double-check which card number is being typed into a real-looking checkout form even when the URL is `test.checkout.pravapayments.com`.
 
 **Acceptance checklist from `05-DEMO-SCRIPT.md`, checked against this real run:**
 
-- [x] Beats 1–4 ran against real webcmd + real Dodo, end to end (Beats 5-6 not yet — real purchase pending a later decision)
+- [x] Beats 1–4 ran against real webcmd + real Prava, end to end (Beats 5-6 not yet — real purchase pending a later decision)
 - [x] Beat 4's DENY confirmed to NOT spawn a webcmd subprocess (verified by code inspection: `execute()` unreachable from the DENY branch)
 - [ ] `gate verify` reflected real signature checks against a receipt produced by a real `gate run` (verified previously against bootstrapped fixture receipts, not yet against a receipt this exact live rehearsal produced — needs Beat 5)
 - [ ] Full run completed within 4 minutes (not measured — run was interactive/exploratory, not timed; time it during the actual Phase 5 rehearsal)
@@ -751,15 +751,15 @@ $ gate mandate create --subject "agent:grocery-runner" --cap 600 --per-txn 600 \
 $ gate fund mnd_ms65y5egd7e7229c47a6 --amount 600
 ✓ MANDATE mnd_ms65y5egd7e7229c47a6 funded — ₹600
   reserve reference cks_0NkEvKofSCvb33CvbrQVl
-  checkout required: complete the Dodo Payments purchase at
-  https://test.checkout.dodopayments.com/session/cks_0NkEvKofSCvb33CvbrQVl
+  checkout required: complete the Prava Payments purchase at
+  https://test.checkout.pravapayments.com/session/cks_0NkEvKofSCvb33CvbrQVl
 
-[human completed the real Dodo test-mode checkout — Dodo's own test Visa 4576238912771450 —
- verified balance afterward via a temp script calling DodoCreditLedger.balance() directly:
+[human completed the real Prava test-mode checkout — Prava's own test Visa 4576238912771450 —
+ verified balance afterward via a temp script calling PravaCreditLedger.balance() directly:
  180000 paise (₹1,800), up from the pre-existing ₹1,200]
 ```
 
-Dry-checked `decide()` directly (temp script, deleted after use) with 100% real inputs — real cart total via a live `webcmd blinkit cart -f json` read (₹476), real ledger balance via a live `DodoCreditLedger.balance()` call (₹1,800), real txn count from `receipts/` (0) — without calling `execute()`, since `gate run`'s ALLOW branch has no dry-run flag and would immediately place the real order:
+Dry-checked `decide()` directly (temp script, deleted after use) with 100% real inputs — real cart total via a live `webcmd blinkit cart -f json` read (₹476), real ledger balance via a live `PravaCreditLedger.balance()` call (₹1,800), real txn count from `receipts/` (0) — without calling `execute()`, since `gate run`'s ALLOW branch has no dry-run flag and would immediately place the real order:
 
 ```
 {
@@ -777,7 +777,7 @@ ALLOW  blinkit/place-order · ₹476
   receipt rcp_ms66xl2ef9771fa00056
 ```
 
-Real money moved: Dodo test-mode balance dropped from ₹1,800 to ₹1,324 (confirmed via a temp script calling `balance()` directly), matching the ₹476 draw exactly. `ledger.jsonl` gained one real entry: `{"runId":"61a80013-9591-4f90-a4d2-8a39dd904fef","reserveRef":"cks_0NkEvKofSCvb33CvbrQVl","amountInrPaise":47600,"ts":"2026-07-29T14:39:17.217Z"}`.
+Real money moved: Prava test-mode balance dropped from ₹1,800 to ₹1,324 (confirmed via a temp script calling `balance()` directly), matching the ₹476 draw exactly. `ledger.jsonl` gained one real entry: `{"runId":"61a80013-9591-4f90-a4d2-8a39dd904fef","reserveRef":"cks_0NkEvKofSCvb33CvbrQVl","amountInrPaise":47600,"ts":"2026-07-29T14:39:17.217Z"}`.
 
 **Real bug found while inspecting the receipt: `network_order_id` was hardcoded `undefined`, even though webcmd's real `place-order` output includes a real `orderId` field.** `docs/03-WEBCMD-INTEGRATION.md`'s manifest schema for `blinkit/place-order` declares columns `["status","confirmed","itemCount","payable","orderId","url","message"]` — `execute()`'s `ExecuteResult.columns` carries this real data back, but `src/cli/gate.ts`'s receipt-building code never read it, unconditionally passing `network_order_id: undefined`. This is a real, previously-invisible gap: nobody had inspected a receipt produced by an actual commit-path command until this run (Beats 1-4 never reached `place-order`). Fixed in `src/cli/gate.ts`: extract `result.columns[0]?.orderId` defensively (some commands have no `orderId` field at all, so this stays optional exactly as the schema declares) and pass it through as `network_order_id`. Full reasoning: `docs/common/02-DECISIONS.md` ADR-011.
 
@@ -790,7 +790,7 @@ $ gate receipt show rcp_ms66xl2ef9771fa00056
 ✓ RECEIPT rcp_ms66xl2ef9771fa00056 signed
 
   mandate  sha256:b37663afab312514baf9c9e894e390bd1db486286f2f24d6b7e33ce02482872f        cart     blinkit · 2 items · ₹476
-  payment  dodo_test · captured
+  payment  prava_test · captured
   run      blinkit/place-order · 61a80013-9591-4f90-a4d2-8a39dd904fef
   evidence trace sha256:384772d343c5ba676e0a08674c9f5819ccd69d2c48a5630991e7257816cc0320
   prev     sha256:0000000000000000000000000000000000000000000000000000000000000000        (chain head)
@@ -843,7 +843,7 @@ DENY  blinkit/place-order · TXN_LIMIT_REACHED · ₹0
 [exit code 1]
 ```
 
-Not `DENY ALREADY_EXECUTED` as `docs/05-DEMO-SCRIPT.md`'s Beat 8 sketch shows. Root cause, found by reading `cmdRun()`: the `hasAlreadyDrawn()` idempotency check (ADR-004) only runs *after* `decide()` has already returned `ALLOW` — this mandate has `max_txns: 1`, already consumed by the real Beat 5 receipt, so `decide()`'s Rule 8 (`TXN_LIMIT_REACHED`) denies the retry before the idempotency check is ever reached. The demo script's own sketch implicitly assumes a mandate with room for another transaction (its illustrative `run_4821_...` example is a standalone snippet, not tied to a specific `--max-txns` value). **The actual security property — no double-charge — holds regardless of which guard fires:** confirmed `ledger.jsonl` still has exactly one entry (the original real draw) and the real Dodo balance is unchanged at ₹1,324 after the retry attempt.
+Not `DENY ALREADY_EXECUTED` as `docs/05-DEMO-SCRIPT.md`'s Beat 8 sketch shows. Root cause, found by reading `cmdRun()`: the `hasAlreadyDrawn()` idempotency check (ADR-004) only runs *after* `decide()` has already returned `ALLOW` — this mandate has `max_txns: 1`, already consumed by the real Beat 5 receipt, so `decide()`'s Rule 8 (`TXN_LIMIT_REACHED`) denies the retry before the idempotency check is ever reached. The demo script's own sketch implicitly assumes a mandate with room for another transaction (its illustrative `run_4821_...` example is a standalone snippet, not tied to a specific `--max-txns` value). **The actual security property — no double-charge — holds regardless of which guard fires:** confirmed `ledger.jsonl` still has exactly one entry (the original real draw) and the real Prava balance is unchanged at ₹1,324 after the retry attempt.
 
 To verify the `ALREADY_EXECUTED`-specific guard itself (not just "some guard denies it"), tried constructing a scenario where `decide()` would reach `ALLOW` — a fresh, unfunded mandate with `--max-txns 2` (0 receipts against its hash, and the real cart is now empty post-order, so `amountInr: 0` clears every remaining rule) — then retried the same real `run_id` against it. **This second `gate run -- ... place-order --confirm` attempt was blocked by Claude Code's own auto-mode safety classifier**, which flagged the repeated `place-order --confirm` invocation regardless of the reasoning that the idempotency guard should catch it before any webcmd call — a reasonable safety behavior, not a bug, since the classifier has no way to verify that reasoning in advance and the downside of being wrong is a second real charge. Rather than route around it, verified the actual guard function directly instead (a pure, non-webcmd, non-money call):
 
@@ -857,7 +857,7 @@ This is the exact function `cmdRun()` calls at its idempotency check site — co
 
 **Acceptance checklist from `05-DEMO-SCRIPT.md`, updated against this real run:**
 
-- [x] Beats 1–6 run end-to-end against a real webcmd session on a real merchant site, with a real Dodo test-mode Checkout Session and Credit Entitlement Balance
+- [x] Beats 1–6 run end-to-end against a real webcmd session on a real merchant site, with a real Prava test-mode Checkout Session and Credit Entitlement Balance
 - [x] The DENY in Beat 4 is produced by `decide()`, and no `webcmd` subprocess is spawned on that path (Beats 1-4 rehearsal, prior session)
 - [x] `gate verify` (Beats 6 and 7) reflects real signature verification, not a hardcoded pass/fail — confirmed against a receipt this exact live rehearsal produced, both directions (valid → tampered → restored → valid)
 - [ ] The whole run, timed, completes within 4 minutes (not measured this session — run was interactive/exploratory with a live user confirmation step in the middle; time it during Phase 4's rehearsal)
@@ -892,7 +892,7 @@ BEAT 2 — gate mandate create --cap 10 --per-txn 10 --max-txns 2 [t+5s]
 
 BEAT 2b — gate fund --reserve-ref cks_0NkEvKofSCvb33CvbrQVl     [t+7s]
 ✓ MANDATE mnd_ms69f71r0a6d108f6070 funded — ₹1,324 (existing reserve)
-  real balance read from Dodo — no new checkout needed
+  real balance read from Prava — no new checkout needed
 
 BEAT 3 — free reads                                             [t+10s, t+11s]
 › blinkit search salt      ALLOW  blinkit/search
@@ -918,7 +918,7 @@ BEAT 6 — the receipt                                            [t+66s, t+68s]
 ✓ RECEIPT rcp_ms69gfwkfcf268d4832f signed
   mandate  sha256:db0e6b0b259ce5866bc852b8f9a419ac5ca7f9a0cde62aa638ac7071d402cbd0
   cart     blinkit · 1 items · ₹20
-  payment  dodo_test · captured
+  payment  prava_test · captured
   run      blinkit/place-order · 51d04cd3-54e9-4c74-870c-0d0452b6d67b
   evidence trace sha256:279d6331c2946308cad6fccdfe9caf4a596888d2decb71cd874c13c650525553
   prev     sha256:6ff9eb597b3c1e884d04bfb3101ad544c2a2c86003fcd0cb394accec4b46e2f0
@@ -948,7 +948,7 @@ The gate then drew a real ₹20, wrote a `ledger.jsonl` entry, and signed a rece
 
 **🚨 Second, separate real bug, still open:** webcmd's `blinkit checkout`/`cart` **under-report the real payable**. Both reported `payable: 20, deliveryCharge: 0, handlingCharge: 0`; Blinkit's own UI in the same session showed ₹20 items + ₹30 delivery + ₹5 handling = **₹55**. `decide()` therefore evaluated ₹20 when the merchant would have charged ₹55 — a ₹20 cart that is really ₹55 could clear a ₹50 cap. This contradicts `docs/03-WEBCMD-INTEGRATION.md` § Step 3's premise that the cart total fed to `decide()` is authoritative. Not fixed — the right remedy (prefer the larger of cart/checkout, parse the real grand total, or treat fee-bearing checkouts as step-up) is a real design decision, not something to guess at. Invisible on the earlier ₹476 run because that cart cleared the free-delivery threshold, so the fees genuinely were ₹0.
 
-**Real side effects of the bad run, all cleaned up:** the ₹20 draw was reversed against the live Dodo account with a real `credit` ledger entry (balance read back to confirm: ₹1,304 → ₹1,324), and the false receipt `rcp_ms69gfwkfcf268d4832f` plus its `ledger.jsonl` line were deleted rather than left in place — a signed attestation to a non-existent order is precisely what this system exists to make impossible, and keeping one as demo data would be indefensible. The genuine ₹476 receipt remains and still verifies (`✓ signature valid · chain intact`).
+**Real side effects of the bad run, all cleaned up:** the ₹20 draw was reversed against the live Prava account with a real `credit` ledger entry (balance read back to confirm: ₹1,304 → ₹1,324), and the false receipt `rcp_ms69gfwkfcf268d4832f` plus its `ledger.jsonl` line were deleted rather than left in place — a signed attestation to a non-existent order is precisely what this system exists to make impossible, and keeping one as demo data would be indefensible. The genuine ₹476 receipt remains and still verifies (`✓ signature valid · chain intact`).
 
 **Also found (minor):** running `npm run build` leaves `dist/`, which `npm test` then also globs (the test script has no path argument, by Phase 0's own workaround) — the suite silently reports 90 tests instead of 45, running everything twice. Harmless but misleading; `dist/` was removed afterward to restore honest counts. Worth knowing before reading a test count that looks unexpectedly high.
 
@@ -966,17 +966,17 @@ Full suite re-verified throughout: `npx tsc --noEmit` → exit 0 (root). `npm te
 - [x] Next.js version actually installed: **16.2.12** (App Router, Turbopack), React 19.2.4, Tailwind CSS v4
 - [x] `/`, `/events`, `/receipts` all show real data, not mocked — verified in an actual Chrome tab (screenshots taken), against real fixture data generated with the production signing code (`src/mandate/sign.ts`, `src/receipt/chain.ts`), not hand-typed JSON
 - [x] Confirmed no API route writes anywhere (code-reviewed) — all three routes (`app/api/mandate|events|receipts/route.ts`) export only `GET`, no filesystem writes, no `Ledger` calls, no webcmd invocation anywhere in `dashboard/`
-- [x] Confirmed only `DODO_API_KEY_READONLY` is used in this app, never the write key — grepped `dashboard/` for `DODO_API_KEY` (without `_READONLY`), zero matches
+- [x] Confirmed only `PRAVA_API_KEY_READONLY` is used in this app, never the write key — grepped `dashboard/` for `PRAVA_API_KEY` (without `_READONLY`), zero matches
 - [x] `npm run build && npm run start` tested — real production build + start, verified via curl and an actual browser tab, not `next dev`
 - [x] Dashboard process killed mid-rehearsal, CLI demo path confirmed unaffected — **done for real, 2026-07-29 (later still)**, see addendum below.
 
 **What actually happened / deviations:**
 
-Scaffolded with `npx create-next-app@latest dashboard --typescript --tailwind --app --no-src-dir --import-alias "@/*" --eslint --use-npm`, then `npm install dodopayments` inside `dashboard/` (its own dependency tree, separate lockfile, per `docs/06-DASHBOARD-SPEC.md`). This Next.js version ships its own `AGENTS.md` warning that it has breaking changes from older Next.js conventions — read its bundled `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md` and the actual generated `app/page.tsx`/`app/layout.tsx` before writing any route/page code, rather than assuming prior-knowledge conventions still applied. They mostly did (Route Handlers, `params` as a `Promise`, App Router file conventions) — no exotic API surface was actually needed for this app's scope.
+Scaffolded with `npx create-next-app@latest dashboard --typescript --tailwind --app --no-src-dir --import-alias "@/*" --eslint --use-npm`, then `npm install pravapayments` inside `dashboard/` (its own dependency tree, separate lockfile, per `docs/06-DASHBOARD-SPEC.md`). This Next.js version ships its own `AGENTS.md` warning that it has breaking changes from older Next.js conventions — read its bundled `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md` and the actual generated `app/page.tsx`/`app/layout.tsx` before writing any route/page code, rather than assuming prior-knowledge conventions still applied. They mostly did (Route Handlers, `params` as a `Promise`, App Router file conventions) — no exotic API surface was actually needed for this app's scope.
 
-Implemented exactly the structure in `docs/06-DASHBOARD-SPEC.md`: `lib/types.ts`, `lib/hash.ts` (`canonicalJSON()`/`sha256Hex()`/`CHAIN_HEAD_HASH`, byte-for-byte duplicates of `src/mandate/sign.ts` and `src/receipt/chain.ts` — verified by testing the tamper-test scenario, see below), `lib/read.ts` (mandate/events/receipts file reading + local chain verification), `lib/dodo.ts` (balance lookup), three API routes, three pages, four components (`StatusBadge`, `EventRow`, `ReceiptCard`, `ReserveBalanceCard`).
+Implemented exactly the structure in `docs/06-DASHBOARD-SPEC.md`: `lib/types.ts`, `lib/hash.ts` (`canonicalJSON()`/`sha256Hex()`/`CHAIN_HEAD_HASH`, byte-for-byte duplicates of `src/mandate/sign.ts` and `src/receipt/chain.ts` — verified by testing the tamper-test scenario, see below), `lib/read.ts` (mandate/events/receipts file reading + local chain verification), `lib/prava.ts` (balance lookup), three API routes, three pages, four components (`StatusBadge`, `EventRow`, `ReceiptCard`, `ReserveBalanceCard`).
 
-**Deviation 1 — real SDK types diverge substantially from `docs/02-DODO-INTEGRATION.md`'s balance-read sketch.** Discovered by reading the installed `dodopayments` package's actual `.d.ts` files directly (no live account needed for this, though B-001 still blocks an actual call): there is no `creditEntitlementBalances.retrieve(reserveRef)` method. Balances are keyed by `(customer_id, credit_entitlement_id)` via `client.creditEntitlements.balances.retrieve()`; resolving a checkout-session-style `reserveRef` to a customer requires a second hop (`checkoutSessions.retrieve(id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`). `lib/dodo.ts` implements this real chain, handles either convention defensively (a `cus_...` id used directly, or a session id resolved through the chain), and is clearly marked unverified-live pending B-001 — same posture as Phase 1d's `execute()`. Full writeup with the exact real interfaces in this file's "Running list of open questions resolved" table above. Added `DODO_CREDIT_ENTITLEMENT_ID` to `.env.example` (root) and `dashboard/.env.local.example` — needed by this real chain, not in the original spec's env var list.
+**Deviation 1 — real SDK types diverge substantially from `docs/02-PRAVA-INTEGRATION.md`'s balance-read sketch.** Discovered by reading the installed `pravapayments` package's actual `.d.ts` files directly (no live account needed for this, though B-001 still blocks an actual call): there is no `creditEntitlementBalances.retrieve(reserveRef)` method. Balances are keyed by `(customer_id, credit_entitlement_id)` via `client.creditEntitlements.balances.retrieve()`; resolving a checkout-session-style `reserveRef` to a customer requires a second hop (`checkoutSessions.retrieve(id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`). `lib/prava.ts` implements this real chain, handles either convention defensively (a `cus_...` id used directly, or a session id resolved through the chain), and is clearly marked unverified-live pending B-001 — same posture as Phase 1d's `execute()`. Full writeup with the exact real interfaces in this file's "Running list of open questions resolved" table above. Added `PRAVA_CREDIT_ENTITLEMENT_ID` to `.env.example` (root) and `dashboard/.env.local.example` — needed by this real chain, not in the original spec's env var list.
 
 **Deviation 2 — RESOLVED 2026-07-29, same day, once Agent A's Phase 1f shipped `src/cli/keys.ts`.** `signature_valid` is now a real boolean, not always `null`. `dashboard/lib/hash.ts` gained `verifySignature()` (duplicate of `src/mandate/sign.ts`'s `verify()`, per the same duplication note as `canonicalJSON()`/`sha256Hex()`), `dashboard/lib/read.ts` gained `loadGatePublicKeyPem()` (reads `keys/gate.public.pem` via `MANDATE_GATE_DATA_DIR`, returns `null` gracefully if it doesn't exist yet rather than throwing — no receipt has ever been signed on a fresh machine until the CLI runs once), and `verifyChainLocal()` now takes the key and computes real signature checks alongside chain-link checks.
 
@@ -985,29 +985,29 @@ Implemented exactly the structure in `docs/06-DASHBOARD-SPEC.md`: `lib/types.ts`
 **Deviation 3 — "current mandate" resolution is an undocumented design call.** `mandates/` can hold more than one file (`gate mandate resign` creates a new `mandate_id` rather than mutating the original, per `05-DEMO-SCRIPT.md` Beat 3-4). `readCurrentMandate()` picks the greatest `mandate_id` by string sort (ULIDs sort lexicographically by creation time) — not specified anywhere else, documented as a comment in `lib/read.ts`.
 
 **Real verification, not just "it compiles":** Generated real, cryptographically valid fixtures (a signed mandate, two hash-chained signed receipts, four `GateEvent`s) using the actual production `sign()`/`buildAndSignReceipt()` functions from `src/mandate/sign.ts`/`src/receipt/chain.ts` — not hand-typed JSON, not a dashboard-side mock — via a one-off script (`_gen-fixtures.ts`, deleted after use, not committed). Ran `npm run build && npm run start` for real. Confirmed via `curl` and an actual Chrome tab (`mcp__claude-in-chrome`):
-- `/` showed the real mandate fields, correct expiry countdown, and the balance card correctly displaying "Unavailable — Dodo not yet configured (missing DODO_API_KEY_READONLY or DODO_CREDIT_ENTITLEMENT_ID)" (both env vars were deliberately left unset to test this real degradation path, not a happy-path-only test)
+- `/` showed the real mandate fields, correct expiry countdown, and the balance card correctly displaying "Unavailable — Prava not yet configured (missing PRAVA_API_KEY_READONLY or PRAVA_CREDIT_ENTITLEMENT_ID)" (both env vars were deliberately left unset to test this real degradation path, not a happy-path-only test)
 - `/events` showed all 4 events, reverse-chronological, color-coded verdict badges, and confirmed via network-request inspection that polling correctly uses `?since=<last_event_id>` and appends only new rows rather than re-fetching the whole list
 - `/receipts` showed both receipts with `chain_link_valid: true`. **Then performed the actual tamper test**: edited `total_inr` in `receipts/rcp_fixture001.json` on disk while the dashboard was running, waited for the next poll cycle (no manual refresh) — the SECOND receipt's badge flipped live from "chain valid" to "chain INVALID" in the browser, while the tampered receipt's own badge stayed "chain valid" (only its own field changed, its own link to `CHAIN_HEAD_HASH` is unaffected) — this is the exact distinction `05-DEMO-SCRIPT.md` Beat 7 and this file's Phase 1e entry require. Reverted the edit afterward.
 - Zero console errors in the browser tab throughout.
 
 Fixed a Turbopack build warning ("whole project traced unintentionally") by setting `turbopack.root` in `next.config.ts` to the dashboard's own directory (it's a genuinely separate app, not a workspace member of the outer repo) and adding a `turbopackIgnore` comment on the one dynamic `process.cwd()` path resolution in `lib/read.ts` — cosmetic, not a functional bug, but worth doing cleanly since it flagged real over-tracing.
 
-`npm audit` in `dashboard/` reports 12 high-severity advisories, all pre-existing in `create-next-app`'s own scaffold dependency tree (eslint/postcss/sharp transitive deps), not introduced by adding `dodopayments`. Fixing them requires downgrading Next.js itself (`npm audit fix --force` → Next 9.x) — not worth it for a locally-run demo dashboard; noting instead of silently ignoring.
+`npm audit` in `dashboard/` reports 12 high-severity advisories, all pre-existing in `create-next-app`'s own scaffold dependency tree (eslint/postcss/sharp transitive deps), not introduced by adding `pravapayments`. Fixing them requires downgrading Next.js itself (`npm audit fix --force` → Next 9.x) — not worth it for a locally-run demo dashboard; noting instead of silently ignoring.
 
 Deleted the fixture data and generator script after verification (`_gen-fixtures.ts`, the fixture `mandates/`/`receipts/`/`events.jsonl` files) so no fake data is sitting in the repo's runtime-data folders — those paths are gitignored anyway, but leaving fabricated data around risked confusing a future real demo run or Agent A's own Phase 1f testing.
 
-**Addendum, 2026-07-29 (later same day) — real Dodo account end-to-end verification, and a real bug caught by it.** The user provided real Dodo test-mode credentials (the same account Agent A provisioned in Phase 1c — `DODO_CREDIT_ENTITLEMENT_ID=cde_0NkBmcWcZ3I79sHr1UZCx`, a real funded customer `cus_0NkBwH3N9Ld41wgNzK6ty`, a real paid checkout session `cks_0NkBw28CUxmbI2KsSdVFu`). Populated `.env` (root) and `dashboard/.env.local` (read-only key + entitlement id only, never the write key) and tested `lib/dodo.ts`'s balance-resolution chain for real, not just against SDK types.
+**Addendum, 2026-07-29 (later same day) — real Prava account end-to-end verification, and a real bug caught by it.** The user provided real Prava test-mode credentials (the same account Agent A provisioned in Phase 1c — `PRAVA_CREDIT_ENTITLEMENT_ID=cde_0NkBmcWcZ3I79sHr1UZCx`, a real funded customer `cus_0NkBwH3N9Ld41wgNzK6ty`, a real paid checkout session `cks_0NkBw28CUxmbI2KsSdVFu`). Populated `.env` (root) and `dashboard/.env.local` (read-only key + entitlement id only, never the write key) and tested `lib/prava.ts`'s balance-resolution chain for real, not just against SDK types.
 
-**Real bug found and fixed:** `lib/dodo.ts`'s `DodoPayments` client never set `environment: 'test_mode'`. The SDK's own doc comment (`node_modules/dodopayments/client.d.ts`) says `environment` defaults to `live_mode` when unset — every call was silently going to `https://live.dodopayments.com` instead of `https://test.dodopayments.com`, and failing there with a generic `401 Unauthorized` (test keys don't work against the live host). This is exactly the kind of live-mode leak `CLAUDE.md` Hard Rule 1 exists to prevent, caught only by making a real call and getting a real, unexpected error — a `401` with test keys against what I assumed was already the test host was surprising enough to dig into, rather than just retrying. Fixed by passing `environment: 'test_mode'` explicitly (confirmed via the same client.d.ts comment: `test_mode` → `https://test.dodopayments.com`, matching `docs/02-DODO-INTEGRATION.md`'s original guess, which was right all along — my code just never applied it).
+**Real bug found and fixed:** `lib/prava.ts`'s `PravaPayments` client never set `environment: 'test_mode'`. The SDK's own doc comment (`node_modules/pravapayments/client.d.ts`) says `environment` defaults to `live_mode` when unset — every call was silently going to `https://live.pravapayments.com` instead of `https://test.pravapayments.com`, and failing there with a generic `401 Unauthorized` (test keys don't work against the live host). This is exactly the kind of live-mode leak `CLAUDE.md` Hard Rule 1 exists to prevent, caught only by making a real call and getting a real, unexpected error — a `401` with test keys against what I assumed was already the test host was surprising enough to dig into, rather than just retrying. Fixed by passing `environment: 'test_mode'` explicitly (confirmed via the same client.d.ts comment: `test_mode` → `https://test.pravapayments.com`, matching `docs/02-PRAVA-INTEGRATION.md`'s original guess, which was right all along — my code just never applied it).
 
 **After the fix, verified both resolution paths for real, via the actual `/api/mandate` route (not a bypass script):**
 - A real fixture mandate with `reserve.ref = 'cks_0NkBw28CUxmbI2KsSdVFu'` (Agent A's real paid checkout session) → `/api/mandate` correctly walked the full 2-hop chain (`checkoutSessions.retrieve` → `payments.retrieve` → `customer.customer_id` = `cus_0NkBwH3N9Ld41wgNzK6ty`, matching Agent A's own record exactly) → `creditEntitlements.balances.retrieve()` → **`balanceInr: 1000`**, matching Agent A's confirmed ₹1,000.00 reserve exactly. Confirmed visually in an actual Chrome tab: the mandate page's balance card showed "₹1,000" with zero console errors.
 - A second fixture mandate with `reserve.ref = 'cus_0NkBwH3N9Ld41wgNzK6ty'` (the direct-customer-id shortcut path) → same result, `balanceInr: 1000`.
 - Also independently confirmed Agent A's FINDING A from outside the dashboard: `balances.retrieve()`'s real response has `"balance": 100000` as an unquoted JSON number, not a string — my `Number(balance.balance)` coercion already handled this correctly regardless (a no-op on an already-numeric value), so no code change was needed there, just confirmation.
 
-Deleted the diagnostic scripts (`_dodo-diag.ts`, a second `_gen-fixtures.ts` pass) and both test mandates afterward, same cleanup discipline as before. `.env`/`dashboard/.env.local` now hold real credentials locally (both gitignored, never committed).
+Deleted the diagnostic scripts (`_prava-diag.ts`, a second `_gen-fixtures.ts` pass) and both test mandates afterward, same cleanup discipline as before. `.env`/`dashboard/.env.local` now hold real credentials locally (both gitignored, never committed).
 
-**What this does and doesn't mean for the wider build:** the dashboard's Dodo integration is now genuinely end-to-end verified against a live test-mode account — no longer "unverified live." This does **not** mean Phase 1g (the full demo script) can run yet: `src/ledger/DodoCreditLedger.ts` itself still doesn't exist (Agent A's Phase 1c, explicitly out of scope for their provisioning-only session — see the entry above), and `gate run`'s webcmd execution is still blocked on B-002 on this machine. Whoever writes `DodoCreditLedger.ts` should apply the same `environment: 'test_mode'` fix — it's a generic SDK-client gotcha, not something specific to the dashboard's code path.
+**What this does and doesn't mean for the wider build:** the dashboard's Prava integration is now genuinely end-to-end verified against a live test-mode account — no longer "unverified live." This does **not** mean Phase 1g (the full demo script) can run yet: `src/ledger/PravaCreditLedger.ts` itself still doesn't exist (Agent A's Phase 1c, explicitly out of scope for their provisioning-only session — see the entry above), and `gate run`'s webcmd execution is still blocked on B-002 on this machine. Whoever writes `PravaCreditLedger.ts` should apply the same `environment: 'test_mode'` fix — it's a generic SDK-client gotcha, not something specific to the dashboard's code path.
 
 **Addendum, 2026-07-29 (later still) — the CLI-kill test, and a real demo-blocking bug it surfaced.** Both blockers (B-001, B-002) are resolved and Agent A has already run a live Phase 1g rehearsal (Beats 1-4) on their machine, so this machine's own `webcmd doctor` passing for real (ADR-007) meant Phase 1h's one remaining acceptance item — killing the dashboard mid-run and confirming the CLI is unaffected — was finally testable here too.
 
@@ -1218,7 +1218,7 @@ Resolver result: {
 
 **Live end-to-end DENY test (safe — no real purchase attempted):**
 
-Created a fresh mandate `mnd_ms6gdmj2c54a44b009e1` with `--cap 250 --per-txn 250` deliberately below the real ₹295 cart. Funded via `--reserve-ref cks_0NkEvKofSCvb33CvbrQVl` (the existing paid reserve, real balance ₹1,324 read back live from Dodo). Ran `gate run -- webcmd blinkit place-order --confirm`:
+Created a fresh mandate `mnd_ms6gdmj2c54a44b009e1` with `--cap 250 --per-txn 250` deliberately below the real ₹295 cart. Funded via `--reserve-ref cks_0NkEvKofSCvb33CvbrQVl` (the existing paid reserve, real balance ₹1,324 read back live from Prava). Ran `gate run -- webcmd blinkit place-order --confirm`:
 
 ```
 › blinkit place-order --confirm
@@ -1237,7 +1237,7 @@ DENY  blinkit/place-order · OVER_PER_TXN_CAP · ₹295
 {"event_id":"evt_ms6gfa5qa64e29743523","ts":"2026-07-29T19:04:59.003Z","mandate_id":"mnd_ms6gdmj2c54a44b009e1","mandate_hash":"sha256:e3cbcbed81fdf8d430ba94c8beabd8830b4b59f926b151af82cbd61cede3ac84","command":"blinkit/place-order","access":"write","verdict":"DENY","code":"OVER_PER_TXN_CAP","amount_inr":295,"reserve_ref":"cks_0NkEvKofSCvb33CvbrQVl"}
 ```
 
-**Post-DENY invariant check:** Dodo balance read back live via `DodoCreditLedger.balance()` → still ₹1,324 exact. No draw, no `ledger.jsonl` entry, no receipt written. Zero side effects, exactly as fail-closed requires.
+**Post-DENY invariant check:** Prava balance read back live via `PravaCreditLedger.balance()` → still ₹1,324 exact. No draw, no `ledger.jsonl` entry, no receipt written. Zero side effects, exactly as fail-closed requires.
 
 **What this LIVE run proves, concretely:**
 1. `resolveCartTotalInr()` reads real webcmd JSON correctly (three sources, all agreeing at 295, `merchantBlocked: false`).
@@ -1269,10 +1269,10 @@ ALLOW  blinkit/place-order · ₹295
 - decide() correctly returned ALLOW (₹295 well within a ₹500 cap).
 - `execute()` genuinely called Blinkit through webcmd — this is a real merchant interaction, not a mock.
 - Blinkit itself refused to complete the transaction (address/payment selection not done in the browser), returning `status: blocked` and no `orderId`.
-- **The ADR-013 fail-closed check (introduced in this codebase 2026-07-29) refused to sign a receipt for the non-existent order.** Before ADR-013 this exact scenario would have signed a "captured" receipt for a ₹295 order that was never placed and drawn ₹295 from Dodo — precisely the worst-case failure the earlier session found. Now: nothing signed, nothing drawn, non-zero exit, honest error to the operator.
+- **The ADR-013 fail-closed check (introduced in this codebase 2026-07-29) refused to sign a receipt for the non-existent order.** Before ADR-013 this exact scenario would have signed a "captured" receipt for a ₹295 order that was never placed and drawn ₹295 from Prava — precisely the worst-case failure the earlier session found. Now: nothing signed, nothing drawn, non-zero exit, honest error to the operator.
 
 **Post-blocked-ALLOW invariants (all verified live):**
-- Dodo reserve balance read back live: `132400 paise = ₹1324.00` (unchanged, no draw).
+- Prava reserve balance read back live: `132400 paise = ₹1324.00` (unchanged, no draw).
 - `ledger.jsonl` on disk: does not exist (no idempotency entry written).
 - `receipts/` directory on disk: does not exist (no false receipt signed).
 - Real trace evidence retained by webcmd: `/Users/vidipghosh/.webcmd/profiles/default/traces/20260729191138-839951f1` (for audit).
@@ -1338,13 +1338,13 @@ Cleanup: deleted temp mandates `mnd_ms6gzbre901c6da0707b.json` and `mnd_ms6gn2bo
 
 ## Running list of open questions resolved during the build
 
-(Move items here from the "Open questions" sections of `02-DODO-INTEGRATION.md` and `01-ARCHITECTURE.md` once answered for real, with the real answer.)
+(Move items here from the "Open questions" sections of `02-PRAVA-INTEGRATION.md` and `01-ARCHITECTURE.md` once answered for real, with the real answer.)
 
 | Question | Where it was open | Real answer found | Date |
 |---|---|---|---|
-| Does Dodo's checkout/payment API accept a request-side idempotency key? | `02-DODO-INTEGRATION.md` | **Partially, from real SDK types (not yet a live call — B-001 still blocks that).** `checkoutSessions.create()`'s params (`CheckoutSessionCreateParams`) have no `idempotency_key` field at all — no evidence funding itself is natively idempotent. But the actual spend-deduction operation is a different, real SDK method than the doc guessed (`client.creditEntitlements.balances.createLedgerEntry(customerID, { credit_entitlement_id, entry_type: 'debit', amount, idempotency_key })` — not `creditEntitlements.deduct()`, which doesn't exist), and its params (`BalanceCreateLedgerEntryParams`) DO include a real `idempotency_key?: string \| null` field. So the piece that actually matters for `draw()` (the deduct call) has native idempotency support; the `ledger.jsonl` guard built in Phase 1d (`hasAlreadyDrawn`/`recordDraw`, see ADR-004) stays as defense-in-depth per the spec's "belt and suspenders" instruction, not because native support is absent. | 2026-07-29, Agent B |
-| Exact field name for Credit Entitlement Balance | `02-DODO-INTEGRATION.md` | **From real SDK types (not a live response yet):** the doc's guess of `balance` was correct, but the *shape around it* is not what the sketch assumed. There is no `creditEntitlementBalances.retrieve(reserveRef)` method at all. The real hierarchy is `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })` → `CustomerCreditBalance { id, balance: string, credit_entitlement_id, customer_id, overage, ... }` — keyed by **customer**, not by checkout-session id. `balance` is a `string` (decimal), not a `number`. **⚠️ CORRECTED 2026-07-29 by Agent A against a real live call: the SDK's type is WRONG here — the wire actually returns `"balance": 100000` as a JSON *number*, while the ledger object's `amount`/`balance_after` for the same transaction ARE quoted strings. Coerce explicitly; see Phase 1c FINDING A.** This means `Ledger.fund()`'s `reserveRef` can't simply be the checkout session's `session_id` (also note: the field is `session_id`, not `.id` as the doc's sketch used) if `balance()`/`draw()` need a customer id — resolving a session to its customer requires `checkoutSessions.retrieve(session_id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`. Recorded here now so whoever picks up Phase 1c (still blocked on B-001) doesn't re-derive this from scratch; the dashboard's `/api/mandate` route (Phase 1h) implements this resolution chain for real, marked unverified-live pending B-001, same as Phase 1d's `execute()`. | 2026-07-29, Agent B |
-| Is the $1,000 promotional credit visible/real in the dashboard? | vault `_TASKS & STATUS` Q8 | **Resolved, and the answer changes the picture.** The user confirmed a real Dodo test-mode account exists and shared a screenshot of Settings → Promotions: "Promo Name: Replit x Dodo Payments," "Fee waiver still available on $0.00 / $1,000.00," "Transaction Fee and Transaction Fixed Fee are waived until the threshold is reached," expires 7 Oct 2026. **This is a transaction-fee waiver on Dodo's own processing fees, not a spendable credit balance.** It's a completely different Dodo feature from the Credit-Based Billing ("Agent Spend Credits" Product + Credit Entitlement) this project's `Ledger.fund()`/`balance()`/`draw()` are built around. It doesn't provide `DODO_API_KEY`/`DODO_API_KEY_READONLY`/a Product/a Credit Entitlement ID, and doesn't change what B-001 still needs. Likely moot for this build anyway — test-mode transactions already involve no real money and (typically) no real processing fees regardless of any promotion, since nothing here ever enters live mode (`CLAUDE.md` Hard rule 1). Good news it does confirm: the account itself is real and in Test Mode — genuine progress toward clearing B-001, just not the whole thing. | 2026-07-29, Agent A |
+| Does Prava's checkout/payment API accept a request-side idempotency key? | `02-PRAVA-INTEGRATION.md` | **Partially, from real SDK types (not yet a live call — B-001 still blocks that).** `checkoutSessions.create()`'s params (`CheckoutSessionCreateParams`) have no `idempotency_key` field at all — no evidence funding itself is natively idempotent. But the actual spend-deduction operation is a different, real SDK method than the doc guessed (`client.creditEntitlements.balances.createLedgerEntry(customerID, { credit_entitlement_id, entry_type: 'debit', amount, idempotency_key })` — not `creditEntitlements.deduct()`, which doesn't exist), and its params (`BalanceCreateLedgerEntryParams`) DO include a real `idempotency_key?: string \| null` field. So the piece that actually matters for `draw()` (the deduct call) has native idempotency support; the `ledger.jsonl` guard built in Phase 1d (`hasAlreadyDrawn`/`recordDraw`, see ADR-004) stays as defense-in-depth per the spec's "belt and suspenders" instruction, not because native support is absent. | 2026-07-29, Agent B |
+| Exact field name for Credit Entitlement Balance | `02-PRAVA-INTEGRATION.md` | **From real SDK types (not a live response yet):** the doc's guess of `balance` was correct, but the *shape around it* is not what the sketch assumed. There is no `creditEntitlementBalances.retrieve(reserveRef)` method at all. The real hierarchy is `client.creditEntitlements.balances.retrieve(customerID, { credit_entitlement_id })` → `CustomerCreditBalance { id, balance: string, credit_entitlement_id, customer_id, overage, ... }` — keyed by **customer**, not by checkout-session id. `balance` is a `string` (decimal), not a `number`. **⚠️ CORRECTED 2026-07-29 by Agent A against a real live call: the SDK's type is WRONG here — the wire actually returns `"balance": 100000` as a JSON *number*, while the ledger object's `amount`/`balance_after` for the same transaction ARE quoted strings. Coerce explicitly; see Phase 1c FINDING A.** This means `Ledger.fund()`'s `reserveRef` can't simply be the checkout session's `session_id` (also note: the field is `session_id`, not `.id` as the doc's sketch used) if `balance()`/`draw()` need a customer id — resolving a session to its customer requires `checkoutSessions.retrieve(session_id).payment_id` → `payments.retrieve(payment_id).customer.customer_id`. Recorded here now so whoever picks up Phase 1c (still blocked on B-001) doesn't re-derive this from scratch; the dashboard's `/api/mandate` route (Phase 1h) implements this resolution chain for real, marked unverified-live pending B-001, same as Phase 1d's `execute()`. | 2026-07-29, Agent B |
+| Is the $1,000 promotional credit visible/real in the dashboard? | vault `_TASKS & STATUS` Q8 | **Resolved, and the answer changes the picture.** The user confirmed a real Prava test-mode account exists and shared a screenshot of Settings → Promotions: "Promo Name: Replit x Prava Payments," "Fee waiver still available on $0.00 / $1,000.00," "Transaction Fee and Transaction Fixed Fee are waived until the threshold is reached," expires 7 Oct 2026. **This is a transaction-fee waiver on Prava's own processing fees, not a spendable credit balance.** It's a completely different Prava feature from the Credit-Based Billing ("Agent Spend Credits" Product + Credit Entitlement) this project's `Ledger.fund()`/`balance()`/`draw()` are built around. It doesn't provide `PRAVA_API_KEY`/`PRAVA_API_KEY_READONLY`/a Product/a Credit Entitlement ID, and doesn't change what B-001 still needs. Likely moot for this build anyway — test-mode transactions already involve no real money and (typically) no real processing fees regardless of any promotion, since nothing here ever enters live mode (`CLAUDE.md` Hard rule 1). Good news it does confirm: the account itself is real and in Test Mode — genuine progress toward clearing B-001, just not the whole thing. | 2026-07-29, Agent A |
 
 ---
 
@@ -1517,7 +1517,7 @@ is what makes an autonomous run possible at all — UPI/card would require a hum
 unreachable ledger printed as `cart ₹179 · mandate ₹500 · over by ₹179` — impossible arithmetic that
 reads as an exhausted mandate. Now printed to stderr. Verdict stays fail-closed.
 
-**Operational note for the demo:** `gate` reads `DODO_*` from the ambient environment and expects a
+**Operational note for the demo:** `gate` reads `PRAVA_*` from the ambient environment and expects a
 shell that has sourced `.env`. Running `node dist/cli/gate.js` directly without it silently DENYs
 everything. Use `node --env-file=.env dist/cli/gate.js …` (the dashboard already injects `.env`
 itself via `lib/gate-cli.ts`).
@@ -1601,7 +1601,7 @@ whether to write at all) but the write states the destination, not the distance.
 | Decrement via route | `3 → 1`, ₹493 → ₹199 |
 | `clear-cart` via gate | real `ALLOW`, then verified `₹0 / 0 items` |
 | Dashboard vs Blinkit | Both paths independently report `₹199 · 3 items`, same two lines, same quantities |
-| Mandate-expiry fix | New mandate `mnd_msa005uo46bd5a235a6c` (₹500 cap, expires 23:55), funded from existing paid reserve `cks_0NkEvKofSCvb33CvbrQVl` — real Dodo balance **₹1,170**, no new payment |
+| Mandate-expiry fix | New mandate `mnd_msa005uo46bd5a235a6c` (₹500 cap, expires 23:55), funded from existing paid reserve `cks_0NkEvKofSCvb33CvbrQVl` — real Prava balance **₹1,170**, no new payment |
 | `npm test` / `tsc --noEmit` | **127/127 pass**, clean on root + dashboard |
 
 ## Also fixed — the garbled error text
@@ -1655,13 +1655,13 @@ whether the merchant's own checkout is driven:
 |---|---|---|
 | Search, clear-cart, add-to-cart, cart verification | real | real |
 | `decide()` — signature, expiry, merchant, caps, txn limit | real | real |
-| Dodo reserve balance read | real | real |
+| Prava reserve balance read | real | real |
 | Merchant checkout driven to a placed order | **no** | yes |
-| Dodo reserve draw | real (test credits) | real (test credits) |
+| Prava reserve draw | real (test credits) | real (test credits) |
 | Signed, chain-linked receipt | real, marked `TEST` | real, marked `LIVE` |
 
-Nothing is mocked or bypassed in either mode. Note that "LIVE" never meant live money at Dodo —
-every Dodo call in this repo is test-mode-only and always has been (CLAUDE.md hard rule 1). The
+Nothing is mocked or bypassed in either mode. Note that "LIVE" never meant live money at Prava —
+every Prava call in this repo is test-mode-only and always has been (CLAUDE.md hard rule 1). The
 distinction is purely merchant-side.
 
 ## Honesty design — how a TEST receipt cannot be mistaken for a real order
@@ -1691,10 +1691,10 @@ distinction is purely merchant-side.
 | Check | Result |
 |---|---|
 | `gate run --mode test` direct | real `ALLOW` ₹281 → `SETTLED IN TEST MODE` → receipt `rcp_msa3ells21fcda8c5b58` |
-| Dodo reserve, run 1 | **₹1,170 → ₹889** — exact ₹281 real test-credit draw |
+| Prava reserve, run 1 | **₹1,170 → ₹889** — exact ₹281 real test-credit draw |
 | Full dashboard job (`POST /api/shop/purchase-run`, `mode:"TEST"`) | reached `RECEIPT_READY`, `ok:true`, receipt `rcp_msa3pg829fdfb4519749`, `orderId: none` |
-| Dodo reserve, run 2 | **₹889 → ₹608** — exact ₹281 again |
-| Receipt contents | `mode TEST — settled against the Dodo test reserve; no merchant order was placed` |
+| Prava reserve, run 2 | **₹889 → ₹608** — exact ₹281 again |
+| Receipt contents | `mode TEST — settled against the Prava test reserve; no merchant order was placed` |
 | `gate verify` | `✓ signature valid · chain intact` |
 | Merchant cart after a TEST run | unchanged at ₹281 — the checkout genuinely was not driven |
 | Invalid mode via API | `400 mode must be "TEST" or "LIVE"` |

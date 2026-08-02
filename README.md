@@ -26,7 +26,7 @@ Prava's documented Browser Harness currently supports Shopify, not Blinkit. This
 
 ## What existed before this hackathon vs. what was built during it
 
-Before Aug 1, 2026: the mandate/policy engine, Ed25519 signing, receipt chain, webcmd/Blinkit integration, dashboard, and the Dodo test integration. During Aug 1–2, 2026: the Prava REST integration, Prava ledger tests, schema migration, and hackathon disclosure material. `demo/mandate-gate-fallback-2026-07-29.mp4` predates the hackathon and depicts the old Dodo flow; it must be replaced with a Prava-flow recording or clearly retained only as a historical artifact.
+Before Aug 1, 2026: the mandate/policy engine, Ed25519 signing, receipt chain, webcmd/Blinkit integration, dashboard, and the Prava test integration. During Aug 1–2, 2026: the Prava REST integration, Prava ledger tests, schema migration, and hackathon disclosure material. `demo/mandate-gate-fallback-2026-07-29.mp4` predates the hackathon and depicts the old Prava flow; it must be replaced with a Prava-flow recording or clearly retained only as a historical artifact.
 
 ## What worked, what did not, and what we learned
 

@@ -142,7 +142,7 @@ anything about the checkout walker itself.
 - [x] Root project builds clean (`npm run build` / `tsc --noEmit`, no errors)
 - [x] Full test suite passes: **238/238**, 0 failures
 - [x] `webcmd doctor` — daemon/runtime/connectivity all OK, `default` profile connected
-- [x] `.env` / `dashboard/.env.local` fully populated (Dodo test-mode keys, Anakin key, data dir)
+- [x] `.env` / `dashboard/.env.local` fully populated (Prava test-mode keys, Anakin key, data dir)
 - [x] **Found and fixed:** a stale `next start -p 3000` production server (built pre-session, from
       before the current uncommitted fixes) was squatting on port 3000, so all real dashboard
       traffic — including, apparently, a live search someone ran for `"hjk"` at ~00:51 — was being

@@ -211,12 +211,12 @@ functions with Postgres operations:
 - **`hasBeenCleared` / `markCleared`:** Use `cleared_merchants(session_id, merchant)` table instead
   of the in-memory `clearedMerchants` Map.
 
-### 6. `DodoCreditLedger` — ledger audit integration
+### 6. `PravaCreditLedger` — ledger audit integration
 
-`draw()` and `credit()` each fire an additional `INSERT INTO ledger_entries ...` after the Dodo
-API call succeeds. The insert uses `ON CONFLICT (idempotency_key) DO NOTHING` — if the Dodo call
+`draw()` and `credit()` each fire an additional `INSERT INTO ledger_entries ...` after the Prava
+API call succeeds. The insert uses `ON CONFLICT (idempotency_key) DO NOTHING` — if the Prava call
 was already idempotent, the audit row is too. A failed insert is logged but never rethrows —
-the Dodo-hosted ledger is authoritative.
+the Prava-hosted ledger is authoritative.
 
 ### 7. `db/migrate.ts` — migration runner
 
@@ -393,7 +393,7 @@ CREATE TABLE IF NOT EXISTS cleared_merchants (
 **NUMERIC/BIGINT read-back caveat:** The `pg` driver returns `NUMERIC` and `BIGINT` columns as
 JavaScript strings to avoid precision loss. Both `PostgresStore` and `ReadLayer` must explicitly
 coerce these with `parseFloat()` / `parseInt()` when reconstructing TypeScript interface values,
-matching the same coercion pattern already used in `DodoCreditLedger.balance()`.
+matching the same coercion pattern already used in `PravaCreditLedger.balance()`.
 
 ---
 
@@ -622,7 +622,7 @@ load time (or at first `Pool` construction) and throw a descriptive error immedi
 Error: DATABASE_URL is not set — required for PostgresStore. Add it to .env (CLI) or dashboard/.env.local (dashboard).
 ```
 
-This matches the pattern already used in `DodoCreditLedger`'s `requireEnv()` helper.
+This matches the pattern already used in `PravaCreditLedger`'s `requireEnv()` helper.
 
 ### Connection errors and query timeouts
 
@@ -638,7 +638,7 @@ This matches the pattern already used in `DodoCreditLedger`'s `requireEnv()` hel
 
 Two cases are explicitly non-fatal by design:
 
-1. **`ledger_entries` insert failure** — The Dodo API call is authoritative. A failed local audit
+1. **`ledger_entries` insert failure** — The Prava API call is authoritative. A failed local audit
    insert is `console.error`-logged but does not rethrow. The `draw()` / `credit()` call resolves
    normally.
 2. **`purchase_job_events` insert failure** — A persistence failure must not kill the running
@@ -752,7 +752,7 @@ Run against a real Postgres instance (e.g. `DATABASE_URL=postgres://localhost/ma
 
 - Schema DDL (column existence, index names) — smoke tests only
 - `decide()` — it is pure and already tested independently; it has no DB surface
-- Dodo API call behavior — integration tests with 1–2 live calls; mocked in unit tests
+- Prava API call behavior — integration tests with 1–2 live calls; mocked in unit tests
 - `keys/` PEM files — out of scope for this migration entirely
 
 ### Balance note

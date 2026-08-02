@@ -82,7 +82,7 @@ instances are created: CLI pool (max 5) and dashboard pool (max 10).
       delegates to `store.*` — zero changes to callers in `src/cli/gate.ts`
     - _Requirements: 3.10, 8.7_
 
-- [ ] 4. `DodoCreditLedger` ledger audit integration
+- [ ] 4. `PravaCreditLedger` ledger audit integration
   - [ ] 4.1 Create `src/db/ledger-store.ts`
     - Export `insertLedgerEntry(entry: { reserveRef, entryType, amountInrPaise, idempotencyKey,
       mandateId?, runId? }): Promise<void>` using `INSERT INTO ledger_entries … ON CONFLICT
@@ -94,7 +94,7 @@ instances are created: CLI pool (max 5) and dashboard pool (max 10).
     - Define and export the `LedgerEntry` TypeScript interface
     - _Requirements: 6.1–6.6_
 
-  - [ ] 4.2 Wire ledger audit into `src/ledger/DodoCreditLedger.ts`
+  - [ ] 4.2 Wire ledger audit into `src/ledger/PravaCreditLedger.ts`
     - In `draw()`: after `createLedgerEntry` resolves, call `insertLedgerEntry` with
       `entry_type='debit'` and `idempotency_key=runId` — failure must not rethrow
     - In `credit()`: after `createLedgerEntry` resolves, call `insertLedgerEntry` with

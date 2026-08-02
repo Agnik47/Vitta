@@ -17,7 +17,7 @@ This feature migrates all six persistence points to a Postgres database while le
 - **Receipt**: The TypeScript interface defined in `src/receipt/schema.ts`. Its shape does not change. It maps to the `receipts` table.
 - **TransactionAuthorization**: The TypeScript interface defined in `src/receipt/authorization.ts`. Its shape does not change. It maps to the `transaction_authorizations` table.
 - **PurchaseJob**: The interface defined in `dashboard/lib/purchase-job.ts`. After migration, the job header maps to `purchase_jobs` and each `AgentLine` event maps to a row in `purchase_job_events`.
-- **LedgerEntry**: A draw or credit record written by `DodoCreditLedger`. Maps to the `ledger_entries` table.
+- **LedgerEntry**: A draw or credit record written by `PravaCreditLedger`. Maps to the `ledger_entries` table.
 - **Migration Script**: A one-shot Node.js script that reads all existing flat files and inserts their contents into Postgres. Safe to run on an empty database (no flat files) and idempotent on already-migrated records.
 - **DATABASE_URL**: The Postgres connection string supplied via environment variable. Required by both the CLI and the dashboard.
 - **decide()**: The pure, synchronous, zero-I/O policy function in `src/policy/decide.ts`. It MUST NOT be modified or called from any database path.
@@ -122,14 +122,14 @@ This feature migrates all six persistence points to a Postgres database while le
 
 ### Requirement 6: Ledger Audit Table
 
-**User Story:** As a developer, I want all Dodo draw and credit operations to be recorded in a `ledger_entries` table, so that spending history for any reserve can be audited without scanning a JSONL file.
+**User Story:** As a developer, I want all Prava draw and credit operations to be recorded in a `ledger_entries` table, so that spending history for any reserve can be audited without scanning a JSONL file.
 
 #### Acceptance Criteria
 
-1. THE LedgerAuditStore SHALL write one row to `ledger_entries` for every call to `DodoCreditLedger.draw()`, capturing: `reserve_ref`, `entry_type = 'debit'`, `amount_inr_paise`, `idempotency_key` (the `runId`), and `run_id`.
-2. THE LedgerAuditStore SHALL write one row to `ledger_entries` for every call to `DodoCreditLedger.credit()`, capturing: `reserve_ref`, `entry_type = 'credit'`, `amount_inr_paise`, `idempotency_key`.
-3. WHEN a `ledger_entries` insert is attempted with a `idempotency_key` that already exists, THE LedgerAuditStore SHALL treat the conflict as a no-op (insert ON CONFLICT DO NOTHING) — the Dodo API call may already be idempotent, and the local audit record must be too.
-4. IF a `ledger_entries` write fails, THE LedgerAuditStore SHALL log the error but MUST NOT prevent the Dodo API call from completing — the Dodo-hosted ledger is authoritative; the local table is an audit trail.
+1. THE LedgerAuditStore SHALL write one row to `ledger_entries` for every call to `PravaCreditLedger.draw()`, capturing: `reserve_ref`, `entry_type = 'debit'`, `amount_inr_paise`, `idempotency_key` (the `runId`), and `run_id`.
+2. THE LedgerAuditStore SHALL write one row to `ledger_entries` for every call to `PravaCreditLedger.credit()`, capturing: `reserve_ref`, `entry_type = 'credit'`, `amount_inr_paise`, `idempotency_key`.
+3. WHEN a `ledger_entries` insert is attempted with a `idempotency_key` that already exists, THE LedgerAuditStore SHALL treat the conflict as a no-op (insert ON CONFLICT DO NOTHING) — the Prava API call may already be idempotent, and the local audit record must be too.
+4. IF a `ledger_entries` write fails, THE LedgerAuditStore SHALL log the error but MUST NOT prevent the Prava API call from completing — the Prava-hosted ledger is authoritative; the local table is an audit trail.
 5. THE LedgerAuditStore SHALL expose `getLedgerEntriesByReserve(reserveRef: string): Promise<LedgerEntry[]>` returning all entries ordered by `recorded_at` ascending to support per-reserve spending audits.
 6. THE LedgerAuditStore SHALL expose `getTotalDrawnForReserve(reserveRef: string): Promise<number>` returning the sum of all `debit` entries for a given `reserve_ref` in INR paise.
 

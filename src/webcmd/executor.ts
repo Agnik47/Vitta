@@ -128,7 +128,7 @@ export interface LedgerEntry {
   ts: string;
 }
 
-// Belt-and-suspenders idempotency guard for Ledger.draw() (docs/02-DODO-INTEGRATION.md's open
+// Belt-and-suspenders idempotency guard for Ledger.draw() (docs/02-PRAVA-INTEGRATION.md's open
 // question on request-side idempotency_key support). The caller (Phase 1f's CLI wiring) must call
 // this BEFORE Ledger.draw() — see docs/common/02-DECISIONS.md ADR-004 for the ledger.jsonl entry
 // shape and why this check lives here instead of inside PravaCreditLedger.

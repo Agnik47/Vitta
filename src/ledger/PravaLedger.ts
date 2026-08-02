@@ -62,7 +62,7 @@ export class PravaLedger implements Ledger {
         user_id: userId, user_email: requireEnv('PRAVA_USER_EMAIL'), total_amount: amount, currency: 'INR',
         purchase_context: [{ merchant_details: { name: 'Blinkit', url: 'https://blinkit.com', country_code_iso2: 'IN' }, product_details: [{ description: `Vitta mandate ${mandateId}`, unit_price: amount, quantity: 1 }] }],
         integration_type: 'full_checkout',
-        mandate_setup: { intent: 'mandate_setup', recurring_frequency: 'one_time', merchant_scope: 'listed', max_charges: 1 },
+        mandate_setup: { intent: 'mandate_setup', recurring_frequency: 'recurring', merchant_scope: 'listed', max_charges: 100 },
         external_order_ref: mandateId, description: `Vitta spending mandate ${mandateId}`,
       }),
     });

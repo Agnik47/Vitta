@@ -30,8 +30,9 @@
   },
   "dependencies": {
     "@prava-sdk/core": "^0.1.2",
-    "dodopayments": "^2.44.0",
+    "dotenv": "^17.4.2",
     "prava": "^0.1.30",
-    "prava-node": "^0.0.1"
+    "prava-node": "^0.0.1",
+    "pravapayments": "npm:dodopayments@^2.44.0"
   }
 }
