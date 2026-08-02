@@ -3,6 +3,12 @@
 // Creates a Prava checkout session for the mandate via /api/shop/mandate/fund.
 // The browser cannot complete the passkey approval on behalf of the user, so the
 // form returns the checkout URL and the session reference for manual approval.
+//
+// Creating the session does NOT itself write anything to mandate.json — gate.ts's `fund` command
+// only persists a reserve when called with --reserve-ref (see src/cli/gate.ts cmdFund). So once the
+// user has finished the Prava checkout in the other tab, this form has to make that second call
+// itself (POSTing reserveRef instead of amountInr) or the mandate page will poll forever and never
+// show a balance, even though the checkout genuinely succeeded on Prava's side.
 import { useState } from "react";
 import { toast } from "sonner";
 import { Panel } from "@/components/shared/panel";
@@ -21,6 +27,7 @@ export function FundMandateForm({ mandateId, onFunded }: { mandateId: string; on
   const [checkoutUrl, setCheckoutUrl] = useState("");
   const [reserveRef, setReserveRef] = useState("");
   const [busy, setBusy] = useState(false);
+  const [attaching, setAttaching] = useState(false);
 
   async function handleFund() {
     setBusy(true);
@@ -38,9 +45,32 @@ export function FundMandateForm({ mandateId, onFunded }: { mandateId: string; on
 
       setCheckoutUrl(json.checkoutUrl ?? "");
       setReserveRef(json.reserveRef ?? "");
-      toast.success("Prava checkout created");
+      toast.success("Prava checkout created — complete it, then confirm below");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleAttach() {
+    if (!reserveRef) return;
+    setAttaching(true);
+    try {
+      const res = await fetch("/api/shop/mandate/fund", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mandateId, reserveRef }),
+      });
+      const json = (await res.json()) as FundResponse;
+      if (!res.ok || !json.ok) {
+        toast.error("Could not confirm funding", {
+          description: json.message ?? "Make sure you finished the Prava checkout (card + passkey) before confirming.",
+        });
+        return;
+      }
+      toast.success("Mandate funded — balance verified with Prava");
+      onFunded();
+    } finally {
+      setAttaching(false);
     }
   }
 
@@ -69,7 +99,7 @@ export function FundMandateForm({ mandateId, onFunded }: { mandateId: string; on
       </div>
 
       {(checkoutUrl || reserveRef) && (
-        <div className="mt-4 space-y-2 rounded-xl border border-border bg-surface-sunken px-4 py-3 text-sm">
+        <div className="mt-4 space-y-3 rounded-xl border border-border bg-surface-sunken px-4 py-3 text-sm">
           {checkoutUrl && (
             <div>
               <div className="text-[11px] tracking-wide text-ink-faint uppercase">Checkout URL</div>
@@ -89,6 +119,15 @@ export function FundMandateForm({ mandateId, onFunded }: { mandateId: string; on
               <code className="mt-1 block font-mono text-xs text-foreground">{reserveRef}</code>
             </div>
           )}
+          <div className="border-t border-border pt-3">
+            <p className="mb-2 text-xs text-muted-foreground">
+              Once you&apos;ve entered your card and approved the passkey in the checkout tab, confirm here — this
+              reads the real balance from Prava and is what actually makes it show up on this page.
+            </p>
+            <Button onClick={handleAttach} disabled={attaching || !reserveRef} size="sm">
+              {attaching ? "Verifying with Prava…" : "I've completed the checkout — confirm funding"}
+            </Button>
+          </div>
         </div>
       )}
     </Panel>

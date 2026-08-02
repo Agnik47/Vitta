@@ -1,0 +1,7 @@
+{
+  "root": "dashboard",
+  "buildCommand": "npm run build && cd .. && npm run build",
+  "env": {
+    "MANDATE_GATE_DATA_DIR": "../"
+  }
+}

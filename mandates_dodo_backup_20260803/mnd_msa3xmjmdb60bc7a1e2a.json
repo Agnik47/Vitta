@@ -1,0 +1,23 @@
+{
+  "mandate_id": "mnd_msa3xmjmdb60bc7a1e2a",
+  "issuer": "did:key:z6MktLJ3CLa8rezn5W57AbhQnxboegqRFe5kd2dtK8Rnn6cS",
+  "subject": "agent:shop-runner",
+  "scope": {
+    "categories": [
+      "groceries"
+    ],
+    "merchants": [
+      "blinkit"
+    ],
+    "cap_inr": 500,
+    "per_txn_inr": 500,
+    "max_txns": 20,
+    "expires_at": "2026-08-01T18:25:00.000Z"
+  },
+  "reserve": {
+    "type": "dodo_credit_test",
+    "blocked_inr": 158,
+    "ref": "cks_0NkEvKofSCvb33CvbrQVl"
+  },
+  "sig": "SV4tmZ9sGxdP7Wm3QAc85OmdafzeNBiaqbKZEeurLHGOUOVetaALXWylDwJ1v4sly+7OMUD7uzMMij6oGw6LDQ=="
+}

@@ -1,0 +1,25 @@
+{
+  "mandate_id": "mnd_mscaxorc75e85014431d",
+  "issuer": "did:key:z6MktLJ3CLa8rezn5W57AbhQnxboegqRFe5kd2dtK8Rnn6cS",
+  "subject": "agent:shop-runner",
+  "scope": {
+    "categories": [
+      "groceries"
+    ],
+    "merchants": [
+      "blinkit",
+      "zepto",
+      "bigbasket"
+    ],
+    "cap_inr": 2000,
+    "per_txn_inr": 1000,
+    "max_txns": 10,
+    "expires_at": "2026-08-03T18:29:00.000Z"
+  },
+  "reserve": {
+    "type": "dodo_credit_test",
+    "blocked_inr": 500,
+    "ref": "cks_0NkXtfRrRLqxDKc7zuqVR"
+  },
+  "sig": "cw/6Hf5nJ2hUQXc9M5SSg7HOOxckUFVzaJfidfJ9XYePW2i7bhrJv7YKzt5W2p7KPkXdSp3WCoO9JdAVYAouBQ=="
+}

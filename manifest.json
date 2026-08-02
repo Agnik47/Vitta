@@ -250,9 +250,6 @@
       "product_url",
       "is_sponsored"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "amazon.in",
     "example": "webcmd amazon-in search <query> -f yaml",
     "defaultFormat": null,
@@ -624,9 +621,6 @@
       "price_text",
       "rating_value",
       "review_count"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "amazon.com",
     "example": "webcmd amazon search <query> -f yaml",
@@ -1740,9 +1734,6 @@
       "genre",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": null,
     "example": "webcmd apple-podcasts search <query> -f yaml",
     "defaultFormat": null,
@@ -1887,9 +1878,6 @@
       "mediatype",
       "downloads",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "archive.org",
     "example": "webcmd archive search <query> -f yaml",
@@ -2167,9 +2155,6 @@
       "published",
       "primary_category",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": null,
     "example": "webcmd arxiv search <query> -f yaml",
@@ -2939,9 +2924,6 @@
       "discount",
       "availability",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.bigbasket.com",
     "example": "webcmd bigbasket search <query> -f yaml",
@@ -3722,9 +3704,6 @@
       "imageUrl",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "blinkit.com",
     "example": "webcmd blinkit search <query> -f yaml",
     "defaultFormat": null,
@@ -4390,9 +4369,6 @@
       "followers",
       "description"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "public.api.bsky.app",
     "example": "webcmd bluesky search <query> -f yaml",
     "defaultFormat": null,
@@ -4684,9 +4660,6 @@
       "recommended_room",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.booking.com",
     "example": "webcmd booking search Tokyo --checkin 2026-06-15 --checkout 2026-06-17 -f yaml",
     "defaultFormat": null,
@@ -4738,9 +4711,6 @@
       "title",
       "url",
       "snippet"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "search.brave.com",
     "example": "webcmd brave search <keyword> -f yaml",
@@ -5130,9 +5100,6 @@
       "url",
       "method",
       "diagnostics"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "chatgpt.com",
     "example": "webcmd chatgpt deep-research-result <id> -f yaml",
@@ -7560,9 +7527,6 @@
       "lastModified",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "atlassian.net",
     "example": "webcmd confluence search <cql> -f yaml",
     "defaultFormat": null,
@@ -7836,9 +7800,6 @@
       "delivery_promise",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.coupang.com",
     "example": "webcmd coupang search <query> -f yaml",
     "defaultFormat": null,
@@ -7948,9 +7909,6 @@
       "repository",
       "updated",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "crates.io",
     "example": "webcmd crates search <query> -f yaml",
@@ -8402,9 +8360,6 @@
       "doi",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "dblp.org",
     "example": "webcmd dblp search <query> -f yaml",
     "defaultFormat": null,
@@ -8819,9 +8774,6 @@
       "type",
       "definition"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "api.dictionaryapi.dev",
     "example": "webcmd dictionary search <word> -f yaml",
     "defaultFormat": null,
@@ -9081,9 +9033,6 @@
       "Author",
       "Message"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "localhost",
     "example": "webcmd discord-app search <query> -f yaml",
     "defaultFormat": null,
@@ -9304,7 +9253,7 @@
     "site": "district",
     "name": "checkout",
     "aliases": [],
-    "description": "Select District movie seats and open the UPI QR payment scanner",
+    "description": "Select District movie seats and stop at the payment handoff page",
     "access": "write",
     "strategy": "cookie",
     "browser": true,
@@ -9357,17 +9306,7 @@
         "positional": false,
         "choices": [],
         "default": 45,
-        "help": "Maximum seconds to wait for selection, review page, and payment handoff"
-      },
-      {
-        "name": "payment",
-        "type": "str",
-        "required": false,
-        "valueRequired": false,
-        "positional": false,
-        "choices": [],
-        "default": "upi-qr",
-        "help": "Payment handoff target: upi-qr opens the scanner; review stops on order review"
+        "help": "Maximum seconds to wait for selection and review page"
       }
     ],
     "columns": [
@@ -9381,10 +9320,6 @@
       "orderAmount",
       "bookingCharge",
       "total",
-      "paymentMethod",
-      "paymentState",
-      "upiQrVisible",
-      "paymentAmount",
       "paymentUrl",
       "showId"
     ],
@@ -9569,9 +9504,6 @@
       "venue",
       "price",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.district.in",
     "example": "webcmd district search <query> -f yaml",
@@ -10013,9 +9945,6 @@
       "description",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "hub.docker.com",
     "example": "webcmd dockerhub search <query> -f yaml",
     "defaultFormat": null,
@@ -10090,9 +10019,6 @@
       "displayUrl",
       "icon",
       "resultType"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "html.duckduckgo.com",
     "example": "webcmd duckduckgo search <keyword> -f yaml",
@@ -10595,9 +10521,6 @@
       "text",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.facebook.com",
     "example": "webcmd facebook search <query> -f yaml",
     "defaultFormat": null,
@@ -10711,9 +10634,6 @@
       "installsLastMonth",
       "updatedAt",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "flathub.org",
     "example": "webcmd flathub search <query> -f yaml",
@@ -10844,9 +10764,6 @@
       "status",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "gemini.google.com",
     "example": "webcmd gemini deep-research <prompt> -f yaml",
     "defaultFormat": "plain",
@@ -10898,9 +10815,6 @@
     ],
     "columns": [
       "response"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "gemini.google.com",
     "example": "webcmd gemini deep-research-result -f yaml",
@@ -11734,9 +11648,6 @@
       "cited",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "scholar.google.com",
     "example": "webcmd google-scholar search <query> -f yaml",
     "defaultFormat": null,
@@ -11916,9 +11827,6 @@
       "title",
       "url",
       "snippet"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "google.com",
     "example": "webcmd google search <keyword> -f yaml",
@@ -12955,9 +12863,6 @@
       "comments",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "news.ycombinator.com",
     "example": "webcmd hackernews search <query> -f yaml",
     "defaultFormat": null,
@@ -13660,9 +13565,6 @@
       "type",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.imdb.com",
     "example": "webcmd imdb search <query> -f yaml",
     "defaultFormat": null,
@@ -13885,9 +13787,6 @@
       "tags",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.indeed.com",
     "example": "webcmd indeed search <query> -f yaml",
     "defaultFormat": null,
@@ -14072,9 +13971,6 @@
       "likes",
       "comments",
       "type"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.instagram.com",
     "example": "webcmd instagram explore -f yaml",
@@ -14565,9 +14461,6 @@
       "private",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.instagram.com",
     "example": "webcmd instagram search <query> -f yaml",
     "defaultFormat": null,
@@ -14985,9 +14878,6 @@
       "assignee",
       "updated",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "atlassian.net",
     "example": "webcmd jira search <jql> -f yaml",
@@ -15722,9 +15612,6 @@
       "viewers",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.linkedin.com",
     "example": "webcmd linkedin-learning search <keywords> -f yaml",
     "defaultFormat": null,
@@ -16103,9 +15990,6 @@
       "headline",
       "location",
       "profile_url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.linkedin.com",
     "example": "webcmd linkedin people-search <keywords> -f yaml",
@@ -16649,9 +16533,6 @@
       "lead_url",
       "recipient_urn"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.linkedin.com",
     "example": "webcmd linkedin salesnav-search <keywords> -f yaml",
     "defaultFormat": null,
@@ -16836,9 +16717,6 @@
       "listed",
       "salary",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.linkedin.com",
     "example": "webcmd linkedin search <query> -f yaml",
@@ -17603,9 +17481,6 @@
       "repository",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "search.maven.org",
     "example": "webcmd maven search <query> -f yaml",
     "defaultFormat": null,
@@ -17659,9 +17534,6 @@
       "locale",
       "summary",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "developer.mozilla.org",
     "example": "webcmd mdn search <query> -f yaml",
@@ -17751,9 +17623,6 @@
       "readTime",
       "claps",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "medium.com",
     "example": "webcmd medium search <keyword> -f yaml",
@@ -18944,9 +18813,6 @@
       "updated",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "registry.npmjs.org",
     "example": "webcmd npm search <query> -f yaml",
     "defaultFormat": null,
@@ -19046,9 +18912,6 @@
       "projectUrl",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "api.nuget.org",
     "example": "webcmd nuget search <query> -f yaml",
     "defaultFormat": null,
@@ -19133,9 +18996,6 @@
       "author",
       "created",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "oeis.org",
     "example": "webcmd oeis search <query> -f yaml",
@@ -19228,9 +19088,6 @@
       "type",
       "doi",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "api.openalex.org",
     "example": "webcmd openalex search <query> -f yaml",
@@ -19573,9 +19430,6 @@
       "pdate",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "openreview.net",
     "example": "webcmd openreview search <query> -f yaml",
     "defaultFormat": null,
@@ -19700,9 +19554,6 @@
       "affectedPackages",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "osv.dev",
     "example": "webcmd osv query <package> --ecosystem <ecosystem> -f yaml",
     "defaultFormat": null,
@@ -19825,9 +19676,6 @@
       "favers",
       "repository",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "packagist.org",
     "example": "webcmd packagist search <query> -f yaml",
@@ -20352,9 +20200,6 @@
       "tags",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.pixiv.net",
     "example": "webcmd pixiv search <query> -f yaml",
     "defaultFormat": null,
@@ -20832,9 +20677,6 @@
       "next_available",
       "profile_url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.practo.com",
     "example": "webcmd practo search <specialty> -f yaml",
     "defaultFormat": null,
@@ -20943,9 +20785,6 @@
       "tagline",
       "reviews",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.producthunt.com",
     "example": "webcmd producthunt browse <category> -f yaml",
@@ -21817,9 +21656,6 @@
       "doi",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "pubmed.ncbi.nlm.nih.gov",
     "example": "webcmd pubmed search <query> -f yaml",
     "defaultFormat": null,
@@ -22239,9 +22075,6 @@
     "columns": [
       "Index",
       "Item"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "localhost",
     "example": "webcmd qoder search <query> -f yaml",
@@ -22881,9 +22714,6 @@
       "preview_image_url",
       "gallery_urls"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "reddit.com",
     "example": "webcmd reddit search <query> -f yaml",
     "defaultFormat": null,
@@ -23490,9 +23320,6 @@
       "authors",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.reuters.com",
     "example": "webcmd reuters search <query> -f yaml",
     "defaultFormat": null,
@@ -23639,9 +23466,6 @@
       "authors",
       "info",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "rubygems.org",
     "example": "webcmd rubygems search <query> -f yaml",
@@ -23828,9 +23652,6 @@
       "firstAuthor",
       "citationCount",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "api.semanticscholar.org",
     "example": "webcmd semanticscholar search <query> -f yaml",
@@ -24912,9 +24733,6 @@
       "createdAt",
       "senderName",
       "content"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "app.slock.ai",
     "example": "webcmd slock message-search <query> -f yaml",
@@ -26043,9 +25861,6 @@
       "album",
       "uri"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": null,
     "example": "webcmd spotify search <query> -f yaml",
     "defaultFormat": null,
@@ -26380,9 +26195,6 @@
       "creation_date",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "stackoverflow.com",
     "example": "webcmd stackoverflow search <query> -f yaml",
     "defaultFormat": null,
@@ -26639,9 +26451,6 @@
       "platforms",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "store.steampowered.com",
     "example": "webcmd steam search <query> -f yaml",
     "defaultFormat": null,
@@ -26818,9 +26627,6 @@
       "date",
       "description",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "substack.com",
     "example": "webcmd substack search <keyword> -f yaml",
@@ -27287,9 +27093,6 @@
       "shares",
       "createTime"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.tiktok.com",
     "example": "webcmd tiktok explore -f yaml",
     "defaultFormat": null,
@@ -27645,9 +27448,6 @@
       "likes",
       "comments",
       "shares"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.tiktok.com",
     "example": "webcmd tiktok search <query> -f yaml",
@@ -28306,9 +28106,6 @@
       "Index",
       "Name",
       "Description"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "localhost",
     "example": "webcmd trae-solo skill-search <keyword> -f yaml",
@@ -29109,9 +28906,6 @@
       "currency",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "trip.com",
     "example": "webcmd trip hotel-search <city> --checkin <checkin> --checkout <checkout> -f yaml",
     "defaultFormat": null,
@@ -29244,9 +29038,6 @@
       "airportCode",
       "province",
       "country"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "trip.com",
     "example": "webcmd trip search <query> -f yaml",
@@ -29476,9 +29267,6 @@
       "matchScore",
       "summary",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "tvmaze.com",
     "example": "webcmd tvmaze search <query> -f yaml",
@@ -31111,9 +30899,6 @@
       "card",
       "quoted_tweet"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "x.com",
     "example": "webcmd twitter search <query> -f yaml",
     "defaultFormat": null,
@@ -31830,9 +31615,6 @@
       "publishedOn",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.upwork.com",
     "example": "webcmd upwork search <query> -f yaml",
     "defaultFormat": null,
@@ -31860,9 +31642,9 @@
     "siteSession": "persistent"
   },
   {
-    "command": "web/fetch-browser",
+    "command": "web/read",
     "site": "web",
-    "name": "fetch-browser",
+    "name": "read",
     "aliases": [],
     "description": "Fetch any web page and export as Markdown",
     "access": "read",
@@ -31976,7 +31758,7 @@
       "saved"
     ],
     "domain": null,
-    "example": "webcmd web fetch-browser --url <url> -f yaml",
+    "example": "webcmd web read --url <url> -f yaml",
     "defaultFormat": null,
     "siteSession": null
   },
@@ -32077,9 +31859,6 @@
       "matchType",
       "matchText",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "www.wikidata.org",
     "example": "webcmd wikidata search <query> -f yaml",
@@ -32217,9 +31996,6 @@
       "title",
       "snippet",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": null,
     "example": "webcmd wikipedia search <query> -f yaml",
@@ -32494,9 +32270,6 @@
       "title",
       "url",
       "snippet"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "search.yahoo.com",
     "example": "webcmd yahoo search <keyword> -f yaml",
@@ -33580,9 +33353,6 @@
       "published",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.youtube.com",
     "example": "webcmd youtube search <query> -f yaml",
     "defaultFormat": null,
@@ -34088,9 +33858,6 @@
       "availability",
       "url"
     ],
-    "tags": [
-      "search"
-    ],
     "domain": "www.zepto.com",
     "example": "webcmd zepto search <query> -f yaml",
     "defaultFormat": null,
@@ -34183,9 +33950,6 @@
       "title",
       "author",
       "url"
-    ],
-    "tags": [
-      "search"
     ],
     "domain": "z-library.im",
     "example": "webcmd zlibrary search <query> -f yaml",
