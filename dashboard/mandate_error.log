@@ -1,0 +1,1 @@
+gate fund failed: ✗ Could not read a real balance for reserve prava-session:ses_123:user_123: Prava API GET /v1/mandates?customer_id=user_123&standing_only=true failed: No such customer for this merchant. Not attaching a reserve this CLI can't verify.
