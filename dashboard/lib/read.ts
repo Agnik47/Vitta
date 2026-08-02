@@ -1,13 +1,45 @@
 // Reads the same flat files src/cli writes — never writes to any of them. See
 // docs/06-DASHBOARD-SPEC.md. All reads are defensive: a missing/partial file is a normal race
 // with the CLI process, not an error — see docs/agent-b/ERROR-HANDLING.md § Dashboard.
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { Mandate, GateEvent, Receipt, TransactionAuthorization } from './types';
 import { sha256Hex, CHAIN_HEAD_HASH, verifySignature } from './hash';
 
 export function getDataDir(): string {
   return path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.MANDATE_GATE_DATA_DIR ?? '../');
+}
+
+/**
+ * Where mandates/receipts/authorizations/events.jsonl/keys actually get READ and WRITTEN at
+ * runtime. On a normal machine (or any host with a persistent filesystem) this is the same as
+ * getDataDir() — the repo root. On Vercel it must NOT be: Vercel's deployment filesystem is
+ * read-only outside /tmp, but getDataDir() still needs to point at the deployed (read-only)
+ * bundle so dist/cli/gate.js and .env can be found there. Splitting the two means the CLI
+ * subprocess's cwd (and thus its own relative ./mandates, ./receipts, ./keys writes, per
+ * src/cli/store.ts) lands somewhere writable, while entry-point/.env lookups are unaffected.
+ *
+ * Caveat: /tmp only persists for the lifetime of one warm serverless instance — fine for a single
+ * continuous test session, not a substitute for real persistent storage across cold starts.
+ */
+export function getRuntimeDataDir(): string {
+  if (!process.env.VERCEL) return getDataDir();
+  const dir = '/tmp/vitta-data';
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * Locates a compiled CLI entry point (dist/cli/gate.js, agent.js, search.js). Prefers
+ * dashboard/dist/... — vercel.json's buildCommand copies the root CLI build there specifically so
+ * Next's outputFileTracingIncludes (which Turbopack refuses to point at a `../` path) can bundle
+ * it into the deployed function. Falls back to the repo-root dist/ (getDataDir()) for local dev,
+ * where nothing copies dist/ into dashboard/.
+ */
+export function resolveCliEntryPoint(...segments: string[]): string {
+  const local = path.join(/* turbopackIgnore: true */ process.cwd(), 'dist', ...segments);
+  if (existsSync(local)) return local;
+  return path.join(getDataDir(), 'dist', ...segments);
 }
 
 /**
@@ -18,7 +50,7 @@ export function getDataDir(): string {
  * specified anywhere else — noted here since it's a real design call, not a spec-given rule.
  */
 export function readCurrentMandate(): Mandate | null {
-  const dir = path.join(getDataDir(), 'mandates');
+  const dir = path.join(getRuntimeDataDir(), 'mandates');
   if (!existsSync(dir)) return null;
 
   let latest: Mandate | null = null;
@@ -38,7 +70,7 @@ export function readCurrentMandate(): Mandate | null {
  * by value comparison — event_id is a UUID, not orderable). If `sinceId` isn't found (first poll,
  * or the log was rotated), returns everything rather than risk silently dropping events. */
 export function readEventsSince(sinceId: string | null): GateEvent[] {
-  const filePath = path.join(getDataDir(), 'events.jsonl');
+  const filePath = path.join(getRuntimeDataDir(), 'events.jsonl');
   if (!existsSync(filePath)) return [];
 
   const lines = readFileSync(filePath, 'utf-8').split('\n').filter(Boolean);
@@ -57,7 +89,7 @@ export function readEventsSince(sinceId: string | null): GateEvent[] {
 }
 
 export function readReceipts(): Receipt[] {
-  const dir = path.join(getDataDir(), 'receipts');
+  const dir = path.join(getRuntimeDataDir(), 'receipts');
   if (!existsSync(dir)) return [];
 
   const receipts: Receipt[] = [];
@@ -73,7 +105,7 @@ export function readReceipts(): Receipt[] {
 }
 
 export function readAuthorizations(): TransactionAuthorization[] {
-  const dir = path.join(getDataDir(), 'authorizations');
+  const dir = path.join(getRuntimeDataDir(), 'authorizations');
   if (!existsSync(dir)) return [];
 
   const authorizations: TransactionAuthorization[] = [];
@@ -113,7 +145,7 @@ export interface ChainVerification {
  * src/cli/keys.ts's design note, no new configuration surface. Returns null if it doesn't exist
  * yet (no receipt has ever been signed on this machine) rather than throwing. */
 export function loadGatePublicKeyPem(): string | null {
-  const keyPath = path.join(getDataDir(), 'keys', 'gate.public.pem');
+  const keyPath = path.join(getRuntimeDataDir(), 'keys', 'gate.public.pem');
   if (!existsSync(keyPath)) return null;
   try {
     return readFileSync(keyPath, 'utf-8');

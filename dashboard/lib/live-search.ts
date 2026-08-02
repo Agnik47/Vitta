@@ -6,7 +6,7 @@
 // established for the real gate CLI.
 import { execFile } from "node:child_process";
 import path from "node:path";
-import { getDataDir } from "@/lib/read";
+import { getRuntimeDataDir, resolveCliEntryPoint } from "@/lib/read";
 
 export type LiveMerchant = "blinkit" | "zepto" | "bigbasket";
 
@@ -34,7 +34,7 @@ export interface MerchantSearchResult {
 }
 
 function searchCliEntryPoint(): string {
-  return path.join(getDataDir(), "dist", "cli", "search.js");
+  return resolveCliEntryPoint("cli", "search.js");
 }
 
 export interface RawSearchResponse {
@@ -68,7 +68,7 @@ export function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSea
     execFile(
       process.execPath,
       [searchCliEntryPoint(), ...argv],
-      { cwd: getDataDir(), timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
+      { cwd: getRuntimeDataDir(), timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error && (error as NodeJS.ErrnoException & { killed?: boolean }).killed) {
           resolve({ ok: false, message: `Timed out after ${Math.round(timeoutMs / 1000)}s waiting on webcmd` });

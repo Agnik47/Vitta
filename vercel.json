@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build && cd .. && npm run build",
+  "buildCommand": "cd .. && npm install && npm run build && rm -rf dashboard/dist && cp -r dist dashboard/dist && cd dashboard && npm run build",
   "env": {
     "MANDATE_GATE_DATA_DIR": "../"
   }

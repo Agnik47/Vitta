@@ -9,11 +9,11 @@
 // are one real gate command each and don't need step-by-step streaming.
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { getDataDir } from "@/lib/read";
+import { getRuntimeDataDir, resolveCliEntryPoint } from "@/lib/read";
 import { loadRootEnvOverrides } from "@/lib/gate-cli";
 
 function agentCliEntryPoint(): string {
-  return path.join(getDataDir(), "dist", "cli", "agent.js");
+  return resolveCliEntryPoint("cli", "agent.js");
 }
 
 export interface AgentBuyItem {
@@ -75,7 +75,7 @@ export function runAgentBuy(input: AgentBuyInput, onLine: (line: AgentLine) => v
 
   return new Promise((resolve) => {
     const proc = spawn(process.execPath, [agentCliEntryPoint(), ...argv], {
-      cwd: getDataDir(),
+      cwd: getRuntimeDataDir(),
       env: { ...process.env, ...loadRootEnvOverrides() },
     });
 

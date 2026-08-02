@@ -10,7 +10,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { getDataDir } from "@/lib/read";
+import { getDataDir, getRuntimeDataDir, resolveCliEntryPoint } from "@/lib/read";
 
 export interface GateCliResult {
   ok: boolean;
@@ -53,7 +53,7 @@ export function friendlyGateFailureMessage(raw: string): string {
 }
 
 function gateCliEntryPoint(): string {
-  return path.join(getDataDir(), "dist", "cli", "gate.js");
+  return resolveCliEntryPoint("cli", "gate.js");
 }
 
 /**
@@ -94,7 +94,7 @@ export function runGateCli(argv: string[], timeoutMs = 60_000): Promise<GateCliR
       process.execPath, // the same node binary running this server — never a shell-resolved "node"
       [gateCliEntryPoint(), ...argv],
       {
-        cwd: getDataDir(),
+        cwd: getRuntimeDataDir(),
         timeout: timeoutMs,
         maxBuffer: 10 * 1024 * 1024,
         env: { ...process.env, ...loadRootEnvOverrides() },
