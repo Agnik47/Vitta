@@ -508,7 +508,7 @@ export default function DocsPage() {
           credit entitlement checked by the policy engine before allowing any write transaction.
         </P>
         <DocH3 id="gate-fund-usage">Usage</DocH3>
-        <CodeBlock code={`# Fund a new reserve\ngate fund <mandate_id> --amount <inr>\n\n# Attach an existing reserve reference\ngate fund <mandate_id> --reserve-ref <dodo_ref>`} />
+        <CodeBlock code={`# Fund a new reserve\ngate fund <mandate_id> --amount <inr>\n\n# Attach an existing reserve reference\ngate fund <mandate_id> --reserve-ref <prava_session_ref>`} />
         <FlagTable flags={[
           { flag: "--amount", description: "Amount in INR (₹) to fund. Creates a new Prava credit entitlement." },
           { flag: "--reserve-ref", description: "Attach an existing Prava reserve reference instead of creating a new one." },

@@ -1,7 +1,6 @@
 {
   "name": "mandate-gate",
   "version": "0.1.0",
-  "description": "Mandate Gate — a policy engine that gates webcmd's money-moving actions behind a signed, human-issued spending mandate, settled via Dodo Payments test mode.",
   "description": "Mandate Gate policy engine with Prava sandbox mandate authorization.",
   "main": "dist/cli/gate.js",
   "directories": {
@@ -30,5 +29,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@prava-sdk/core": "^0.1.2",
+    "dodopayments": "^2.44.0",
+    "prava": "^0.1.30",
+    "prava-node": "^0.0.1"
   }
 }

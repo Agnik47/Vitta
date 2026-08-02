@@ -41,3 +41,5 @@ dist/
 Thumbs.db
 
 .env
+test-api.js
+test-sdk.ts

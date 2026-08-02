@@ -34,7 +34,12 @@ The documented Prava session, mandate lookup, remaining-balance, idempotent char
 
 ## Live demo (84 seconds)
 
-The full end-to-end flow — mandate creation, real Dodo funding, a live merchant search, a policy DENY, a policy ALLOW with a placed order, receipt generation, and tamper detection — runs in under 90 seconds. A fallback video is committed at `demo/mandate-gate-fallback-2026-07-29.mp4`.
+The full end-to-end flow — mandate creation, real Prava session funding, a live merchant search, a policy DENY, a policy ALLOW with a placed order, receipt generation, and tamper detection — runs in under 90 seconds. A fallback video is committed at `demo/mandate-gate-fallback-2026-07-29.mp4`.
+
+---
+
+
+The full end-to-end flow — mandate creation, real Prava session funding, a live merchant search, a policy DENY, a policy ALLOW with a placed order, receipt generation, and tamper detection — runs in under 90 seconds. A fallback video is committed at `demo/mandate-gate-fallback-2026-07-29.mp4`.
 
 ---
 
@@ -44,9 +49,9 @@ The full end-to-end flow — mandate creation, real Dodo funding, a live merchan
 |---|---|---|
 | 1 | **Mandate** | A JSON document signed with Ed25519. Specifies merchant scope, total spend cap, per-transaction cap, max transactions, and expiry. Renders as plain English the human can read before signing. |
 | 2 | **Policy Engine (`decide()`)** | A pure, synchronous, zero-I/O, zero-LLM function. Same inputs always produce the same `ALLOW` / `DENY` / `STEP_UP`. Never calls a network, never consults a model. |
-| 3 | **Dodo Payments (test mode)** | The human funds the mandate through a real Dodo Checkout Session. On `ALLOW`, the engine draws from a real Credit Entitlement Balance. On `DENY`, no money moves. |
+| 3 | **Prava Payments (sandbox)** | The human funds the mandate through a Prava mandate-setup session. On `ALLOW`, the engine mints a single-use card credential. On `DENY`, no money moves. |
 | 4 | **Receipt chain** | Every `ALLOW` produces a signed, hash-linked receipt. Tamper with any receipt and the *next* receipt's chain link breaks — not just the tampered one's signature. |
-| 5 | **Dashboard** | A Next.js app showing the live mandate, Dodo balance, policy decision feed, and receipt verification status. Also the real shopping interface: search, cart, and one-click purchase with mandate gating. |
+| 5 | **Dashboard** | A Next.js app showing the live mandate, Prava balance, policy decision feed, and receipt verification status. Also the real shopping interface: search, cart, and one-click purchase with mandate gating. |
 
 ---
 
@@ -57,7 +62,7 @@ The full end-to-end flow — mandate creation, real Dodo funding, a live merchan
    → builds + Ed25519-signs a Mandate → mandates/mnd_xxx.json
 
 2. gate fund mnd_xxx --amount 800
-   → creates a real Dodo Checkout Session (test mode)
+   → creates a Prava sandbox mandate-setup session
    → human completes test-card payment → reserveRef stored on the mandate
 
 3. Agent runs a read command (e.g. blinkit cart)
@@ -66,7 +71,7 @@ The full end-to-end flow — mandate creation, real Dodo funding, a live merchan
 4. Agent runs a write command (e.g. blinkit place-order)
    → decide(request, mandate, ledgerBalance, txnCount, now) evaluates the full rule table
    → DENY  → nothing executes, ledger untouched, typed reason code returned
-   → ALLOW → real browser command runs, Dodo draws the spend,
+   → ALLOW → real browser command runs, Prava issues the token,
              a Receipt is signed and hash-linked to the previous one
 ```
 
@@ -81,7 +86,7 @@ Every decision emits a `GateEvent` — the single contract the CLI, `events.json
 | Language | TypeScript on Node.js 20+ |
 | Policy engine | Hand-written pure function — no framework, no LLM |
 | Signing | `node:crypto` — Ed25519, zero external dependencies |
-| Payments | `dodopayments` SDK, test mode only |
+| Payments | Prava REST API, sandbox only |
 | Browser automation | `@agentrhq/webcmd` — real stealth-Chromium, 800+ real site commands |
 | Dashboard | Next.js 16 (App Router) + Tailwind CSS + shadcn/ui |
 | Tests | `node:test` — 238 passing, no external test framework |
@@ -95,7 +100,7 @@ mandate-gate/
 ├── src/
 │   ├── mandate/          # Mandate schema, Ed25519 signing, plain-English rendering
 │   ├── policy/           # decide() — the core rule engine (pure / sync / zero-I/O)
-│   ├── ledger/           # Dodo Credit Entitlement integration (real test-mode API)
+│   ├── ledger/           # Prava Sandbox integration (REST API)
 │   ├── receipt/          # Receipt schema, hash-chain build/verify
 │   ├── webcmd/           # webcmd manifest fetch + safe command execution
 │   ├── agent/            # Purchase agent — cart sync, gate spawn, state machine
@@ -114,7 +119,7 @@ mandate-gate/
 ├── receipts/             # Runtime: signed receipt JSON files
 ├── authorizations/       # Runtime: transaction authorization JSON files
 ├── events.jsonl          # Runtime: append-only policy decision log
-├── ledger.jsonl          # Runtime: Dodo draw/credit audit trail
+├── ledger.jsonl          # Runtime: Prava draw/credit audit trail
 └── keys/                 # Runtime: Ed25519 keypairs (gitignored)
 ```
 
@@ -126,36 +131,13 @@ mandate-gate/
 
 - Node.js 20+
 - `@agentrhq/webcmd` installed globally: `npm install -g @agentrhq/webcmd`
-- A Dodo Payments test-mode account with a Credit Entitlement configured
+- A Prava developer account (Dashboard) with Sandbox access
 - A Blinkit account logged into the webcmd browser session (`webcmd blinkit whoami`)
 
 ### 1. Install dependencies
 
 ```bash
 # Root (CLI + policy engine)
-npm install
-
-# Dashboard
-cd dashboard && npm install
-```
-
-### 2. Configure environment
-
-```bash
-# Root CLI
-cp .env.example .env
-# Fill in DODO_API_KEY, DODO_API_KEY_READONLY, DODO_CREDIT_ENTITLEMENT_ID, DODO_TOPUP_PRODUCT_ID
-
-# Dashboard
-cp dashboard/.env.local.example dashboard/.env.local
-# Fill in the same Dodo read-only key + entitlement id
-```
-
-### 3. Install Blinkit webcmd adapters
-
-The project ships custom adapters for absolute cart quantity control and clear-cart:
-
-```bash
 node webcmd-adapters/install.mjs
 ```
 
@@ -163,6 +145,25 @@ Verify:
 ```bash
 webcmd scan | grep -E "set-cart-quantity|clear-cart"
 ```
+
+### 2. Configure environment
+
+```bash
+# Root CLI
+cp .env.example .env
+# Fill in PRAVA_SECRET_KEY, PRAVA_USER_EMAIL, PRAVA_API_BASE_URL
+
+# Dashboard
+cp dashboard/.env.local.example dashboard/.env.local
+# Fill in the same Prava secret key
+```
+
+**Prava Sandbox Test Card:**
+Use this test card in the Prava Sandbox:
+- **Card Number**: `4622943123232200`
+- **CVV**: `93`
+- **Expiry**: `12/27`
+*Note: Test cards have a max daily limit of 30 transactions.*
 
 ### 4. Build
 
@@ -193,7 +194,7 @@ All commands are run as `node dist/cli/gate.js <command>` from the repo root.
 |---|---|
 | `gate mandate create` | Create and sign a new mandate |
 | `gate mandate resign` | Update and re-sign an existing mandate |
-| `gate fund <mandateId> --amount <n>` | Fund a mandate via a real Dodo Checkout Session |
+| `gate fund <mandateId> --amount <n>` | Fund a mandate via a Prava mandate-setup session |
 | `gate run -- webcmd <site> <cmd>` | Execute a webcmd command through the policy gate |
 | `gate receipt show <receiptId>` | Display a receipt |
 | `gate verify <receiptId>` | Verify a receipt's signature and chain link |
@@ -265,17 +266,17 @@ Tampering with any field in any receipt breaks every subsequent chain link — e
 
 ## Safety guarantees
 
-- **Test mode only.** Every Dodo API call targets `https://test.dodopayments.com`. No live-mode code exists in this repo.
+- **Sandbox only.** Every Prava API call targets `https://sandbox.api.prava.space`. No live-mode code exists in this repo.
 - **Fail closed.** Any unknown command, unparseable amount, expired mandate, or bad signature produces `DENY`. The default is never `ALLOW`.
 - **No LLM in the decision path.** `decide()` is deterministic — a future audit can re-run the exact same inputs and get the exact same verdict.
 - **Human-in-the-loop for real purchases.** The dashboard requires explicit confirmation before starting a purchase job. The CLI's `--confirm` flag must be explicitly passed.
-- **Idempotent draws.** The same `runId` cannot draw from the Dodo ledger twice — both at the application level and enforced by Dodo's own `idempotency_key`.
+- **Idempotent draws.** The same `runId` cannot draw from the Prava ledger twice — both at the application level and enforced by Prava's idempotency reference.
 
 ---
 
 ## Money safety note
 
-This project operates in **Dodo Payments test mode** using test-mode API keys and a $1,000 promotional credit balance. No real money moves anywhere in this build. Switching to live mode requires business verification with Dodo and is explicitly out of scope.
+This project operates in **Prava Sandbox mode** using test keys. No real money moves anywhere in this build. Switching to live mode requires business verification with Prava and is explicitly out of scope.
 
 ---
 
