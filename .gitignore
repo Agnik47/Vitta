@@ -43,3 +43,7 @@ Thumbs.db
 .env
 test-api.js
 test-sdk.ts
+
+# Source demo video — 69MB. The GIFs in assets/ are what the README renders;
+# host the full video via a GitHub Release instead of committing it.
+assets/*.mp4
