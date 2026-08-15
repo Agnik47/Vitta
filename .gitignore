@@ -41,3 +41,7 @@ dist/
 Thumbs.db
 
 .env
+
+# Source demo video — 69MB. GIFs in assets/ are what the README renders;
+# host the full video via a GitHub Release or issue upload instead of committing it.
+assets/*.mp4
