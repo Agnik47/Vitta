@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 200" width="1200" height="200" role="img" aria-label="Vitta — a spending limit should be a boundary, not a suggestion">
+  <!-- Static state is the finished design; all animation is ambient enhancement.
+       Waves tile at exactly 1200px and translate by exactly one tile width, so the
+       loop is seamless with no visible seam at any point in the cycle. -->
+  <defs>
+    <linearGradient id="vf-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111a2b"/>
+      <stop offset="50%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#080b10"/>
+    </linearGradient>
+
+    <!-- Symmetric (A - B - A) so that a full-tile translate returns to the same colour. -->
+    <linearGradient id="vf-wave1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.50"/>
+      <stop offset="50%"  stop-color="#6C4EE3" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.50"/>
+    </linearGradient>
+    <linearGradient id="vf-wave2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#6C4EE3" stop-opacity="0.26"/>
+      <stop offset="50%"  stop-color="#22c55e" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#6C4EE3" stop-opacity="0.26"/>
+    </linearGradient>
+
+    <linearGradient id="vf-rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#22c55e" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#22c55e" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#6C4EE3" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="vf-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+    </radialGradient>
+
+    <pattern id="vf-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#8b949e" stroke-opacity="0.05" stroke-width="1"/>
+    </pattern>
+
+    <clipPath id="vf-card"><rect x="0" y="0" width="1200" height="200" rx="18"/></clipPath>
+
+    <style>
+      .vf-line { font: 500 23px "Segoe UI","Inter",system-ui,-apple-system,Helvetica,Arial,sans-serif; }
+      .vf-sub  { font: 400 13px "SFMono-Regular",Consolas,"Liberation Mono",monospace; letter-spacing:1.6px; }
+    </style>
+  </defs>
+
+  <g clip-path="url(#vf-card)">
+    <rect width="1200" height="200" fill="url(#vf-bg)"/>
+    <rect width="1200" height="200" fill="url(#vf-grid)"/>
+
+    <ellipse cx="600" cy="200" rx="520" ry="150" fill="url(#vf-glow)">
+      <animate attributeName="rx" values="520;640;520" dur="9s" repeatCount="indefinite"/>
+    </ellipse>
+
+    <!-- Each wave is ONE path spanning two full tiles (0-2400), so it has a single
+         bounding box and therefore a single continuous gradient. Two separate tile
+         paths would each get their own objectBoundingBox gradient and show a hard
+         colour seam at the tile boundary. Translating by exactly one tile (1200)
+         loops seamlessly in both shape and colour. -->
+
+    <!-- back wave: tile period 400, drifts left one full tile -->
+    <path fill="url(#vf-wave2)" d="M0,150 C100,124 200,176 400,150 C500,124 600,176 800,150 C900,124 1000,176 1200,150 C1300,124 1400,176 1600,150 C1700,124 1800,176 2000,150 C2100,124 2200,176 2400,150 L2400,200 L0,200 Z">
+      <animateTransform attributeName="transform" type="translate"
+        values="0,0; -1200,0" dur="16s" repeatCount="indefinite"/>
+    </path>
+
+    <!-- front wave: tile period 300, drifts right one full tile -->
+    <path fill="url(#vf-wave1)" d="M0,172 C75,152 150,192 300,172 C375,152 450,192 600,172 C675,152 750,192 900,172 C975,152 1050,192 1200,172 C1275,152 1350,192 1500,172 C1575,152 1650,192 1800,172 C1875,152 1950,192 2100,172 C2175,152 2250,192 2400,172 L2400,200 L0,200 Z">
+      <animateTransform attributeName="transform" type="translate"
+        values="-1200,0; 0,0" dur="21s" repeatCount="indefinite"/>
+    </path>
+
+    <rect x="300" y="42" width="600" height="2" fill="url(#vf-rule)">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="4.5s" repeatCount="indefinite"/>
+    </rect>
+
+    <text x="600" y="92" class="vf-line" fill="#c9d4e0" text-anchor="middle">
+      A spending limit should be a <tspan fill="#22c55e" font-weight="700">boundary</tspan>, not a <tspan fill="#8b949e" font-style="italic">suggestion</tspan>.
+    </text>
+
+    <g transform="translate(600,118)">
+      <circle cx="-14" cy="0" r="3.5" fill="#22c55e">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="0" cy="0" r="3.5" fill="#8b7cf0">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="14" cy="0" r="3.5" fill="#F5A623">
+        <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0.8s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <text x="600" y="154" class="vf-sub" fill="#6b7785" text-anchor="middle">TYPESCRIPT · ED25519 · DODO PAYMENTS TEST MODE · ISC</text>
+
+    <rect x="0.75" y="0.75" width="1198.5" height="198.5" rx="18" fill="none" stroke="#233043" stroke-width="1.5"/>
+  </g>
+</svg>

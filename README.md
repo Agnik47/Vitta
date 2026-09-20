@@ -1,285 +1,390 @@
-# Mandate Gate (Vitta)
+<div align="center">
 
-> **An AI spending policy engine.** A human signs a scoped, capped, time-boxed spending permission — a *mandate* — and an AI browser-automation agent's money-moving actions either execute or get denied based on that mandate's rules. Every decision is deterministic, cryptographically signed, and produces a tamper-evident receipt chain.
+<img src="assets/header.svg" alt="Vitta — give your AI agent a spending limit it physically cannot break" width="100%">
 
----
+<br/>
 
-## What it does
+**A human signs a scoped, capped, time-boxed spending permission — a _mandate_.
+An AI agent's money-moving actions then either execute or get denied against it.
+No LLM sits in the decision path.**
 
-AI agents that drive a real browser (via [webcmd](https://www.npmjs.com/package/@agentrhq/webcmd)) can also click "place order." A language model's own judgment is not a reliable safety boundary for real purchases — it can be wrong, manipulated, or simply asked to do more than the human intended.
+<br/>
 
-Mandate Gate moves that boundary *outside* the model entirely. A pure, deterministic policy function is the only thing standing between an agent's write command and it actually happening, and that function's rules come from a cryptographically signed human decision, not a prompt.
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Node](https://img.shields.io/badge/Node-20%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)
+![Dodo Payments](https://img.shields.io/badge/Dodo_Payments-Test_Mode-6C4EE3?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-238_passing-2EA043?style=for-the-badge)
+![Ed25519](https://img.shields.io/badge/signing-Ed25519-F5A623?style=for-the-badge)
 
-**One sentence:** A human signs *"my agent may spend up to ₹800 at Blinkit before 6 pm today"* and the agent physically cannot exceed that boundary — whether it tries to or not.
-
----
-
-## User and problem
-
-Vitta is for people who let an AI agent prepare grocery purchases but need a deterministic, signed boundary between an agent's intent and any spend. It prevents a browser agent from exceeding the merchant, amount, transaction-count, and expiry limits that its owner explicitly approved.
-
-## Prava integration and current checkout boundary
-
-Vitta creates a Prava sandbox mandate-setup session for the signed cap. The owner completes Prava's passkey approval, then each permitted draw mints a merchant- and amount-scoped, single-use Prava credential with the Vitta run ID as Prava's idempotency reference. Prava is therefore the authorization rail, not a decorative button.
-
-Prava's documented Browser Harness currently supports Shopify, not Blinkit. This repository cannot present Prava's credential at Blinkit's checkout today. Blinkit checkout is consequently a separately disclosed simulation/test step; no receipt or demo should claim that Prava paid a Blinkit order until a supported token-presenting integration is implemented.
-
-## What existed before this hackathon vs. what was built during it
-
-Before Aug 1, 2026: the mandate/policy engine, Ed25519 signing, receipt chain, webcmd/Blinkit integration, dashboard, and the Dodo test integration. During Aug 1–2, 2026: the Prava REST integration, Prava ledger tests, schema migration, and hackathon disclosure material. `demo/mandate-gate-fallback-2026-07-29.mp4` predates the hackathon and depicts the old Dodo flow; it must be replaced with a Prava-flow recording or clearly retained only as a historical artifact.
-
-## What worked, what did not, and what we learned
-
-The documented Prava session, mandate lookup, remaining-balance, idempotent charge, and session-revoke APIs fit the ledger boundary and are covered by mocked unit tests. A direct Prava-to-Blinkit payment did not work because the documented Prava Browser Harness is Shopify-only. The important lesson is that authorization evidence is not a completed merchant transaction: the UI and demo must preserve that distinction.
-
-## Live demo (84 seconds)
-
-The full end-to-end flow — mandate creation, real Prava session funding, a live merchant search, a policy DENY, a policy ALLOW with a placed order, receipt generation, and tamper detection — runs in under 90 seconds. A fallback video is committed at `demo/mandate-gate-fallback-2026-07-29.mp4`.
+</div>
 
 ---
 
+## The problem
 
-The full end-to-end flow — mandate creation, real Prava session funding, a live merchant search, a policy DENY, a policy ALLOW with a placed order, receipt generation, and tamper detection — runs in under 90 seconds. A fallback video is committed at `demo/mandate-gate-fallback-2026-07-29.mp4`.
+We are about to hand AI agents a browser and a credit card.
+
+An agent that can search a grocery site can also click **Place Order**. Today, the only thing standing between "find me some peanut butter" and a ₹4,000 charge is the model's own judgment — and a model can be wrong, jailbroken, or simply more enthusiastic than you intended.
+
+**"I'll prompt it not to overspend" is not a spending control.** It's a suggestion written in the same channel an attacker can write to.
+
+## The idea
+
+Move the boundary **outside the model entirely.**
+
+> A human signs *"my agent may spend up to **₹800** at **Blinkit**, in **one** transaction, before **6:00 PM today**."*
+>
+> The agent then physically cannot exceed that — whether it tries to or not.
+
+The only thing between an agent's write command and it actually happening is a **pure, deterministic function**. It takes no network calls, consults no model, and its rules come from a cryptographically signed human decision — not a prompt.
+
+Same inputs → same verdict. Every time. Forever. Auditable years later.
 
 ---
 
-## The five working parts
+## What Vitta actually is
 
-| # | Component | What it does |
-|---|---|---|
-| 1 | **Mandate** | A JSON document signed with Ed25519. Specifies merchant scope, total spend cap, per-transaction cap, max transactions, and expiry. Renders as plain English the human can read before signing. |
-| 2 | **Policy Engine (`decide()`)** | A pure, synchronous, zero-I/O, zero-LLM function. Same inputs always produce the same `ALLOW` / `DENY` / `STEP_UP`. Never calls a network, never consults a model. |
-| 3 | **Prava Payments (sandbox)** | The human funds the mandate through a Prava mandate-setup session. On `ALLOW`, the engine mints a single-use card credential. On `DENY`, no money moves. |
-| 4 | **Receipt chain** | Every `ALLOW` produces a signed, hash-linked receipt. Tamper with any receipt and the *next* receipt's chain link breaks — not just the tampered one's signature. |
-| 5 | **Dashboard** | A Next.js app showing the live mandate, Prava balance, policy decision feed, and receipt verification status. Also the real shopping interface: search, cart, and one-click purchase with mandate gating. |
+| | Component | What it does |
+|:--:|---|---|
+| 📜 | **Mandate** | An Ed25519-signed JSON document. Merchant scope, total cap, per-transaction cap, max transactions, expiry. Renders as plain English you read *before* you sign. |
+| ⚖️ | **Policy Engine** | `decide()` — pure, synchronous, zero-I/O, zero-LLM. Returns `ALLOW` / `DENY` / `STEP_UP`. Never throws; unknown input always fails closed to `DENY`. |
+| 💳 | **Dodo Payments** | The real money rail. A human funds the mandate through a genuine Dodo Checkout Session; every `ALLOW` draws from a real Credit Entitlement balance. [Deep dive ↓](#-dodo-payments-integration) |
+| 🧾 | **Receipt Chain** | Every `ALLOW` emits a signed, hash-linked receipt. Tamper with one and *every subsequent* link breaks — not just the one you touched. |
+| 🖥️ | **Dashboard** | Next.js app: live mandate, live Dodo balance, decision feed, receipt verification — plus a real storefront with search, cart and one-click gated purchase. |
+| 🎯 | **Price Sniper** | Watches a real product's live price in a time window and fires the purchase pipeline the moment it hits your target — through the *same* gate, never around it. |
+
+---
+
+## See it work
+
+<div align="center">
+
+**The storefront** — live multi-merchant search, real carts, mandate-gated checkout
+
+![Storefront](assets/vitta-shop.gif)
+
+**The docs** — every rule, schema and CLI command documented in-app
+
+![Docs](assets/vitta-docs.gif)
+
+</div>
+
+> [!TIP]
+> The full-resolution walkthrough lives at `assets/Vitta1.mp4`. It is deliberately **not committed** (69 MB) — attach it to a GitHub Release if you want it hosted.
 
 ---
 
 ## How a spend happens
 
+```mermaid
+flowchart TD
+    A["👤 Human signs a mandate<br/><i>₹800 · Blinkit · before 18:00</i>"] --> B["💳 Fund via Dodo<br/>Checkout Session"]
+    B --> C{"🤖 Agent issues<br/>a webcmd command"}
+    C -->|"access: read"| D["✅ ALLOW — free<br/><i>reads never touch the mandate</i>"]
+    C -->|"access: write"| E["⚖️ decide()<br/>pure · deterministic · no LLM"]
+    E -->|"any rule fails"| F["⛔ DENY<br/>nothing executes<br/>reserve untouched"]
+    E -->|"all rules pass"| G["🌐 Real browser command runs"]
+    G --> H["💰 Dodo draws the spend<br/><i>idempotent on runId</i>"]
+    H --> I["🧾 Receipt signed +<br/>hash-linked to the previous one"]
+
+    style A fill:#1f2937,stroke:#6C4EE3,color:#fff
+    style E fill:#1f2937,stroke:#F5A623,color:#fff
+    style F fill:#3f1d1d,stroke:#ef4444,color:#fff
+    style I fill:#14311f,stroke:#2EA043,color:#fff
 ```
-1. gate mandate create --cap 800 --merchants blinkit --expires "18:00"
-   → builds + Ed25519-signs a Mandate → mandates/mnd_xxx.json
 
-2. gate fund mnd_xxx --amount 800
-   → creates a Prava sandbox mandate-setup session
-   → human completes test-card payment → reserveRef stored on the mandate
+Every decision — allow or deny — emits a `GateEvent`, the single contract the CLI, `events.jsonl` and the dashboard all read.
 
-3. Agent runs a read command (e.g. blinkit cart)
-   → reads are free — decide() short-circuits to ALLOW, no mandate check
+---
 
-4. Agent runs a write command (e.g. blinkit place-order)
-   → decide(request, mandate, ledgerBalance, txnCount, now) evaluates the full rule table
-   → DENY  → nothing executes, ledger untouched, typed reason code returned
-   → ALLOW → real browser command runs, Prava issues the token,
-             a Receipt is signed and hash-linked to the previous one
+## The mandate
+
+What the human signs:
+
+```jsonc
+{
+  "mandate_id": "mnd_mstyxrlm46b61bf8a4bc",
+  "issuer":  "did:key:z6MktLJ3CLa8rezn5W57AbhQnxboegqRFe5kd2dtK8Rnn6cS",
+  "subject": "agent:shop-runner",
+  "scope": {
+    "categories":  ["groceries"],
+    "merchants":   ["blinkit", "zepto", "bigbasket"],
+    "cap_inr":     2000,   // total, across the mandate's whole life
+    "per_txn_inr": 1000,   // ceiling on any single transaction
+    "max_txns":    10,
+    "expires_at":  "2026-08-15T18:29:00.000Z"
+  },
+  "reserve": {
+    "type":        "dodo_credit_test",
+    "blocked_inr": 208,
+    "ref":         "cus_0NkBwH3N9Ld41wgNzK6ty"   // the real Dodo reserve
+  },
+  "sig": "RXrCU0+QcwbMRSwhTLHyqY+tjlpKz3lSeaG71zIYbbc..."
+}
 ```
 
-Every decision emits a `GateEvent` — the single contract the CLI, `events.jsonl`, and the dashboard all read.
+Rendered for a human before signing:
+
+> *"agent:shop-runner may spend up to **₹2,000** at Blinkit, Zepto or BigBasket, in one transaction, before **11:59 PM today**."*
+
+---
+
+## 💳 Dodo Payments integration
+
+Dodo is not a logo on a slide here — it is the **settlement rail**. A mandate that isn't funded through Dodo cannot authorize a single rupee, and the gate reads the **real balance from Dodo's API** on every write decision rather than trusting anything stored locally.
+
+### Why Credit Entitlements
+
+A mandate needs a *reserve*: a pot of money that exists, is drawn down atomically, and can be read back as a source of truth. Dodo's **Credit Entitlements** map onto that exactly — so Vitta models the reserve as one entitlement per customer, denominated in **INR paise at 1:1** (`unit: "INR paise"`, `precision: 0`). Credits and paise are the same integer throughout; there is no conversion anywhere to get wrong.
+
+### The four ledger operations
+
+`src/ledger/DodoCreditLedger.ts` implements the `Ledger` interface against the live test-mode API:
+
+| Op | Dodo call | Role |
+|---|---|---|
+| `fund()` | `checkoutSessions.create()` | Creates a **real** checkout session for the top-up product, overriding `credits_amount` per session. Returns `session_id` + `checkout_url`. A human completes payment — an agent never enters card details. |
+| `balance()` | `creditEntitlements.balances.retrieve()` | Reads the live reserve. Called before **every** write decision. |
+| `draw()` | `balances.createLedgerEntry({ entry_type: 'debit' })` | Settles an authorized spend. Passes `idempotency_key: runId`, so a replayed run can never double-charge. |
+| `credit()` | `balances.createLedgerEntry({ entry_type: 'credit' })` | Auto top-up for a reserve that's short — hard-capped at the mandate's own signed limit, so it can never become a cap bypass. |
+
+### The money path
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as 👤 Human
+    participant G as ⚖️ Gate
+    participant D as 💳 Dodo · test mode
+    participant M as 🛒 Merchant
+
+    H->>G: gate fund mnd_xxx --amount 800
+    G->>D: checkoutSessions.create()
+    D-->>G: session_id + checkout_url
+    G-->>H: "complete the purchase here →"
+    H->>D: pays the session (human, out of band)
+
+    Note over G,D: later — agent tries to spend
+    G->>D: balances.retrieve()
+    D-->>G: real balance (paise)
+    G->>G: decide() — pure, no LLM
+    alt DENY
+        G-->>M: nothing happens · reserve untouched
+    else ALLOW
+        G->>M: real browser command
+        M-->>G: order proof
+        G->>D: createLedgerEntry — debit, idempotency_key=runId
+        G->>G: sign receipt + link to previous hash
+    end
+```
+
+### Two keys, two jobs
+
+Vitta never lets one credential do both:
+
+- **`DODO_API_KEY`** (write) — `fund()`, `draw()`, `credit()`. CLI only.
+- **`DODO_API_KEY_READONLY`** (read) — `balance()` and every dashboard route.
+
+The dashboard **never imports the write key.** This is verified, not assumed: the read-only key returns `401` on both ledger writes and checkout-session creation.
+
+### Notes from integrating against a real account
+
+> [!IMPORTANT]
+> These cost real debugging time. They're written down so they don't cost yours.
+
+- **`environment: 'test_mode'` must be passed explicitly.** The SDK defaults to `live_mode`, which rejects test keys with a generic `401` that reads like a bad key rather than a wrong host.
+- **`balance` is a JSON `number` on the wire**, even though the SDK's own generated type declares it `string`. Coerce it; never trust the type alone.
+- **`checkoutSessions.create()` returns `session_id`**, not `session.id` — and `checkout_url` alongside it.
+- **A checkout session resolves to a customer in two hops:** `session.payment_id` → `payments.retrieve()` → `customer.customer_id`. `balance()`/`draw()` are keyed by *customer*, not by session.
+- **There is no `.deduct()` method.** Debits are ledger entries, and they *do* accept a real `idempotency_key`.
+
+> [!NOTE]
+> **Every Dodo call in this repository targets test mode.** No live-mode code path exists. See [Safety](#safety).
+
+---
+
+## The policy engine
+
+`decide()` evaluates in this exact order — **first match wins**, and the default is never `ALLOW`.
+
+| # | Rule | Verdict |
+|:--:|---|---|
+| 0 | Read-only command | `ALLOW` — free, short-circuits before any mandate check |
+| 1 | Signature doesn't verify | `DENY: BAD_SIGNATURE` |
+| 2 | Mandate expired | `DENY: EXPIRED` |
+| 3 | Command not in the webcmd manifest | `DENY: UNKNOWN_COMMAND` |
+| 4 | Merchant outside mandate scope | `DENY: MERCHANT_NOT_ALLOWED` |
+| 5 | Amount not parseable | `DENY: AMOUNT_UNPARSEABLE` |
+| 6 | Over the per-transaction cap | `DENY: OVER_PER_TXN_CAP` |
+| 7 | Over the remaining total cap | `DENY: OVER_TOTAL_CAP` |
+| 8 | Transaction count exhausted | `DENY: TXN_LIMIT_REACHED` |
+| ✅ | Everything passed | `ALLOW` |
+
+Around `decide()`, the run pipeline adds one more guarantee: a `runId` that has already drawn cannot draw again (`ALREADY_EXECUTED`) — enforced locally **and** by Dodo's own `idempotency_key`.
+
+`decide()` is pure. No network. No model. No throw.
+
+---
+
+## Receipt chain
+
+Each receipt carries the SHA-256 of the one before it (`prev_receipt_hash`; the first uses a 64-zero chain head). Verification is two checks:
+
+1. The Ed25519 signature on the receipt validates against the **gate's** public key (not the issuer's).
+2. `receipt[i].prev_receipt_hash === sha256(receipt[i-1])`
+
+```
+receipt_1 ──sha256──▶ receipt_2 ──sha256──▶ receipt_3
+    │                     │                     │
+   sig                   sig                   sig      ← each independently verifiable
+```
+
+Edit any field in `receipt_2` and you break **two** things at once: its own signature, *and* `receipt_3`'s chain link. Re-signing the tampered receipt doesn't help — the gate's private key isn't yours.
+
+---
+
+## TEST vs LIVE
+
+Both modes run the **identical** pipeline: real search, real merchant cart, real signature and cap checks, real Dodo reserve read, real Dodo draw, real signed receipt. Nothing is stubbed in either.
+
+The single difference is whether the **merchant's** checkout is driven to a placed order.
+
+| | `LIVE` | `TEST` |
+|---|---|---|
+| Merchant order placed | ✅ real order | ❌ not driven |
+| Dodo settlement | ✅ real (test mode) | ✅ real (test mode) |
+| Receipt signed | ✅ with merchant order id | ✅ marked `TEST`, no order id |
+| Default | CLI | Dashboard |
+
+`TEST` exists because Blinkit's payment step needs a human with a phone (UPI QR), and COD is intermittently unavailable. It exercises every part this project owns without requiring one.
 
 ---
 
 ## Tech stack
 
-| Layer | Technology |
+| Layer | Choice | Why |
+|---|---|---|
+| Language | TypeScript · Node 20+ | — |
+| Policy engine | Hand-written pure function | No framework, no LLM, fully auditable |
+| Signing | `node:crypto` Ed25519 | Zero external crypto dependencies |
+| Payments | `dodopayments` SDK ^2.43 | Test mode only |
+| Browser automation | `@agentrhq/webcmd` | Real stealth-Chromium — **109 sites, 807 commands, 230 write** |
+| Dashboard | Next.js 16 · React 19 · Tailwind v4 · shadcn/ui | — |
+| Tests | `node:test` | **238 passing**, no external runner |
+
+---
+
+## Quickstart
+
+**Prerequisites** — Node 20+, `npm i -g @agentrhq/webcmd`, a Dodo Payments **test-mode** account with a Credit Entitlement, and a merchant account logged into the webcmd session (`webcmd blinkit whoami`).
+
+```bash
+# 1 — install (both workspaces)
+npm install
+cd dashboard && npm install && cd ..
+
+# 2 — configure
+cp .env.example .env                              # DODO_API_KEY, DODO_API_KEY_READONLY,
+                                                  # DODO_CREDIT_ENTITLEMENT_ID, DODO_TOPUP_PRODUCT_ID
+cp dashboard/.env.local.example dashboard/.env.local   # read-only key + entitlement id
+
+# 3 — install the custom merchant adapters
+node webcmd-adapters/install.mjs
+webcmd scan | grep -E "set-cart-quantity|clear-cart"
+
+# 4 — build the CLI  (the dashboard spawns dist/cli/gate.js — this step is required)
+npm run build
+
+# 5 — verify
+npm test        # 238 passing
+
+# 6 — run
+cd dashboard && npm run dev     # → http://localhost:3000
+```
+
+> [!WARNING]
+> **`dashboard/.env.local` needs its own copy of the Dodo read-only key.** Next only loads env files from the `dashboard/` directory — the repo-root `.env` is invisible to the Next process. Missing keys surface as *"Dodo not yet configured"* rather than a hard error.
+
+> [!CAUTION]
+> `gate` does not auto-load `.env` (no `dotenv` dependency by design). Source it first, or you'll get a confusing SDK error about `DODO_PAYMENTS_API_KEY`:
+> ```bash
+> set -a && source .env && set +a
+> ```
+
+---
+
+## CLI reference
+
+```bash
+node dist/cli/gate.js <command>
+```
+
+| Command | What it does |
 |---|---|
-| Language | TypeScript on Node.js 20+ |
-| Policy engine | Hand-written pure function — no framework, no LLM |
-| Signing | `node:crypto` — Ed25519, zero external dependencies |
-| Payments | Prava REST API, sandbox only |
-| Browser automation | `@agentrhq/webcmd` — real stealth-Chromium, 800+ real site commands |
-| Dashboard | Next.js 16 (App Router) + Tailwind CSS + shadcn/ui |
-| Tests | `node:test` — 238 passing, no external test framework |
+| `gate scan` | Show the webcmd manifest — sites, commands, how many are governed |
+| `gate mandate create` | Build and Ed25519-sign a new mandate |
+| `gate mandate resign` | Re-sign with updated limits (step-up approval) |
+| `gate fund <id> --amount <n>` | Create a real Dodo Checkout Session |
+| `gate fund <id> --reserve-ref <ref>` | Attach an already-paid reserve; balance read live from Dodo |
+| `gate fund <id> --auto --amount <n>` | Top up an existing reserve, capped at the signed limit |
+| `gate run -- webcmd <site> <cmd>` | Run a command through the gate |
+| `gate receipt show <id>` | Display a receipt |
+| `gate verify <id>` | Verify a receipt's signature **and** chain link |
+
+```bash
+# create → fund → shop, end to end
+gate mandate create --subject "agent:shop-runner" \
+  --cap 2000 --per-txn 1000 --merchants "blinkit,zepto,bigbasket" --expires "23:59"
+
+gate fund mnd_xxx --amount 800
+
+gate run -- webcmd zepto search "peanut butter"           # read  → ALLOW, free
+gate run -- webcmd blinkit set-cart-quantity <id> --quantity 2
+gate run -- webcmd blinkit place-order --confirm          # write → gated
+```
 
 ---
 
 ## Repository layout
 
 ```
-mandate-gate/
+vitta/
 ├── src/
-│   ├── mandate/          # Mandate schema, Ed25519 signing, plain-English rendering
-│   ├── policy/           # decide() — the core rule engine (pure / sync / zero-I/O)
-│   ├── ledger/           # Prava Sandbox integration (REST API)
-│   ├── receipt/          # Receipt schema, hash-chain build/verify
-│   ├── webcmd/           # webcmd manifest fetch + safe command execution
-│   ├── agent/            # Purchase agent — cart sync, gate spawn, state machine
-│   ├── events/           # GateEvent — the one schema every consumer reads
-│   └── cli/              # `gate` CLI — the only way actions are taken
+│   ├── mandate/      # schema · Ed25519 signing · plain-English rendering
+│   ├── policy/       # decide() — the rule engine (pure / sync / zero-I/O)
+│   ├── ledger/       # DodoCreditLedger — real test-mode Dodo API
+│   ├── receipt/      # receipt schema · hash-chain build & verify
+│   ├── webcmd/       # manifest loading · safe command execution
+│   ├── agent/        # purchase agent — cart sync, gate spawn, state machine
+│   ├── events/       # GateEvent — the one schema every consumer reads
+│   └── cli/          # `gate` — the only way an action is ever taken
 │
-├── dashboard/            # Next.js app (search, cart, mandate, events, receipts)
-│   ├── app/api/shop/     # Cart sync, search, purchase-run routes
-│   ├── lib/              # cart-context, cart-sync, real-cart, gate-cli
-│   └── components/       # UI components
+├── dashboard/        # Next.js app — shop, mandate, events, receipts, sniper, docs
+├── webcmd-adapters/  # custom Blinkit adapters (absolute qty, clear-cart, place-order)
+├── assets/           # README media
 │
-├── webcmd-adapters/
-│   └── blinkit/          # Custom adapters: set-cart-quantity, clear-cart, place-order
-│
-├── mandates/             # Runtime: mandate JSON files
-├── receipts/             # Runtime: signed receipt JSON files
-├── authorizations/       # Runtime: transaction authorization JSON files
-├── events.jsonl          # Runtime: append-only policy decision log
-├── ledger.jsonl          # Runtime: Prava draw/credit audit trail
-└── keys/                 # Runtime: Ed25519 keypairs (gitignored)
+├── mandates/         # runtime · signed mandates
+├── receipts/         # runtime · signed receipts
+├── events.jsonl      # runtime · append-only decision log
+└── keys/             # runtime · Ed25519 keypairs (gitignored)
 ```
 
 ---
 
-## Getting started
+## Safety
 
-### Prerequisites
-
-- Node.js 20+
-- `@agentrhq/webcmd` installed globally: `npm install -g @agentrhq/webcmd`
-- A Prava developer account (Dashboard) with Sandbox access
-- A Blinkit account logged into the webcmd browser session (`webcmd blinkit whoami`)
-
-### 1. Install dependencies
-
-```bash
-# Root (CLI + policy engine)
-node webcmd-adapters/install.mjs
-```
-
-Verify:
-```bash
-webcmd scan | grep -E "set-cart-quantity|clear-cart"
-```
-
-### 2. Configure environment
-
-```bash
-# Root CLI
-cp .env.example .env
-# Fill in PRAVA_SECRET_KEY, PRAVA_USER_EMAIL, PRAVA_API_BASE_URL
-
-# Dashboard
-cp dashboard/.env.local.example dashboard/.env.local
-# Fill in the same Prava secret key
-```
-
-**Prava Sandbox Test Card:**
-Use this test card in the Prava Sandbox:
-- **Card Number**: `4622943123232200`
-- **CVV**: `93`
-- **Expiry**: `12/27`
-*Note: Test cards have a max daily limit of 30 transactions.*
-
-### 4. Build
-
-```bash
-npm run build          # compiles src/ → dist/
-```
-
-### 5. Run tests
-
-```bash
-npm test               # 238 tests, node:test runner
-```
-
-### 6. Start the dashboard
-
-```bash
-cd dashboard && npm run dev
-# → http://localhost:3000
-```
+- **Test mode only.** Every Dodo call targets test mode. No live-mode code path exists in this repository.
+- **Fail closed.** Unknown command, unparseable amount, expired mandate, bad signature, unreachable ledger — all produce `DENY`. If the balance read fails, the gate treats it as ₹0 and says so out loud rather than guessing.
+- **No LLM in the decision path.** `decide()` is deterministic and re-runnable: an auditor can replay the exact inputs years later and get the exact same verdict.
+- **Human-in-the-loop for real money.** Funding requires a human completing a real checkout. An agent never enters payment details.
+- **Idempotent draws.** The same `runId` cannot draw twice — enforced in the application *and* by Dodo's `idempotency_key`.
+- **Least privilege.** The dashboard only ever receives the read-only key.
 
 ---
 
-## CLI reference
+<div align="center">
 
-All commands are run as `node dist/cli/gate.js <command>` from the repo root.
+<img src="assets/footer.svg" alt="Vitta — a spending limit should be a boundary, not a suggestion" width="100%">
 
-| Command | What it does |
-|---|---|
-| `gate mandate create` | Create and sign a new mandate |
-| `gate mandate resign` | Update and re-sign an existing mandate |
-| `gate fund <mandateId> --amount <n>` | Fund a mandate via a Prava mandate-setup session |
-| `gate run -- webcmd <site> <cmd>` | Execute a webcmd command through the policy gate |
-| `gate receipt show <receiptId>` | Display a receipt |
-| `gate verify <receiptId>` | Verify a receipt's signature and chain link |
-| `gate scan` | List all available webcmd commands |
-
-### Common webcmd commands (Blinkit)
-
-```bash
-# Search
-node dist/cli/gate.js run -- webcmd blinkit search --query "maggi"
-
-# Add to cart (absolute quantity — idempotent)
-node dist/cli/gate.js run -- webcmd blinkit set-cart-quantity <productId> --quantity 2
-
-# Clear the entire cart
-node dist/cli/gate.js run -- webcmd blinkit clear-cart
-
-# Place an order (requires mandate ALLOW)
-node dist/cli/gate.js run -- webcmd blinkit place-order --confirm
-```
-
----
-
-## Policy engine rules
-
-`decide()` evaluates rules in this exact order. The first matching rule wins.
-
-| # | Rule | Verdict |
-|---|---|---|
-| 0 | Read-only command (`access: 'read'`) | `ALLOW` — free, no mandate check |
-| 1 | Mandate missing or signature invalid | `DENY: BAD_SIGNATURE` |
-| 2 | Mandate expired | `DENY: EXPIRED` |
-| 3 | Command not in manifest | `DENY: UNKNOWN_COMMAND` |
-| 4 | Merchant not in mandate scope | `DENY: MERCHANT_NOT_ALLOWED` |
-| 5 | Amount unparseable | `DENY: AMOUNT_UNPARSEABLE` |
-| 6 | Amount exceeds per-transaction cap | `DENY: OVER_PER_TXN_CAP` |
-| 7 | Total spend would exceed cap | `DENY: OVER_TOTAL_CAP` |
-| 8 | Transaction limit reached | `DENY: TXN_LIMIT_REACHED` |
-| 9 | Same `runId` already executed | `DENY: ALREADY_EXECUTED` |
-| 10 | All checks pass | `ALLOW` |
-
-`decide()` is a pure function. It never calls a network, never calls an LLM, and never throws — unknown/invalid inputs always produce `DENY`, never `ALLOW`.
-
----
-
-## Cart synchronisation
-
-The dashboard mirrors the real Blinkit cart exactly. Every cart mutation follows four steps:
-
-1. **Read** the real merchant cart
-2. **Compute** the delta between real quantity and desired quantity
-3. **Write** an absolute target quantity (not "add N more") — idempotent
-4. **Verify** the merchant now reports the desired quantity before updating the UI
-
-This replaced an optimistic local model that could silently diverge from Blinkit (observed live: dashboard ₹165 vs real cart ₹330; a human-approved ₹160 purchase was actually ₹354).
-
----
-
-## Receipt chain
-
-Each receipt contains the SHA-256 hash of the previous receipt (`prev_receipt_hash`). The chain is verified by:
-
-1. Checking the Ed25519 signature on each receipt against the gate's public key
-2. Confirming `receipt[i].prev_receipt_hash === sha256(receipt[i-1])`
-
-Tampering with any field in any receipt breaks every subsequent chain link — even if the attacker re-signs the tampered receipt, they cannot forge the private key used by the gate.
-
----
-
-## Safety guarantees
-
-- **Sandbox only.** Every Prava API call targets `https://sandbox.api.prava.space`. No live-mode code exists in this repo.
-- **Fail closed.** Any unknown command, unparseable amount, expired mandate, or bad signature produces `DENY`. The default is never `ALLOW`.
-- **No LLM in the decision path.** `decide()` is deterministic — a future audit can re-run the exact same inputs and get the exact same verdict.
-- **Human-in-the-loop for real purchases.** The dashboard requires explicit confirmation before starting a purchase job. The CLI's `--confirm` flag must be explicitly passed.
-- **Idempotent draws.** The same `runId` cannot draw from the Prava ledger twice — both at the application level and enforced by Prava's idempotency reference.
-
----
-
-## Money safety note
-
-This project operates in **Prava Sandbox mode** using test keys. No real money moves anywhere in this build. Switching to live mode requires business verification with Prava and is explicitly out of scope.
-
----
-
-## License
-
-ISC
+</div>
