@@ -7,6 +7,7 @@ import { MERCHANT_LABEL, type MerchantOffer } from "@/lib/shop-catalog";
 import { useCart } from "@/lib/cart-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toastCartError } from "@/lib/cart-toast";
 
 /**
  * One merchant's offer for a product. Real Blinkit offers get a solid "Real" tag (icon+text+color,
@@ -31,7 +32,7 @@ export function MerchantOfferRow({
     const result = await addItem(productId, offer.merchant);
     setAdding(false);
     if (!result.ok) {
-      toast.error("Could not add to real cart", { description: result.message });
+      toastCartError("Could not add to real cart", result.message);
       return;
     }
     if (offer.real) {

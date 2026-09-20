@@ -1,7 +1,7 @@
 {
   "name": "mandate-gate",
   "version": "0.1.0",
-  "description": "Mandate Gate policy engine with Prava sandbox mandate authorization.",
+  "description": "Mandate Gate policy engine with a Razorpay test-mode reserve.",
   "main": "dist/cli/gate.js",
   "directories": {
     "doc": "docs"
@@ -9,7 +9,18 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "node --require ts-node/register --test"
+    "pretest": "tsc",
+    "test": "node --require ts-node/register --test",
+    "agents": "node dist/agents/serve.js all",
+    "shop": "node dist/cli/shop.js",
+    "nasiko:cards": "tsc && node dist/agents/write-cards.js",
+    "demo:agents": "tsc && node dist/agents/demo.js",
+    "check:razorpay-dashboard": "node scripts/check-razorpay-dashboard.js",
+    "check:bigbasket-parser": "node --no-warnings scripts/check-bigbasket-parser.js",
+    "check:browser-queue": "node --no-warnings scripts/check-browser-queue.js",
+    "check:pack-size": "node --no-warnings scripts/check-pack-size.js",
+    "check:portability": "node --no-warnings scripts/check-portability.js",
+    "check:gate-failure": "node --no-warnings scripts/check-gate-failure.js"
   },
   "repository": {
     "type": "git",
@@ -19,6 +30,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "bugs": {
     "url": "https://github.com/Agnik47/Vitta/issues"
   },

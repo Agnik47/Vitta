@@ -31,6 +31,7 @@
 // a cart mutation is an access:'write' command and stays inside the one audited decision path, so it
 // still produces a real GateEvent. It commits ₹0 — only place-order moves money.
 import { friendlyGateFailureMessage, runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 import type { AddToCartMerchant } from "@/lib/product-ref";
 import { quantityOf, readRealCart, type RealCart } from "@/lib/real-cart";
 
@@ -38,7 +39,7 @@ import { quantityOf, readRealCart, type RealCart } from "@/lib/real-cart";
 const MAX_QUANTITY = 12;
 
 export type CartSyncResult =
-  | { ok: true; cart: RealCart; changed: boolean; previousQuantity: number; quantity: number }
+  | { ok: true; cart: RealCart; changed: boolean; previousQuantity?: number; quantity: number }
   | { ok: false; message: string; cart?: RealCart };
 
 /** Which real webcmd command expresses "make this line exactly N".
@@ -63,43 +64,30 @@ export async function syncCartQuantity(
   merchant: AddToCartMerchant,
   productRef: string,
   desiredQuantity: number,
-  timeoutMs = 660_000
+  timeoutMs = 90_000
 ): Promise<CartSyncResult> {
   if (!Number.isInteger(desiredQuantity) || desiredQuantity < 0 || desiredQuantity > MAX_QUANTITY) {
     return { ok: false, message: `quantity must be a whole number between 0 and ${MAX_QUANTITY}` };
   }
 
-  // STEP 1 — read the real cart. This is the only trusted view of "what is currently there".
-  const before = await readRealCart(merchant);
-  if (!before.ok) {
-    return { ok: false, message: before.message };
-  }
-
-  // STEP 2 — compute the delta against the REAL quantity, not a local guess.
-  const previousQuantity = quantityOf(before.cart, productRef);
-  if (previousQuantity === desiredQuantity) {
-    // Already correct. Doing nothing is the right answer — re-issuing an add here is exactly how
-    // quantities used to creep upward on every retry.
-    return { ok: true, cart: before.cart, changed: false, previousQuantity, quantity: desiredQuantity };
-  }
-
-  // STEP 3 — one absolute write to the destination quantity.
+  // The write is ABSOLUTE ("end up at exactly N"), so it needs no read first: repeating it, retrying
+  // it or double-clicking it can only land the cart where it was asked to be. Skipping the pre-read
+  // saves a whole browser round-trip, which is most of what "add to cart" used to cost.
   const argv = absoluteSetCommand(merchant, productRef, desiredQuantity);
   if (!argv) {
     return {
       ok: false,
       message: `${merchant} has no absolute cart-quantity command, so its cart cannot be kept in sync yet. Blinkit is the supported merchant for synchronized carts.`,
-      cart: before.cart,
     };
   }
 
   const result = await runGateCli(argv, timeoutMs);
   if (!result.ok) {
-    const raw = result.stdout.trim() || result.stderr.trim() || "cart update failed";
-    return { ok: false, message: friendlyGateFailureMessage(raw), cart: before.cart };
+    const raw = describeGateFailure(result.stdout, result.stderr, "cart update failed");
+    return { ok: false, message: friendlyGateFailureMessage(raw) };
   }
 
-  // STEP 4 — re-read and verify. The write command reports its own success, but "I wrote it" is a
+  // Re-read and verify. The write command reports its own success, but "I wrote it" is a
   // different fact from "the merchant now says it" — and this project has already been burned once
   // by trusting a cart-mutation command's self-report (a clear-cart that reported success over a
   // cart that was still full).
@@ -117,7 +105,10 @@ export async function syncCartQuantity(
     };
   }
 
-  return { ok: true, cart: after.cart, changed: true, previousQuantity, quantity: verifiedQuantity };
+  // The adapter reports "Set to 1 (was 0)"; surface the "was" when it is there, never guess it.
+  const was = /\bwas (\d+)\)/.exec(result.stdout)?.[1];
+  const previousQuantity = was !== undefined ? Number(was) : undefined;
+  return { ok: true, cart: after.cart, changed: previousQuantity === undefined || previousQuantity !== verifiedQuantity, previousQuantity, quantity: verifiedQuantity };
 }
 
 /**
@@ -127,14 +118,14 @@ export async function syncCartQuantity(
  * a clear that reports success over a non-empty cart is a failure mode this project has already hit
  * for real.
  */
-export async function clearRealCart(merchant: AddToCartMerchant, timeoutMs = 660_000): Promise<CartSyncResult> {
+export async function clearRealCart(merchant: AddToCartMerchant, timeoutMs = 120_000): Promise<CartSyncResult> {
   if (merchant !== "blinkit") {
     return { ok: false, message: `${merchant} has no clear-cart command available.` };
   }
 
   const result = await runGateCli(["run", "--", "webcmd", "blinkit", "clear-cart"], timeoutMs);
   if (!result.ok) {
-    const raw = result.stdout.trim() || result.stderr.trim() || "clear-cart failed";
+    const raw = describeGateFailure(result.stdout, result.stderr, "clear-cart failed");
     return { ok: false, message: friendlyGateFailureMessage(raw) };
   }
 

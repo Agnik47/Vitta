@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useCart } from "@/lib/cart-context";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -121,6 +122,7 @@ const STEP_LABEL: Record<string, string> = {
   "merchant-confirm": "Waiting for merchant confirmation",
   draw: "Drawing from reserve",
   confirm: "Signing receipt",
+  "empty-cart": "Emptying the cart after purchase",
 };
 
 function rupees(n: number): string {
@@ -190,6 +192,7 @@ export default function PurchaseJobPage() {
   const [authorizationRow, setAuthorizationRow] = useState<AuthorizationRow | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const notifiedRef = useRef(false);
+  const { itemCount: cartItemCount, syncing: cartSyncing, refresh: refreshCart } = useCart();
 
   useEffect(() => {
     if (!jobId) return;
@@ -216,6 +219,8 @@ export default function PurchaseJobPage() {
             // waiting on you" state, and framing it as either would misrepresent what happened.
             if (json.state === "RECEIPT_READY") {
               toast.success("Purchase complete", { description: json.result?.receiptId });
+              // The purchase empties the real cart. The cart state lives across pages, so re-read it now.
+              void refreshCart();
             } else if (json.state === "WAITING_FOR_MERCHANT_CONFIRMATION") {
               toast.info("Authorized — waiting for merchant confirmation", {
                 description: "The mandate approved this spend. Complete checkout in the merchant's browser window to finish.",
@@ -236,7 +241,7 @@ export default function PurchaseJobPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [jobId]);
+  }, [jobId, refreshCart]);
 
   // Once the job names a real signed receipt, fetch its real signature/chain verification for the
   // success panel — never fabricated, the same /api/receipts route /receipts itself uses.
@@ -369,6 +374,23 @@ export default function PurchaseJobPage() {
       />
 
       <div className="flex flex-col gap-4">
+        {job.state === "RECEIPT_READY" && !cartSyncing && (
+          cartItemCount === 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-allow/30 bg-allow/5 px-4 py-3 text-[13px] text-foreground">
+              <CheckCircle2 className="size-4 shrink-0 text-allow" strokeWidth={2.25} />
+              Purchase complete — your cart is empty.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-step-up/30 bg-step-up/5 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
+              <strong className="font-semibold text-foreground">Purchase complete, but your cart still holds {cartItemCount} item(s).</strong>{" "}
+              The gate did not allow it to be emptied — for example because the mandate&apos;s transaction limit is reached. Nothing else was bought;{" "}
+              <Link href="/shop/cart" className="text-seal underline underline-offset-2">
+                clear it from the Cart
+              </Link>{" "}
+              or create a new mandate.
+            </div>
+          )
+        )}
         <Panel>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="text-sm font-semibold text-foreground">Execution Progress Timeline</div>
@@ -438,7 +460,7 @@ export default function PurchaseJobPage() {
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-allow" strokeWidth={1.75} />
                 <span>
                   This run executed the full pipeline — real cart, real mandate check, real reserve draw, real signed
-                  receipt — and settled against your Prava test reserve.{" "}
+                  receipt — and settled against your Razorpay test reserve.{" "}
                   <strong className="text-foreground">No {merchantLabel} order was placed</strong>, so there is no
                   merchant order id. Switch to Live Mode on the cart page to place a real order.
                 </span>
@@ -469,7 +491,7 @@ export default function PurchaseJobPage() {
                 value={
                   result.paymentStatus === "captured"
                     ? isTestRun
-                      ? "Captured (Prava test reserve)"
+                      ? "Captured (Razorpay test reserve)"
                       : "Captured"
                     : "Not charged"
                 }

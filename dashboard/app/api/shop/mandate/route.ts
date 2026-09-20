@@ -1,6 +1,7 @@
 // Creates a real, Ed25519-signed mandate by spawning `gate mandate create` — never reimplements
 // signing/schema logic here. See ADR-015 / CLAUDE.md rule 8.
 import { runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 
 const ALLOWED_MERCHANTS = new Set(["blinkit", "zepto", "bigbasket", "district"]);
 const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
 
   if (!result.ok) {
     return Response.json(
-      { ok: false, message: result.stdout.trim() || result.stderr.trim() || "gate mandate create failed" },
+      { ok: false, message: describeGateFailure(result.stdout, result.stderr, "gate mandate create failed") },
       { status: 422 }
     );
   }

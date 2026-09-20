@@ -1,9 +1,11 @@
-// Funds a mandate's reserve by spawning `gate fund` â€” Prava session creation, never a
-// direct PravaLedger call from route code. See ADR-015 / CLAUDE.md rule 8. The route supports
-// both flows:
-// - `amountInr`: create a new Prava checkout session and return its checkout URL
-// - `reserveRef`: attach an already-approved Prava mandate reference
+// Funds a mandate's reserve by spawning `gate fund` — never a direct ledger call from route code.
+// See ADR-015 / CLAUDE.md rule 8. The route supports both flows:
+// - `amountInr`: create a Razorpay TEST order (the reserve) and return its reserve reference, order
+//   id and hosted pay-page URL
+// - `reserveRef`: attach an order that has been PAID — the gate reads the real captured balance from
+//   Razorpay (capturing an `authorized` payment first) and re-signs the mandate with it
 import { runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 
 const MANDATE_ID_RE = /^mnd_[a-z0-9]+$/;
 
@@ -36,18 +38,21 @@ export async function POST(req: Request) {
 
   if (!result.ok) {
     return Response.json(
-      { ok: false, message: result.stdout.trim() || result.stderr.trim() || "gate fund failed" },
+      { ok: false, message: describeGateFailure(result.stdout, result.stderr, "gate fund failed") },
       { status: 422 }
     );
   }
 
   const raw = result.stdout.trim();
   const reserveRefMatch = /reserve reference\s+([^\s]+)/i.exec(raw);
-  const checkoutUrlMatch = /(https:\/\/\S+)/i.exec(raw);
+  // The pay-page URL is http://localhost:… in dev, so both schemes are accepted.
+  const checkoutUrlMatch = /(https?:\/\/\S+)/i.exec(raw);
+  const createdRef = reserveRefMatch?.[1];
   return Response.json({
     ok: true,
     raw,
-    reserveRef: reserveRefMatch?.[1],
+    reserveRef: createdRef,
+    orderId: createdRef?.startsWith("razorpay-order:") ? createdRef.slice("razorpay-order:".length) : undefined,
     checkoutUrl: checkoutUrlMatch?.[1],
   });
 }

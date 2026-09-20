@@ -38,7 +38,7 @@ export function ReceiptChain({ entries }: { entries: Entry[] }) {
       <EmptyState
         icon={ReceiptIcon}
         title="No receipts yet"
-        hint="A receipt is written the moment `gate run` executes an allowed write."
+        hint="A funding receipt is written when a Razorpay test payment funds a mandate; a spend receipt the moment `gate run` executes an allowed write."
       />
     );
   }

@@ -24,6 +24,7 @@
 // cart-read/route.ts documents — `gate run` short-circuits every access:'read' command and returns
 // WITHOUT executing it (rule 0), so the gate literally cannot fetch cart contents. search.js is the
 // narrow read-only entry point that refuses anything not marked access:'read' in the manifest.
+import { browserWriteEpoch } from "@/lib/browser-queue";
 import { runSearchCli } from "@/lib/live-search";
 import type { AddToCartMerchant } from "@/lib/product-ref";
 
@@ -105,7 +106,21 @@ function readableCartError(raw: string, merchant: AddToCartMerchant): string {
   return raw.split("\n")[0].trim() || `Could not read the real ${name} cart.`;
 }
 
-export async function readRealCart(merchant: AddToCartMerchant, timeoutMs = 90_000): Promise<ReadRealCartResult> {
+// Several open tabs poll the same cart. Reads that arrive while an identical read is still pending
+// share its result — but only within one write epoch, so a read queued AFTER a write is never handed
+// a cart that predates it.
+const pendingReads = new Map<string, Promise<ReadRealCartResult>>();
+
+export function readRealCart(merchant: AddToCartMerchant, timeoutMs = 90_000): Promise<ReadRealCartResult> {
+  const key = `${merchant}:${browserWriteEpoch()}`;
+  const pending = pendingReads.get(key);
+  if (pending) return pending;
+  const read = fetchRealCart(merchant, timeoutMs).finally(() => pendingReads.delete(key));
+  pendingReads.set(key, read);
+  return read;
+}
+
+async function fetchRealCart(merchant: AddToCartMerchant, timeoutMs: number): Promise<ReadRealCartResult> {
   const raw = await runSearchCli([merchant, "cart"], timeoutMs);
   if (!raw.ok) {
     return {

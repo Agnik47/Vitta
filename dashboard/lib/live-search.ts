@@ -5,6 +5,8 @@
 // ledger — via the same safe execFile(argv array, no shell) discipline gate-cli.ts already
 // established for the real gate CLI.
 import { execFile } from "node:child_process";
+import { runBrowserTask } from "@/lib/browser-queue";
+import { withPackSize } from "@/lib/pack-size";
 import path from "node:path";
 import { getRuntimeDataDir, resolveCliEntryPoint } from "@/lib/read";
 
@@ -31,6 +33,9 @@ export interface MerchantSearchResult {
   /** Set only on a genuine failure — never populated alongside fabricated products. */
   error?: string;
   authRequired?: boolean;
+  /** Which real source answered ("anakin" or "webcmd") — set by lib/product-sources, so a consumer
+   *  like the Deal Discovery agent can report where a price actually came from. */
+  source?: string;
 }
 
 function searchCliEntryPoint(): string {
@@ -63,7 +68,16 @@ function stripAnsi(text: string): string {
   return text.replace(/(?:\x1b|\\e|\\x1b)\[[0-9;]*m/g, "");
 }
 
+/** Every call here drives webcmd's one shared browser, so they run one at a time (lib/browser-queue.ts). */
 export function runSearchCli(argv: string[], timeoutMs = 60_000): Promise<RawSearchResponse> {
+  return runBrowserTask(() => spawnSearchCli(argv, timeoutMs), {
+    site: argv[0] ?? "shared",
+    failure: (r) => (r.ok ? null : r.message ?? "search failed"),
+    retryable: true, // read-only: safe to run again after a session reset
+  });
+}
+
+function spawnSearchCli(argv: string[], timeoutMs: number): Promise<RawSearchResponse> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
@@ -139,7 +153,8 @@ async function searchBlinkit(query: string): Promise<MerchantSearchResult> {
     return {
       merchant: "blinkit",
       productId: String(r.productId ?? ""),
-      name: String(r.name ?? "Unnamed product"),
+      // Blinkit states the pack size in `variant`, not in the name — carry it in (see lib/pack-size.ts).
+      name: withPackSize(String(r.name ?? "Unnamed product"), r.variant),
       brand: r.brand ? String(r.brand) : undefined,
       priceInr: num(r.price),
       mrpInr: r.mrp !== undefined && r.mrp !== null ? num(r.mrp) : undefined,
@@ -161,7 +176,8 @@ async function searchZepto(query: string): Promise<MerchantSearchResult> {
     return {
       merchant: "zepto",
       productId: String(r.product_id ?? ""),
-      name: String(r.title ?? "Unnamed product"),
+      // Zepto states the pack size in `pack_size` ("1 pack (1 kg)"), not in the title.
+      name: withPackSize(String(r.title ?? "Unnamed product"), r.pack_size),
       brand: r.brand ? String(r.brand) : undefined,
       priceInr: num(r.price),
       mrpInr: r.mrp !== undefined && r.mrp !== null ? num(r.mrp) : undefined,

@@ -13,8 +13,8 @@ No LLM sits in the decision path.**
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node-20%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)
-![Dodo Payments](https://img.shields.io/badge/Dodo_Payments-Test_Mode-6C4EE3?style=for-the-badge)
-![Tests](https://img.shields.io/badge/tests-238_passing-2EA043?style=for-the-badge)
+![Razorpay](https://img.shields.io/badge/Razorpay-Test_Mode-0C2451?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-702_passing-2EA043?style=for-the-badge)
 ![Ed25519](https://img.shields.io/badge/signing-Ed25519-F5A623?style=for-the-badge)
 
 </div>
@@ -49,9 +49,9 @@ Same inputs → same verdict. Every time. Forever. Auditable years later.
 |:--:|---|---|
 | 📜 | **Mandate** | An Ed25519-signed JSON document. Merchant scope, total cap, per-transaction cap, max transactions, expiry. Renders as plain English you read *before* you sign. |
 | ⚖️ | **Policy Engine** | `decide()` — pure, synchronous, zero-I/O, zero-LLM. Returns `ALLOW` / `DENY` / `STEP_UP`. Never throws; unknown input always fails closed to `DENY`. |
-| 💳 | **Dodo Payments** | The real money rail. A human funds the mandate through a genuine Dodo Checkout Session; every `ALLOW` draws from a real Credit Entitlement balance. [Deep dive ↓](#-dodo-payments-integration) |
+| 💳 | **Razorpay (test mode)** | The reserve rail. A human funds the mandate by paying a real Razorpay test Order in Checkout; the reserve is what Razorpay reports as *captured*, and every `ALLOW` draws against it. [Deep dive ↓](#-razorpay-test-mode-integration) |
 | 🧾 | **Receipt Chain** | Every `ALLOW` emits a signed, hash-linked receipt. Tamper with one and *every subsequent* link breaks — not just the one you touched. |
-| 🖥️ | **Dashboard** | Next.js app: live mandate, live Dodo balance, decision feed, receipt verification — plus a real storefront with search, cart and one-click gated purchase. |
+| 🖥️ | **Dashboard** | Next.js app: live mandate, live Razorpay balance, decision feed, receipt verification — plus a real storefront with search, cart and one-click gated purchase. |
 | 🎯 | **Price Sniper** | Watches a real product's live price in a time window and fires the purchase pipeline the moment it hits your target — through the *same* gate, never around it. |
 
 ---
@@ -79,13 +79,13 @@ Same inputs → same verdict. Every time. Forever. Auditable years later.
 
 ```mermaid
 flowchart TD
-    A["👤 Human signs a mandate<br/><i>₹800 · Blinkit · before 18:00</i>"] --> B["💳 Fund via Dodo<br/>Checkout Session"]
+    A["👤 Human signs a mandate<br/><i>₹800 · Blinkit · before 18:00</i>"] --> B["💳 Fund via Razorpay<br/>test Order + Checkout"]
     B --> C{"🤖 Agent issues<br/>a webcmd command"}
     C -->|"access: read"| D["✅ ALLOW — free<br/><i>reads never touch the mandate</i>"]
     C -->|"access: write"| E["⚖️ decide()<br/>pure · deterministic · no LLM"]
     E -->|"any rule fails"| F["⛔ DENY<br/>nothing executes<br/>reserve untouched"]
     E -->|"all rules pass"| G["🌐 Real browser command runs"]
-    G --> H["💰 Dodo draws the spend<br/><i>idempotent on runId</i>"]
+    G --> H["💰 Reserve is drawn<br/><i>idempotent on runId</i>"]
     H --> I["🧾 Receipt signed +<br/>hash-linked to the previous one"]
 
     style A fill:#1f2937,stroke:#6C4EE3,color:#fff
@@ -116,9 +116,9 @@ What the human signs:
     "expires_at":  "2026-08-15T18:29:00.000Z"
   },
   "reserve": {
-    "type":        "dodo_credit_test",
+    "type":        "razorpay_test_order",
     "blocked_inr": 208,
-    "ref":         "cus_0NkBwH3N9Ld41wgNzK6ty"   // the real Dodo reserve
+    "ref":         "razorpay-order:order_Q1w2E3r4T5y6"   // the real Razorpay test order
   },
   "sig": "RXrCU0+QcwbMRSwhTLHyqY+tjlpKz3lSeaG71zIYbbc..."
 }
@@ -130,79 +130,52 @@ Rendered for a human before signing:
 
 ---
 
-## 💳 Dodo Payments integration
+## 💳 Razorpay test-mode integration
 
-Dodo is not a logo on a slide here — it is the **settlement rail**. A mandate that isn't funded through Dodo cannot authorize a single rupee, and the gate reads the **real balance from Dodo's API** on every write decision rather than trusting anything stored locally.
+Razorpay is the **reserve rail**. A mandate that hasn't been funded by a real, captured Razorpay test payment cannot authorize a single rupee, and the gate reads the **real captured amount from Razorpay's API** on every write decision rather than trusting anything stored locally.
 
-### Why Credit Entitlements
+### How a reserve works
 
-A mandate needs a *reserve*: a pot of money that exists, is drawn down atomically, and can be read back as a source of truth. Dodo's **Credit Entitlements** map onto that exactly — so Vitta models the reserve as one entitlement per customer, denominated in **INR paise at 1:1** (`unit: "INR paise"`, `precision: 0`). Credits and paise are the same integer throughout; there is no conversion anywhere to get wrong.
+Razorpay is a payments gateway, not a wallet — it has no per-mandate balance and no API to pay a third-party merchant like Blinkit. So Vitta models the reserve honestly:
 
-### The four ledger operations
-
-`src/ledger/DodoCreditLedger.ts` implements the `Ledger` interface against the live test-mode API:
-
-| Op | Dodo call | Role |
+| Op | What happens | Razorpay call |
 |---|---|---|
-| `fund()` | `checkoutSessions.create()` | Creates a **real** checkout session for the top-up product, overriding `credits_amount` per session. Returns `session_id` + `checkout_url`. A human completes payment — an agent never enters card details. |
-| `balance()` | `creditEntitlements.balances.retrieve()` | Reads the live reserve. Called before **every** write decision. |
-| `draw()` | `balances.createLedgerEntry({ entry_type: 'debit' })` | Settles an authorized spend. Passes `idempotency_key: runId`, so a replayed run can never double-charge. |
-| `credit()` | `balances.createLedgerEntry({ entry_type: 'credit' })` | Auto top-up for a reserve that's short — hard-capped at the mandate's own signed limit, so it can never become a cap bypass. |
+| `fund` | Create an **Order** stamped with the mandate id; the human pays it in Checkout. Reserve reference = `razorpay-order:<order_id>`. | `POST /v1/orders` |
+| `balance` | **Captured payments, net of refunds, minus what Vitta has drawn.** Authorized-but-uncaptured, failed and refunded payments count as ₹0. | `GET /v1/orders/:id`, `/payments` |
+| `draw` | A Vitta-side debit, idempotent on the run id. Recorded in an append-only local log **and** in the order's server-side `notes`; the balance uses the *larger* spent figure, so wiping the local file cannot give money back. | `PATCH /v1/orders/:id` |
+| `release` | Zero the reserve first, then refund only the unspent amount. | `POST /v1/payments/:id/refund` |
+| `credit` | **Rejected.** An order's amount is fixed; a top-up is a new, human-paid order. An agent can never add money. | — |
 
-### The money path
+### The funding flow
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant H as 👤 Human
-    participant G as ⚖️ Gate
-    participant D as 💳 Dodo · test mode
-    participant M as 🛒 Merchant
-
-    H->>G: gate fund mnd_xxx --amount 800
-    G->>D: checkoutSessions.create()
-    D-->>G: session_id + checkout_url
-    G-->>H: "complete the purchase here →"
-    H->>D: pays the session (human, out of band)
-
-    Note over G,D: later — agent tries to spend
-    G->>D: balances.retrieve()
-    D-->>G: real balance (paise)
-    G->>G: decide() — pure, no LLM
-    alt DENY
-        G-->>M: nothing happens · reserve untouched
-    else ALLOW
-        G->>M: real browser command
-        M-->>G: order proof
-        G->>D: createLedgerEntry — debit, idempotency_key=runId
-        G->>G: sign receipt + link to previous hash
-    end
+    participant G as 🛡️ gate CLI
+    participant R as 💳 Razorpay · test mode
+    H->>G: gate fund mnd_… --amount 800
+    G->>R: POST /v1/orders (notes: vitta_mandate_id)
+    G-->>H: razorpay-order:order_… + pay-page URL
+    H->>R: pays in Checkout (test card 4100 2800 0000 1007)
+    H->>G: gate fund mnd_… --reserve-ref razorpay-order:order_…
+    G->>R: capture any authorized payment · read captured − refunded
+    G-->>H: mandate re-signed with the REAL balance
 ```
 
-### Two keys, two jobs
+In the dashboard the same thing is one button on the Mandate page (Razorpay Checkout opens in a modal), and an optional webhook (`/api/razorpay/webhook`, `order.paid` / `payment.captured` / `payment.authorized`) confirms funding without a click.
 
-Vitta never lets one credential do both:
+### What is defended, and how
 
-- **`DODO_API_KEY`** (write) — `fund()`, `draw()`, `credit()`. CLI only.
-- **`DODO_API_KEY_READONLY`** (read) — `balance()` and every dashboard route.
+- **A reserve is only what Razorpay says was captured.** The Checkout signature and the webhook signature are checked (`HMAC-SHA256`, constant-time), but neither makes money spendable — `gate fund --reserve-ref` re-reads Razorpay itself, so a forged callback finds nothing paid.
+- **One order, one mandate.** `--reserve-ref` refuses an order stamped for a different mandate, or one Vitta didn't create, so the same money can't back two mandates.
+- **No accidental stranding.** Funding or attaching a different order to a mandate that still holds money is refused unless you pass `--replace`.
+- **Test mode only.** `rzp_live_…` keys are refused before any request is made.
 
-The dashboard **never imports the write key.** This is verified, not assumed: the read-only key returns `401` on both ledger writes and checkout-session creation.
+Test cards: `4100 2800 0000 1007` (Visa) or `5555 5555 5555 4444` (Mastercard), any future expiry and CVV; on the bank page any 4–10 digit OTP succeeds, fewer than 4 digits fails. See `.env.example` for `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET`.
 
-### Notes from integrating against a real account
+> **Older mandates.** Mandates funded through Prava carry a reserve reference the Razorpay ledger cannot read. They still verify and load, but fund them again with `gate fund`.
 
-> [!IMPORTANT]
-> These cost real debugging time. They're written down so they don't cost yours.
-
-- **`environment: 'test_mode'` must be passed explicitly.** The SDK defaults to `live_mode`, which rejects test keys with a generic `401` that reads like a bad key rather than a wrong host.
-- **`balance` is a JSON `number` on the wire**, even though the SDK's own generated type declares it `string`. Coerce it; never trust the type alone.
-- **`checkoutSessions.create()` returns `session_id`**, not `session.id` — and `checkout_url` alongside it.
-- **A checkout session resolves to a customer in two hops:** `session.payment_id` → `payments.retrieve()` → `customer.customer_id`. `balance()`/`draw()` are keyed by *customer*, not by session.
-- **There is no `.deduct()` method.** Debits are ledger entries, and they *do* accept a real `idempotency_key`.
-
-> [!NOTE]
-> **Every Dodo call in this repository targets test mode.** No live-mode code path exists. See [Safety](#safety).
-
----
+> **Honest limits.** A draw does not move money at Razorpay (nothing could pay the merchant); it debits the funded order. Razorpay's order `notes` are merchant-controlled metadata, not a tamper-proof ledger — they are a second record that makes deleting the local log pointless, not a substitute for one. Re-funding replaces a mandate's reserve rather than adding to it.
 
 ## The policy engine
 
@@ -221,7 +194,7 @@ The dashboard **never imports the write key.** This is verified, not assumed: th
 | 8 | Transaction count exhausted | `DENY: TXN_LIMIT_REACHED` |
 | ✅ | Everything passed | `ALLOW` |
 
-Around `decide()`, the run pipeline adds one more guarantee: a `runId` that has already drawn cannot draw again (`ALREADY_EXECUTED`) — enforced locally **and** by Dodo's own `idempotency_key`.
+Around `decide()`, the run pipeline adds one more guarantee: a `runId` that has already drawn cannot draw again (`ALREADY_EXECUTED`) — enforced locally **and** by the ledger, which keys every draw on the run id.
 
 `decide()` is pure. No network. No model. No throw.
 
@@ -246,14 +219,14 @@ Edit any field in `receipt_2` and you break **two** things at once: its own sign
 
 ## TEST vs LIVE
 
-Both modes run the **identical** pipeline: real search, real merchant cart, real signature and cap checks, real Dodo reserve read, real Dodo draw, real signed receipt. Nothing is stubbed in either.
+Both modes run the **identical** pipeline: real search, real merchant cart, real signature and cap checks, real Razorpay reserve read, real ledger draw, real signed receipt. Nothing is stubbed in either.
 
 The single difference is whether the **merchant's** checkout is driven to a placed order.
 
 | | `LIVE` | `TEST` |
 |---|---|---|
 | Merchant order placed | ✅ real order | ❌ not driven |
-| Dodo settlement | ✅ real (test mode) | ✅ real (test mode) |
+| Razorpay reserve | ✅ real (test mode) | ✅ real (test mode) |
 | Receipt signed | ✅ with merchant order id | ✅ marked `TEST`, no order id |
 | Default | CLI | Dashboard |
 
@@ -268,16 +241,96 @@ The single difference is whether the **merchant's** checkout is driven to a plac
 | Language | TypeScript · Node 20+ | — |
 | Policy engine | Hand-written pure function | No framework, no LLM, fully auditable |
 | Signing | `node:crypto` Ed25519 | Zero external crypto dependencies |
-| Payments | `dodopayments` SDK ^2.43 | Test mode only |
+| Payments | Razorpay REST API via `fetch` (no SDK) | Test mode only — `rzp_live_` keys are refused |
 | Browser automation | `@agentrhq/webcmd` | Real stealth-Chromium — **109 sites, 807 commands, 230 write** |
 | Dashboard | Next.js 16 · React 19 · Tailwind v4 · shadcn/ui | — |
-| Tests | `node:test` | **238 passing**, no external runner |
+| Tests | `node:test` | **702 passing**, no external runner |
 
 ---
 
+## Multi-agent shopping — Nasiko × Anakin × Vitta
+
+> **Nasiko controls the agents. Anakin gives them the web. Vitta decides whether they may move money.**
+
+One `shop-runner` becomes a small team, each with one job:
+
+```text
+ "Find me the cheapest 2kg atta under ₹300 and buy it"
+                        │
+                        ▼
+              ┌───────────────────┐
+              │  Nasiko           │  registry · routing · per-hop traces
+              └─────────┬─────────┘
+   ┌──────────┬─────────┴───┬──────────────┐
+   ▼          ▼             ▼              ▼
+ Planner → Discovery  →  Evaluator  →  Purchase Agent
+ (intent)  (Anakin)      (proposal)         │
+                                            ▼
+                                     ┌─────────────┐
+                                     │ Vitta gate  │  reads the REAL cart · decide() · no LLM
+                                     └──────┬──────┘
+                                  ALLOW ────┴──── DENY / STEP_UP
+                                    │                  └─ browser action never runs, nothing drawn
+                                    ▼
+                          merchant → Razorpay reserve → signed receipt
+```
+
+| Agent | Does | Cannot |
+|---|---|---|
+| `vitta-shopping-planner` | Parses the request into a structured intent | search or buy |
+| `vitta-deal-discovery` | Finds candidates across Blinkit / Zepto / BigBasket via the existing Anakin-first search | place an order (its only access is the read-only search CLI) |
+| `vitta-deal-evaluator` | Picks the cheapest *eligible* candidate (size, stock, merchant, ceiling) and explains why | authorize anything — a proposal is not permission |
+| `vitta-purchase-agent` | Builds the cart and asks the gate to place the order | bypass the gate; hold payment credentials; top up the reserve |
+
+**The boundary, unchanged.** LLMs and agents decide *what to propose*; the gate deterministically decides *what is permitted*. The gate prices the **real merchant cart** — an agent cannot claim a price — so an over-cap proposal is refused on the cart's true total. `decide()`, the signed mandate, the receipt chain and the reserve ledger are untouched, and `src/agents/security.test.ts` fails the build if an agent ever imports them or spawns a merchant command itself.
+
+**Try it** (no merchant logins or Razorpay keys needed — the merchant and Razorpay are local simulators; the gate, signatures, receipts and agents are real):
+
+```bash
+npm install && npm run demo:agents
+```
+
+It signs a ₹800 mandate (₹500 per transaction, 2 transactions), buys the cheapest 2kg atta (Zepto ₹229 → ALLOW → receipt, reserve ₹800 → ₹571), then has a *compromised* Evaluator propose a ₹1,299 item — **DENIED `OVER_PER_TXN_CAP`**, zero merchant orders, zero charges — and finally replays the request to show it cannot double-charge. Add `-- --persist-runs` to keep the runs for the dashboard's **Agent activity** page.
+
+**Run it for real**
+
+```bash
+npm run build
+npm run agents                                   # the four agents as A2A servers (ports 9101-9104)
+node dist/cli/shop.js run "cheapest 2kg atta under ₹300" --mode test
+```
+
+`--mode` is always explicit (`test` never drives the merchant's checkout; `live` places a real order). Through Nasiko instead of direct calls: set `NASIKO_URL` and the `NASIKO_AGENT_ID_*` variables and every hop is dispatched via Nasiko's orchestrator with one W3C trace id per run — see [nasiko/README.md](nasiko/README.md) for deployment, what is verified and what still needs a live control plane.
+
+**Price Sniper.** With `VITTA_AGENT_PIPELINE=on`, a fired watch runs Discovery (re-reads that product's live price) → Evaluator (re-checks the target) → Purchase Agent → gate. Hitting the target price authorizes nothing by itself.
+
+**Human in the loop by default.** A run started from the dashboard's *Agent activity* page does not buy anything unless you tick "Let the agents place the order for me". Otherwise the agents search, evaluate and pick, and the Purchase Agent is never entered: the run ends **Ready for your review**, with the pick offered as *Add to cart & review*. You review it in the Cart and press *Proceed to purchase* — the existing path where the mandate and the gate decide. From the CLI the same thing is `shop run --review "…"`.
+
+**Idempotent by request.** A shopping request id buys at most once: a replayed or retried request (Nasiko retries failed steps) returns the recorded result. An interrupted purchase is never silently retried.
+
+## Platform support
+
+Vitta is meant to run the same on **macOS, Linux and Windows** with **Node 20+**. What is covered, and how it is checked:
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Gate CLI, mandates, receipts, ledger, agents | ✓ | ✓ | ✓ |
+| Dashboard (`next build` / `next start`) | ✓ | ✓ | ✓ |
+| Nasiko deploy (`node nasiko/deploy.js`) — Node only: no bash, python, curl or zip | ✓ | ✓ | ✓ |
+| Test suite | ✓ all | ✓ all | ✓ all except the sandbox end-to-end tests, which need a POSIX shell shim for `webcmd` and skip themselves |
+
+- **CI** (`.github/workflows/ci.yml`) runs the build, the tests and the checks on all three systems and Node 20/22/24. Locally, this project has been run on macOS; the Linux and Windows results come from CI.
+- **Line endings:** `.gitattributes` keeps LF everywhere, so a Windows checkout does not turn scripts or hashed fixtures into CRLF.
+- **`.env` files** may have a UTF-8 BOM, Windows line endings, `export` prefixes or quoted values — all read the same way.
+- **`webcmd`** installs as `webcmd.cmd` on Windows; the gate and the dashboard resolve it themselves.
+- **Docker + Nasiko:** `host.docker.internal` works on Docker Desktop (macOS, Windows). On Linux add `--add-host=host.docker.internal:host-gateway` (or use the host's LAN address) so the Discovery container can reach your dashboard.
+- **Some `npm run check:*` scripts** load dashboard TypeScript directly and need Node 22.18+ (type stripping is built in from there).
+
+Setup steps in the quickstart below use POSIX commands; the Windows PowerShell equivalents are `Copy-Item .env.example .env` for `cp`, and `$env:NAME = "value"` for `export NAME=value`.
+
 ## Quickstart
 
-**Prerequisites** — Node 20+, `npm i -g @agentrhq/webcmd`, a Dodo Payments **test-mode** account with a Credit Entitlement, and a merchant account logged into the webcmd session (`webcmd blinkit whoami`).
+**Prerequisites** — Node 20+, `npm i -g @agentrhq/webcmd`, a Razorpay **test-mode** key pair (Dashboard → API Keys, Test Mode), and a merchant account logged into the webcmd session (`webcmd blinkit whoami`).
 
 ```bash
 # 1 — install (both workspaces)
@@ -285,11 +338,15 @@ npm install
 cd dashboard && npm install && cd ..
 
 # 2 — configure
-cp .env.example .env                              # DODO_API_KEY, DODO_API_KEY_READONLY,
-                                                  # DODO_CREDIT_ENTITLEMENT_ID, DODO_TOPUP_PRODUCT_ID
-cp dashboard/.env.local.example dashboard/.env.local   # read-only key + entitlement id
+cp .env.example .env                              # RAZORPAY_KEY_ID (rzp_test_…), RAZORPAY_KEY_SECRET
+cp dashboard/.env.local.example dashboard/.env.local   # the same test keys (+ optional webhook secret)
 
-# 3 — install the custom merchant adapters
+# 3a — webcmd 0.8+ ships each site as a plugin. Search (read-only) needs these, or the dashboard
+#      shows "webcmd is not installed" / "Site \"blinkit\" is not installed" for that merchant:
+webcmd plugin install github:agentrhq/webcmd-plugins/blinkit
+webcmd plugin install github:agentrhq/webcmd-plugins/zepto
+
+# 3b — install the custom merchant adapters
 node webcmd-adapters/install.mjs
 webcmd scan | grep -E "set-cart-quantity|clear-cart"
 
@@ -297,17 +354,17 @@ webcmd scan | grep -E "set-cart-quantity|clear-cart"
 npm run build
 
 # 5 — verify
-npm test        # 238 passing
+npm test        # 702 passing
 
 # 6 — run
 cd dashboard && npm run dev     # → http://localhost:3000
 ```
 
 > [!WARNING]
-> **`dashboard/.env.local` needs its own copy of the Dodo read-only key.** Next only loads env files from the `dashboard/` directory — the repo-root `.env` is invisible to the Next process. Missing keys surface as *"Dodo not yet configured"* rather than a hard error.
+> **`dashboard/.env.local` needs its own copy of the Razorpay test keys.** Next only loads env files from the `dashboard/` directory — the repo-root `.env` is invisible to the Next process. Missing keys surface as *"Razorpay is not configured"* rather than a hard error.
 
 > [!CAUTION]
-> `gate` does not auto-load `.env` (no `dotenv` dependency by design). Source it first, or you'll get a confusing SDK error about `DODO_PAYMENTS_API_KEY`:
+> `gate` does not auto-load `.env` (no `dotenv` dependency by design). Source it first, or the ledger will stop with "RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are not set":
 > ```bash
 > set -a && source .env && set +a
 > ```
@@ -325,8 +382,8 @@ node dist/cli/gate.js <command>
 | `gate scan` | Show the webcmd manifest — sites, commands, how many are governed |
 | `gate mandate create` | Build and Ed25519-sign a new mandate |
 | `gate mandate resign` | Re-sign with updated limits (step-up approval) |
-| `gate fund <id> --amount <n>` | Create a real Dodo Checkout Session |
-| `gate fund <id> --reserve-ref <ref>` | Attach an already-paid reserve; balance read live from Dodo |
+| `gate fund <id> --amount <n>` | Create a Razorpay test Order (the reserve); pay it in Checkout. Refuses to replace a reserve that still holds money unless `--replace` |
+| `gate fund <id> --reserve-ref razorpay-order:<id>` | Attach a PAID order to the mandate it was created for; captures an `authorized` payment, then reads the real balance from Razorpay |
 | `gate fund <id> --auto --amount <n>` | Top up an existing reserve, capped at the signed limit |
 | `gate run -- webcmd <site> <cmd>` | Run a command through the gate |
 | `gate receipt show <id>` | Display a receipt |
@@ -353,8 +410,8 @@ vitta/
 ├── src/
 │   ├── mandate/      # schema · Ed25519 signing · plain-English rendering
 │   ├── policy/       # decide() — the rule engine (pure / sync / zero-I/O)
-│   ├── ledger/       # DodoCreditLedger — real test-mode Dodo API
-│   ├── receipt/      # receipt schema · hash-chain build & verify
+│   ├── ledger/       # RazorpayLedger — real test-mode Razorpay Orders/Payments API (+ signature checks)
+│   ├── receipt/      # receipt schema · hash-chain build & verify · signed funding receipts
 │   ├── webcmd/       # manifest loading · safe command execution
 │   ├── agent/        # purchase agent — cart sync, gate spawn, state machine
 │   ├── events/       # GateEvent — the one schema every consumer reads
@@ -365,7 +422,8 @@ vitta/
 ├── assets/           # README media
 │
 ├── mandates/         # runtime · signed mandates
-├── receipts/         # runtime · signed receipts
+├── receipts/         # runtime · signed spend receipts (hash-chained)
+├── funding-receipts/ # runtime · one signed receipt per Razorpay test order that funded a mandate
 ├── events.jsonl      # runtime · append-only decision log
 └── keys/             # runtime · Ed25519 keypairs (gitignored)
 ```
@@ -374,11 +432,11 @@ vitta/
 
 ## Safety
 
-- **Test mode only.** Every Dodo call targets test mode. No live-mode code path exists in this repository.
+- **Test mode only.** Every Razorpay call targets test mode — the ledger refuses any key that is not `rzp_test_…`. No live-mode code path exists in this repository.
 - **Fail closed.** Unknown command, unparseable amount, expired mandate, bad signature, unreachable ledger — all produce `DENY`. If the balance read fails, the gate treats it as ₹0 and says so out loud rather than guessing.
 - **No LLM in the decision path.** `decide()` is deterministic and re-runnable: an auditor can replay the exact inputs years later and get the exact same verdict.
 - **Human-in-the-loop for real money.** Funding requires a human completing a real checkout. An agent never enters payment details.
-- **Idempotent draws.** The same `runId` cannot draw twice — enforced in the application *and* by Dodo's `idempotency_key`.
+- **Idempotent draws.** The same `runId` cannot draw twice — enforced in the application and keyed on the run id in the ledger.
 - **Least privilege.** The dashboard only ever receives the read-only key.
 
 ---

@@ -80,14 +80,51 @@ export function resolveWebcmdCommand(): { command: string; prefixArgs: string[] 
 // that should ever block a decision that already resolved to ALLOW.
 const TRACE_ARTIFACT_LINE = /Webcmd trace artifact:\s*(.+)/;
 
-export function execute(site: string, command: string, args: string[], presetRunId?: string): Promise<ExecuteResult> {
+/**
+ * The reason a webcmd command gave for failing. webcmd reports it as a JSON document on stdout
+ * (`{"ok":false,"error":{"code":"ARGUMENT","message":"productId must be a Blinkit product id…"}}`),
+ * sometimes as plain text on stderr. Without this the gate could only say "webcmd exited 2", and a
+ * person adding a product to their cart saw an ALLOW line and no reason at all.
+ */
+export function describeWebcmdFailure(stdout: string, stderr: string): string {
+  const MAX = 300;
+  // The JSON error document has been seen on either stream (exit 2 → stdout, exit 66 → stderr).
+  for (const stream of [stdout, stderr]) {
+    try {
+      const parsed = JSON.parse(stream) as { error?: { code?: unknown; message?: unknown; help?: unknown } };
+      const message = typeof parsed.error?.message === 'string' ? parsed.error.message.trim() : '';
+      if (!message) continue;
+      // `help` is advice for someone repairing the adapter, and often the only place that says WHICH
+      // input was at fault ("No cart payload for product 88888888") — keep its first sentence.
+      const rawHelp = typeof parsed.error?.help === 'string' ? parsed.error.help.split(/(?<=\.)\s|\s(?=Treat this)/)[0].trim() : '';
+      const help = /^Treat this as adapter breakage/i.test(rawHelp) ? '' : rawHelp; // pure repair advice: not a reason
+      const code = typeof parsed.error?.code === 'string' ? ` (${parsed.error.code})` : '';
+      return `${message}${help && !message.includes(help) ? ` — ${help}` : ''}${code}`.slice(0, MAX);
+    } catch {
+      // not a JSON error document on this stream
+    }
+  }
+  return (stderr.trim() || stdout.trim()).replace(/\s+/g, ' ').slice(0, MAX);
+}
+
+export interface ExecuteOptions {
+  /**
+   * Capture webcmd's trace artifact (default true). Only a COMMIT command needs it — the trace digest
+   * is receipt evidence. A cart write skips it, and that is not just tidiness: measured live
+   * (2026-09-20), `blinkit set-cart-quantity` took 7s without `--trace on` and hung past 90s with it,
+   * holding webcmd's single browser session locked so every later call failed with "Session is busy".
+   */
+  trace?: boolean;
+}
+
+export function execute(site: string, command: string, args: string[], presetRunId?: string, options: ExecuteOptions = {}): Promise<ExecuteResult> {
   return new Promise((resolve, reject) => {
     // A caller that already minted a runId (src/cli/gate.ts, for a commit command — the runId is
     // recorded on a real, signed TransactionAuthorization BEFORE this function is even called, so
     // it must be the same id execute() itself uses, not a fresh independent one).
     const runId = presetRunId ?? crypto.randomUUID();
     const { command: cmd, prefixArgs } = resolveWebcmdCommand();
-    const proc = spawn(cmd, [...prefixArgs, site, command, ...args, '--trace', 'on', '-f', 'json'], {
+    const proc = spawn(cmd, [...prefixArgs, site, command, ...args, '--trace', options.trace === false ? 'off' : 'on', '-f', 'json'], {
       // webcmd's own default command timeout (60s) is tight for the custom BigBasket adapters added
       // in this build — their real cart-verification round trips (read cart, navigate, poll,
       // re-read cart to confirm) run 70-90s end to end. Found live: a real add-to-cart hit exactly
@@ -100,7 +137,10 @@ export function execute(site: string, command: string, args: string[], presetRun
     proc.stdout.on('data', (d) => (stdout += d));
     proc.stderr.on('data', (d) => (stderr += d));
     proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`webcmd exited ${code}`));
+      if (code !== 0) {
+        const detail = describeWebcmdFailure(stdout, stderr);
+        return reject(new Error(`webcmd exited ${code}${detail ? ` — ${detail}` : ''}`));
+      }
       const columns = JSON.parse(stdout);
       const { tracePath, traceDigest } = resolveTraceArtifact(stderr);
       resolve({ runId, columns, tracePath, traceDigest });
@@ -131,7 +171,7 @@ export interface LedgerEntry {
 // Belt-and-suspenders idempotency guard for Ledger.draw() (docs/02-DODO-INTEGRATION.md's open
 // question on request-side idempotency_key support). The caller (Phase 1f's CLI wiring) must call
 // this BEFORE Ledger.draw() — see docs/common/02-DECISIONS.md ADR-004 for the ledger.jsonl entry
-// shape and why this check lives here instead of inside PravaCreditLedger.
+// shape and why this check lives here instead of inside the ledger.
 export function hasAlreadyDrawn(runId: string, ledgerPath = './ledger.jsonl'): boolean {
   if (!existsSync(ledgerPath)) return false;
   const lines = readFileSync(ledgerPath, 'utf-8').split('\n').filter(Boolean);

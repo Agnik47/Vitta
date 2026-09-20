@@ -12,18 +12,21 @@ import { isMandate } from '../mandate/schema';
 import type { Mandate } from '../mandate/schema';
 import type { Receipt } from '../receipt/schema';
 import type { TransactionAuthorization } from '../receipt/authorization';
+import type { FundingReceipt } from '../receipt/funding';
 import type { GateEvent } from '../events/GateEvent';
+import type { ActivityEvent } from '../events/ActivityEvent';
 
 const MANDATES_DIR = './mandates';
 const RECEIPTS_DIR = './receipts';
 const AUTHORIZATIONS_DIR = './authorizations';
+const FUNDING_RECEIPTS_DIR = './funding-receipts';
 const EVENTS_PATH = './events.jsonl';
 
 /** Appends one GateEvent as a JSON line — the dashboard's /events page (dashboard/lib/read.ts)
  * polls this same file. Every `gate run` decision (read or write, allow or deny) must call this,
  * not just print via formatGateEventLine() — the terminal line and the persisted line are two
  * separate, both-required outputs of the same event. */
-export function appendEvent(event: GateEvent, filePath = EVENTS_PATH): void {
+export function appendEvent(event: GateEvent | ActivityEvent, filePath = EVENTS_PATH): void {
   appendFileSync(filePath, JSON.stringify(event) + '\n');
 }
 
@@ -102,6 +105,31 @@ export function loadAllAuthorizations(dir = AUTHORIZATIONS_DIR): TransactionAuth
         return JSON.parse(readFileSync(filePath, 'utf-8')) as TransactionAuthorization;
       } catch (err) {
         throw new Error(`Failed to parse authorization file ${filePath}: ${(err as Error).message}`);
+      }
+    });
+}
+
+/** Writes a funding receipt unless one already exists for that order — the receipt is the record of
+ *  the FIRST time the order was attached, and re-attaching must not rewrite its timestamp or
+ *  signature. Returns true when a new file was written. */
+export function saveFundingReceipt(receipt: FundingReceipt, dir = FUNDING_RECEIPTS_DIR): boolean {
+  mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `${receipt.funding_receipt_id}.json`);
+  if (existsSync(filePath)) return false;
+  writeFileSync(filePath, JSON.stringify(receipt, null, 2));
+  return true;
+}
+
+export function loadAllFundingReceipts(dir = FUNDING_RECEIPTS_DIR): FundingReceipt[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => {
+      const filePath = path.join(dir, f);
+      try {
+        return JSON.parse(readFileSync(filePath, 'utf-8')) as FundingReceipt;
+      } catch (err) {
+        throw new Error(`Failed to parse funding receipt file ${filePath}: ${(err as Error).message}`);
       }
     });
 }

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { GateEvent } from "@/lib/types";
+import type { DecisionLogEntry } from "@/lib/types";
+import { isActivityEvent } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { EventTable } from "@/components/events/event-table";
 import { useIncrementalPoll } from "@/hooks/use-polling";
@@ -10,7 +11,7 @@ import { useIncrementalPoll } from "@/hooks/use-polling";
 const POLL_INTERVAL_MS = 1800;
 
 export default function EventsPage() {
-  const { items } = useIncrementalPoll<GateEvent>("/api/events", POLL_INTERVAL_MS);
+  const { items } = useIncrementalPoll<DecisionLogEntry>("/api/events?include=activity", POLL_INTERVAL_MS);
   const seenCount = useRef(0);
 
   useEffect(() => {
@@ -20,7 +21,11 @@ export default function EventsPage() {
     const fresh = items.slice(seenCount.current);
     seenCount.current = items.length;
     for (const event of fresh) {
-      if (event.verdict === "DENY") {
+      if (isActivityEvent(event)) {
+        if (event.outcome === "FAILURE") {
+          toast.error(event.summary, { description: event.error });
+        }
+      } else if (event.verdict === "DENY") {
         toast.error(`DENY — ${event.command}`, {
           description: event.code ?? "policy denied",
         });
@@ -30,7 +35,10 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="Gate decision log" description="Every ALLOW, DENY, and STEP_UP the policy engine has issued, live." />
+      <PageHeader
+        title="Decision log"
+        description="Every record of what happened, live: the gate's ALLOW, DENY and STEP_UP decisions, and everything around them — mandates created, payments received, purchases completed or failed."
+      />
       <EventTable events={items} />
     </div>
   );

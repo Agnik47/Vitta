@@ -8,6 +8,8 @@
 // process-spawning path is a real command-injection hole. Every argument here can originate from a
 // browser request, so this is not optional hardening — it's the actual security boundary.
 import { execFile } from "node:child_process";
+import { parseEnvFile } from "@/lib/env-file";
+import { markBrowserWrite, runBrowserTask } from "@/lib/browser-queue";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { getDataDir, getRuntimeDataDir, resolveCliEntryPoint } from "@/lib/read";
@@ -57,7 +59,7 @@ function gateCliEntryPoint(): string {
 }
 
 /**
- * The spawned `gate` CLI needs the same PRAVA_* vars the CLI reads when a human runs it directly
+ * The spawned `gate` CLI needs the same RAZORPAY_* vars the CLI reads when a human runs it directly
  * from a shell that's sourced `.env` — but the dashboard's own Next.js process may never have
  * loaded that file (no dashboard/.env.local exists on every machine this runs on). Rather than
  * assume the parent process's env already has these, read the root .env explicitly and merge it
@@ -65,21 +67,11 @@ function gateCliEntryPoint(): string {
  * .env format (see CLAUDE.md's own `.env.example`), no quoting/multiline support needed.
  */
 // Exported so lib/agent-cli.ts can spawn dist/cli/agent.js with the same real env resolution,
-// rather than re-deriving this PRAVA_*-loading logic a second time.
+// rather than re-deriving this RAZORPAY_*-loading logic a second time.
 export function loadRootEnvOverrides(): Record<string, string> {
   const envPath = path.join(getDataDir(), ".env");
   if (!existsSync(envPath)) return {};
-  const overrides: Record<string, string> = {};
-  for (const line of readFileSync(envPath, "utf-8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim();
-    if (key) overrides[key] = value;
-  }
-  return overrides;
+  return parseEnvFile(readFileSync(envPath, "utf-8"));
 }
 
 /**
@@ -88,7 +80,24 @@ export function loadRootEnvOverrides(): Record<string, string> {
  * Never rejects on a non-zero exit — a DENY/STEP_UP is a normal, expected result, not a fault of
  * this function, so callers inspect `ok`/`exitCode` rather than catching.
  */
+// Browser commands that land on an absolute state, so running one twice cannot do anything the first
+// run did not. Only these may be retried after a stuck-session reset; a purchase never is.
+const REPEAT_SAFE_BROWSER_COMMANDS = new Set(["set-cart-quantity", "clear-cart"]);
+
 export function runGateCli(argv: string[], timeoutMs = 60_000): Promise<GateCliResult> {
+  // Only `gate run -- webcmd …` drives the browser; fund / mandate / scan never touch it.
+  if (argv[0] !== "run") return spawnGateCli(argv, timeoutMs);
+  markBrowserWrite();
+  // `gate run -- webcmd <site> <command> …`: the site is the word after `webcmd`.
+  const webcmdAt = argv.indexOf("webcmd");
+  return runBrowserTask(() => spawnGateCli(argv, timeoutMs), {
+    site: (webcmdAt >= 0 ? argv[webcmdAt + 1] : undefined) ?? "shared",
+    failure: (r) => (r.ok ? null : `${r.stdout}\n${r.stderr}`),
+    retryable: argv.some((a) => REPEAT_SAFE_BROWSER_COMMANDS.has(a)),
+  });
+}
+
+function spawnGateCli(argv: string[], timeoutMs: number): Promise<GateCliResult> {
   return new Promise((resolve) => {
     execFile(
       process.execPath, // the same node binary running this server — never a shell-resolved "node"

@@ -4,7 +4,7 @@
 // Hard boundary (CLAUDE.md rule 2, ADR-015): this file orchestrates: it decides WHAT to run and
 // WHEN, never WHETHER a spend is allowed. Every money-moving or browser-driving step is a spawn of
 // the real `gate`/`search` CLIs via gate-spawn.ts — this file never imports src/policy/decide.ts,
-// src/webcmd/executor.ts, or PravaCreditLedger directly, and contains no model/LLM call of any kind.
+// src/webcmd/executor.ts, or a ledger directly, and contains no model/LLM call of any kind.
 // The one judgement call a human makes — which product — already happened before this runs; nothing
 // here second-guesses it.
 //
@@ -16,6 +16,7 @@ import { MERCHANT_PROFILES, type PurchaseMerchant } from './merchants';
 import { parseCommitOutput } from './parse-commit-output';
 import { withRetry } from './retry';
 import { DEFAULT_EXECUTION_MODE, type ExecutionMode } from '../receipt/execution-mode';
+import { recordActivity } from '../cli/activity-log';
 
 /** One line to add to the merchant's real cart before checkout. A "Purchase Job" is always scoped
  *  to a single merchant (a real checkout can't span two marketplaces), but a merchant's cart is
@@ -54,6 +55,9 @@ export interface PurchaseInput {
 export type PurchaseStepName =
   | 'precondition'
   | 'clear-cart'
+  // After a completed purchase: the cart's items were bought (TEST: settled against the reserve), so
+  // the cart is emptied. Its own step name — the outcome is already decided when it runs.
+  | 'empty-cart'
   | 'add-to-cart'
   | 'verify-cart'
   | 'order-value-check'
@@ -121,6 +125,31 @@ interface CartReadResult {
 }
 
 const TOPUP_QUERIES = ['milk', 'bread', 'eggs', 'biscuits', 'bananas'];
+
+/** Records a purchase that did NOT complete. A completed one is on record already: the gate writes it. */
+function recordPurchaseOutcome(result: PurchaseResult): void {
+  if (result.ok) return;
+  const base = { ...(result.finalAmountInr !== undefined ? { amount_inr: result.finalAmountInr } : {}), details: { merchant: result.merchant, mode: result.mode, product: result.productName } };
+  if (result.awaitingMerchantConfirmation) {
+    recordActivity({
+      action: 'purchase.completed',
+      outcome: 'INFO',
+      summary: `Purchase authorized at ${result.merchant}, waiting for the merchant to confirm the order`,
+      ...base,
+    });
+    return;
+  }
+  const refused = result.verdict === 'DENY' || result.verdict === 'STEP_UP';
+  recordActivity({
+    action: 'purchase.failed',
+    outcome: 'FAILURE',
+    summary: refused
+      ? `Purchase of ${result.productName} at ${result.merchant} was refused by the mandate${result.denyCode ? ` (${result.denyCode})` : ''}`
+      : `Purchase of ${result.productName} at ${result.merchant} failed before it reached the gate`,
+    ...(result.failureReason ? { error: result.failureReason } : result.denyCode ? { error: result.denyCode } : {}),
+    ...base,
+  });
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -244,7 +273,19 @@ export class PurchaseAgent {
     };
   }
 
+  /**
+   * Runs the purchase and puts the outcome on record. A completed purchase is recorded by the gate
+   * itself (it is the one that draws the reserve and signs the receipt), so this records what the gate
+   * cannot see: a purchase the mandate refused, one that failed before the gate was even asked, and one
+   * that is authorized but waiting on the merchant.
+   */
   async run(input: PurchaseInput): Promise<PurchaseResult> {
+    const result = await this.execute(input);
+    recordPurchaseOutcome(result);
+    return result;
+  }
+
+  private async execute(input: PurchaseInput): Promise<PurchaseResult> {
     const startedAt = nowIso();
     const { merchant, items } = input;
     const mode = input.mode ?? DEFAULT_EXECUTION_MODE;
@@ -516,7 +557,7 @@ export class PurchaseAgent {
       'done',
       commitResult.receiptId
         ? mode === 'TEST'
-          ? 'Reserve drawn from the real Prava test reserve'
+          ? 'Reserve drawn from the Razorpay test reserve'
           : 'Reserve drawn'
         : 'Nothing drawn (hand-off merchant, no order id to draw against)',
     );
@@ -525,6 +566,10 @@ export class PurchaseAgent {
       'done',
       commitResult.receiptId ? `Receipt ${commitResult.receiptId}` : 'Approved — awaiting merchant confirmation',
     );
+
+    // The purchase is complete and signed. Whatever happens next cannot change that, so emptying the
+    // cart never fails the run — it only reports whether the cart really is empty afterwards.
+    if (commitResult.receiptId) await this.emptyCartAfterPurchase(merchant, profile.supportsClearCart !== false);
 
     return {
       ok: true,
@@ -547,6 +592,57 @@ export class PurchaseAgent {
     };
   }
 
+  /**
+   * Empties the real cart once a purchase is complete, and confirms it with a real read.
+   *
+   * Why: in TEST mode the merchant's checkout is never driven, so nothing empties the merchant's cart —
+   * the bought items sat there afterwards, looked unbought, and blocked the next purchase's cart check.
+   * (In LIVE mode the merchant has already emptied it, and the read below finds nothing to do.)
+   *
+   * Never throws and never changes the purchase outcome: money was already drawn and the receipt
+   * signed. A failure here is reported as a failed step, and the person can clear the cart themselves.
+   */
+  private async emptyCartAfterPurchase(merchant: PurchaseMerchant, supportsClearCart: boolean): Promise<void> {
+    if (!supportsClearCart) {
+      this.emit('empty-cart', 'skipped', `${merchant} has no clear-cart command — its cart is left as it is`);
+      return;
+    }
+    this.emit('empty-cart', 'running', 'Purchase complete — emptying the cart so its items cannot be bought twice');
+    try {
+      const before = await readCart(merchant);
+      if (before.ok && (before.cartItemCount ?? 0) === 0) {
+        this.emit('empty-cart', 'done', 'The cart is already empty');
+        return;
+      }
+      let lastIssue = before.message;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const result = await runGate(['run', '--', 'webcmd', merchant, 'clear-cart']);
+        if (!result.ok) {
+          lastIssue = describeFailure(result, 'clear-cart failed');
+          continue;
+        }
+        // Not the command's word for it: read the real cart back.
+        const verify = await readCart(merchant);
+        if (verify.ok && (verify.cartItemCount ?? 0) === 0) {
+          this.emit('empty-cart', 'done', 'Cart emptied and confirmed empty by a real read');
+          recordActivity({ action: 'cart.emptied', outcome: 'SUCCESS', summary: `The ${merchant} cart was emptied after the purchase`, details: { merchant } });
+          return;
+        }
+        lastIssue = verify.message ?? `Cart still shows ${verify.cartItemCount ?? '?'} item(s) after clearing`;
+      }
+      // An exhausted mandate refuses every further write, a ₹0 clear-cart included: the gate stays the
+      // only authority, so say exactly that rather than a vague failure.
+      const reason = /TXN_LIMIT_REACHED/.test(lastIssue ?? '')
+        ? "the mandate's transaction limit is reached, so the gate will not allow another cart change — clear the cart yourself, or create a new mandate"
+        : `clear it from the Cart page. ${lastIssue ?? ''}`.trim();
+      this.emit('empty-cart', 'failed', `Could not confirm the cart is empty — ${reason}`);
+      recordActivity({ action: 'cart.emptied', outcome: 'FAILURE', summary: `The ${merchant} cart could not be emptied after the purchase`, error: reason, details: { merchant } });
+    } catch (err) {
+      this.emit('empty-cart', 'failed', `Could not empty the cart — clear it from the Cart page. ${(err as Error).message}`);
+      recordActivity({ action: 'cart.emptied', outcome: 'FAILURE', summary: `The ${merchant} cart could not be emptied after the purchase`, error: (err as Error).message, details: { merchant } });
+    }
+  }
+
   private async attemptCommit(merchant: PurchaseMerchant, mode: ExecutionMode): Promise<{
     verdict?: 'ALLOW' | 'DENY' | 'STEP_UP';
     denyCode?: string;
@@ -563,7 +659,7 @@ export class PurchaseAgent {
       'commit',
       'running',
       mode === 'TEST'
-        ? `Settling against the Prava test reserve — ${merchant}'s checkout is not driven in test mode`
+        ? `Settling against the Razorpay test reserve — ${merchant}'s checkout is not driven in test mode`
         : `Placing the real ${merchant} order`,
     );
     // The command is identical in both modes — `place-order --confirm` is what decide() evaluates,

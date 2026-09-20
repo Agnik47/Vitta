@@ -1,14 +1,16 @@
 "use client";
 
-// The one place a mandate is created, funded and inspected.
+// The one place a mandate is created, funded and inspected. "New mandate" is available even while a
+// valid one exists: the newest mandate becomes the active one everywhere (dashboard and `gate run`).
 //
 // Both spending paths in this app depend on it: the cart's "Proceed to purchase" and any Price
 // Sniper watch. It lives at the top level rather than under /shop because a mandate is not a
 // shopping step — it is the authority every purchase is checked against.
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldCheck } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import { MandateHero } from "@/components/mandate/mandate-hero";
 import { CreateMandateForm } from "@/components/mandate/create-mandate-form";
 import { FundMandateForm } from "@/components/mandate/fund-mandate-form";
@@ -21,6 +23,7 @@ type MandateApiResponse = { mandate: Mandate | null; balance: Balance };
 export default function MandatePage() {
   const { data } = usePolledFetch<MandateApiResponse>("/api/mandate", 4000);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [creatingNew, setCreatingNew] = useState(false);
 
   // Date.now() deferred to an effect, not called during render — same SSR-safe pattern as
   // mandate/expiry-ring.tsx. Starts non-expired so a valid mandate isn't briefly shown as expired
@@ -57,6 +60,24 @@ export default function MandatePage() {
         </>
       ) : (
         <div className="flex flex-col gap-5">
+          {creatingNew ? (
+            <CreateMandateForm
+              replacing
+              onCancel={() => setCreatingNew(false)}
+              onCreated={() => {
+                setCreatingNew(false);
+                setRefreshTick((t) => t + 1);
+              }}
+            />
+          ) : (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setCreatingNew(true)}>
+                <Plus className="mr-1.5 size-3.5" />
+                New mandate
+              </Button>
+            </div>
+          )}
+
           <MandateHero mandate={mandate} balance={balance} />
 
           {!funded && <FundMandateForm mandateId={mandate.mandate_id} onFunded={() => setRefreshTick((t) => t + 1)} />}

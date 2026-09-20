@@ -42,6 +42,9 @@ export interface SniperWatch {
   lastSeenPriceInr?: number;
   checks: SniperCheck[];
   firedJobId?: string;
+  /** Set instead of firedJobId when the watch fired through the four-agent pipeline
+   *  (VITTA_AGENT_PIPELINE=on) — the id of the run on the Agent activity page. */
+  firedRunId?: string;
   failureReason?: string;
 }
 

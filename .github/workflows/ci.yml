@@ -1,0 +1,65 @@
+# Vitta has to work the same on Linux, macOS and Windows, so CI runs on all three (and on the Node
+# versions we support). It is the only place the Linux and Windows paths are actually exercised.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: test · ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # `pretest` compiles (tsc), then every test runs. The sandbox end-to-end tests need a POSIX shell shim
+      # for webcmd, so they skip themselves on Windows — everything else runs there.
+      - run: npm test
+      # These load dashboard TypeScript directly, which needs Node's built-in type stripping (22.18+).
+      - name: portability and parser checks
+        if: matrix.node != 20
+        run: |
+          npm run check:portability
+          npm run check:pack-size
+          npm run check:bigbasket-parser
+          npm run check:browser-queue
+          npm run check:gate-failure
+
+  dashboard:
+    name: dashboard · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm ci
+        working-directory: dashboard
+      - run: npx tsc --noEmit
+        working-directory: dashboard
+      - run: npx next build
+        working-directory: dashboard
+      # Starts the built dashboard and drives its Razorpay routes end to end (needs the POSIX webcmd shim).
+      - name: dashboard route checks
+        if: runner.os != 'Windows'
+        run: npm run check:razorpay-dashboard

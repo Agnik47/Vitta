@@ -1,0 +1,18 @@
+# One line ending everywhere. Without this, Git on Windows converts text files to CRLF at checkout, which
+# breaks shell scripts (`#!/usr/bin/env bash\r`), and would change bytes that tests hash or compare
+# (scripts/fixtures/*, signed JSON canonicalisation).
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary

@@ -52,7 +52,7 @@ export function useIncrementalPoll<T extends { event_id: string }>(baseUrl: stri
 
     async function poll() {
       try {
-        const url = lastEventId.current ? `${baseUrl}?since=${lastEventId.current}` : baseUrl;
+        const url = lastEventId.current ? `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}since=${lastEventId.current}` : baseUrl;
         const res = await fetch(url);
         if (!res.ok) throw new Error(String(res.status));
         const next: T[] = await res.json();

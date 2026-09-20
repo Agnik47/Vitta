@@ -11,9 +11,10 @@ export interface Receipt {
   authorization_id: string;
   mandate_hash: string; // sha256 of canonicalJSON(mandate)
   cart: { merchant: string; items: number; total_inr: number };
-  payment: { rail: 'prava_sandbox'; reserve_ref: string; status: 'authorized' };
+  // 'prava_sandbox' is the previous rail — receipts already signed under it must still type-check and verify.
+  payment: { rail: 'razorpay_test' | 'prava_sandbox'; reserve_ref: string; status: 'authorized' };
   // `mode` records whether the merchant's own checkout was actually driven to a placed order (LIVE)
-  // or the run settled against the Prava test reserve without placing one (TEST). See
+  // or the run settled against the Razorpay test reserve without placing one (TEST). See
   // ./execution-mode.ts. Optional only for backward compatibility: receipts written before this
   // field existed are LIVE by definition, since every one of them attested to a real merchant order.
   // Read it through receiptExecutionMode() rather than defaulting inline.

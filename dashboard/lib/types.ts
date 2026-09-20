@@ -15,7 +15,7 @@ export interface Mandate {
     expires_at: string;
   };
   reserve: {
-    type: 'prava_mandate_sandbox';
+    type: 'razorpay_test_order' | 'prava_mandate_sandbox';
     blocked_inr: number;
     ref: string;
   };
@@ -58,9 +58,9 @@ export interface Receipt {
   authorization_id?: string;
   mandate_hash: string;
   cart: { merchant: string; items: number; total_inr: number };
-  payment: { rail: 'prava_sandbox'; reserve_ref: string; status: 'authorized' };
+  payment: { rail: 'razorpay_test' | 'prava_sandbox'; reserve_ref: string; status: 'authorized' };
   // `mode` distinguishes a receipt whose merchant order was really placed (LIVE) from one that
-  // settled against the Prava test reserve without placing an order (TEST). Optional for backward
+  // settled against the Razorpay test reserve without placing an order (TEST). Optional for backward
   // compatibility: receipts written before the mode existed are LIVE by definition. Mirrors
   // src/receipt/schema.ts by hand, per this file's existing convention.
   execution: { command: string; run_id: string; profile: string; mode?: "TEST" | "LIVE" };
@@ -85,4 +85,58 @@ export interface TransactionAuthorization {
   reserve_verified_inr: number;
   authorized_at: string;
   sig: string;
+}
+
+// Read-only mirror of src/receipt/funding.ts's FundingReceipt — the signed record of a Razorpay TEST
+// payment funding a mandate's reserve. Separate from the spend Receipt chain: a top-up is not a spend.
+export interface FundingReceipt {
+  funding_receipt_id: string;
+  mandate_id: string;
+  mandate_hash: string;
+  reserve_ref: string;
+  order_id: string;
+  payments: Array<{ id: string; amount_inr: number; method: string; paid_at: string }>;
+  amount_inr: number;
+  currency: 'INR';
+  mode: 'TEST';
+  issued_at: string;
+  sig: string;
+}
+
+// Read-only mirror of src/events/ActivityEvent.ts — an entry in the decision log that is NOT a gate
+// verdict (a mandate created, a payment received, a purchase completed or failed…). It never carries
+// a `verdict`: only the gate says whether a spend was allowed.
+export type ActivityAction =
+  | 'mandate.create'
+  | 'mandate.resign'
+  | 'payment.order_created'
+  | 'payment.received'
+  | 'payment.fund'
+  | 'purchase.completed'
+  | 'purchase.failed'
+  | 'cart.emptied'
+  | 'gate.run'
+  | 'agents.run';
+
+export interface ActivityEvent {
+  event_id: string;
+  ts: string;
+  kind: 'ACTIVITY';
+  action: ActivityAction;
+  outcome: 'SUCCESS' | 'FAILURE' | 'INFO';
+  summary: string;
+  mandate_id?: string;
+  amount_inr?: number;
+  run_id?: string;
+  reserve_ref?: string;
+  receipt_id?: string;
+  error?: string;
+  details?: Record<string, string | number | boolean>;
+}
+
+/** One line of events.jsonl: a gate verdict or an activity entry. */
+export type DecisionLogEntry = GateEvent | ActivityEvent;
+
+export function isActivityEvent(entry: DecisionLogEntry): entry is ActivityEvent {
+  return (entry as ActivityEvent).kind === 'ACTIVITY';
 }

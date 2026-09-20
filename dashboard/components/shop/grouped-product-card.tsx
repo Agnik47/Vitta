@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart-context";
 import { MERCHANT_LABEL, type ShopMerchant } from "@/lib/shop-catalog";
 import type { LiveProduct } from "@/lib/live-search";
 import { Button } from "@/components/ui/button";
+import { toastCartError } from "@/lib/cart-toast";
 
 // Re-using the same colors from live-search-results
 const MERCHANT_BADGE: Record<string, string> = {
@@ -60,7 +61,7 @@ function OfferRow({ offer }: { offer: LiveProduct }) {
     });
     setAdding(false);
     if (!result.ok) {
-      toast.error("Could not add to real cart", { description: result.message });
+      toastCartError("Could not add to real cart", result.message);
       return;
     }
     toast.success(`Added to real ${MERCHANT_LABEL[offer.merchant]} cart`, {

@@ -10,7 +10,16 @@ import { Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function CreateMandateForm({ onCreated }: { onCreated: () => void }) {
+export function CreateMandateForm({
+  onCreated,
+  replacing = false,
+  onCancel,
+}: {
+  onCreated: () => void;
+  /** True when a valid mandate already exists — the new one becomes the active mandate instead. */
+  replacing?: boolean;
+  onCancel?: () => void;
+}) {
   const [subject, setSubject] = useState("agent:shop-runner");
   const [cap, setCap] = useState("2000");
   const [perTxn, setPerTxn] = useState("1000");
@@ -51,13 +60,26 @@ export function CreateMandateForm({ onCreated }: { onCreated: () => void }) {
   return (
     <Panel>
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm font-medium text-foreground">No active mandate</div>
-        <Button variant="ghost" size="sm" onClick={() => setShowManual(!showManual)} className="h-8 text-xs text-ink-faint">
-          <Settings2 className="mr-1.5 size-3.5" />
-          {showManual ? "Hide manual config" : "Manual config"}
-        </Button>
+        <div className="text-sm font-medium text-foreground">{replacing ? "Create a new mandate" : "No active mandate"}</div>
+        <div className="flex items-center gap-1">
+          {onCancel && (
+            <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy} className="h-8 text-xs text-ink-faint">
+              Cancel
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setShowManual(!showManual)} className="h-8 text-xs text-ink-faint">
+            <Settings2 className="mr-1.5 size-3.5" />
+            {showManual ? "Hide manual config" : "Manual config"}
+          </Button>
+        </div>
       </div>
-      
+      {replacing && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          The new mandate becomes the active one for every purchase. The current mandate stays on record, and any unspent reserve stays in its
+          Razorpay order — the new mandate starts unfunded, so you&apos;ll fund it next.
+        </p>
+      )}
+
       {!showManual ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-step-up/30 bg-step-up/5 py-8 text-center">
           <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-step-up/20">
@@ -65,7 +87,7 @@ export function CreateMandateForm({ onCreated }: { onCreated: () => void }) {
           </div>
           <h3 className="mb-2 text-sm font-medium text-foreground">Agent-Driven Mandate</h3>
           <p className="mb-4 max-w-md text-xs text-ink-faint">
-            Let the agent automatically configure and sign a standard mandate optimized for today's purchases (up to 10 transactions).
+            Let the agent automatically configure and sign a standard mandate optimized for today&apos;s purchases (up to 10 transactions).
           </p>
           <div className="mb-6 flex items-center justify-center gap-3">
             <span className="text-sm font-medium text-foreground">Cap (₹)</span>
