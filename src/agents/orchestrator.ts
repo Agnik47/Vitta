@@ -109,6 +109,7 @@ export async function runShoppingFlow(input: FlowInput, deps: FlowDeps): Promise
     s.completed_at = new Date().toISOString();
     s.duration_ms = new Date(s.completed_at).getTime() - new Date(s.started_at).getTime();
     s.steps = result.steps;
+    if (result.nasiko_trace_id) s.nasiko_trace_id = result.nasiko_trace_id;
     s.status = result.ok ? 'done' : 'failed';
     if (result.ok) s.summary = summarize(result);
     else {

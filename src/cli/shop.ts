@@ -56,6 +56,13 @@ function printFinal(r: FlowRecord): void {
   console.log(`  routed via ${r.nasiko.routed ? `Nasiko (${r.nasiko.url})` : 'direct A2A'} · mode ${r.mode}`);
   console.log('');
   for (const s of r.stages) console.log(stageLine(s));
+  // Nasiko keys its trace view by its own id, not ours — print those so a hop can be found there.
+  const nasikoTraces = r.stages.filter((s) => s.nasiko_trace_id);
+  if (nasikoTraces.length > 0) {
+    console.log('');
+    console.log("  Nasiko traces (Observability → search by id):");
+    for (const s of nasikoTraces) console.log(`    ${s.agent.padEnd(24)} ${s.nasiko_trace_id}`);
+  }
   console.log('');
   const o = r.outcome;
   switch (r.status) {

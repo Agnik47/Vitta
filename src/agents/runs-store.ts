@@ -22,6 +22,9 @@ export interface FlowStage {
   status: StageStatus;
   /** This hop's W3C span id — the same id Nasiko sees in the traceparent it receives. */
   span_id?: string;
+  /** Nasiko's own trace id for this hop — the one its trace view (and `GET /api/observability/trace/<id>`)
+   *  is keyed by. Only present when the hop was dispatched through Nasiko. */
+  nasiko_trace_id?: string;
   started_at?: string;
   completed_at?: string;
   duration_ms?: number;

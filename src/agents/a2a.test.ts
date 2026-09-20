@@ -135,6 +135,20 @@ test('Nasiko replies as an event stream: the AgentResult is read from the artifa
   const r = await callAgent({ agent: NAME, url: 'http://nasiko/api/orchestrator/a2a', nasikoAgentId: 'agt_1' }, request({}), { fetchImpl });
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.data, { hop: 'via-nasiko' });
+  // Nasiko's trace view is keyed by the id in its `trace_meta` event, not by our traceparent.
+  assert.equal(r.nasiko_trace_id, 'abc');
+});
+
+test('event stream: the Nasiko trace id also rides on a failed hop, and a direct call carries none', async () => {
+  const failed = await callAgent({ agent: NAME, url: 'http://x', nasikoAgentId: 'agt_1' }, request({}), { fetchImpl: sse(nasikoStream('', 'TASK_STATE_FAILED', 'agent HTTP 502')) });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.nasiko_trace_id, 'abc');
+
+  const direct = await callAgent({ agent: NAME, url: 'http://x' }, request({}), {
+    fetchImpl: (async () => new Response(JSON.stringify({ jsonrpc: '2.0', id: 'x', result: { task: { id: 't', artifacts: [{ parts: [{ text: JSON.stringify(agentOk(NAME, 1, [])) }] }] } } }), { status: 200 })) as unknown as typeof fetch,
+  });
+  assert.ok(direct.ok);
+  assert.equal(direct.nasiko_trace_id, undefined);
 });
 
 test('event stream: a chunked artifact (append) is reassembled before it is parsed', async () => {

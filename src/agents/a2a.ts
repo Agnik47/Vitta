@@ -339,6 +339,9 @@ export async function callAgent(endpoint: AgentEndpoint, request: AgentRequest, 
   }
 
   let text: unknown;
+  let nasikoTraceId: string | undefined;
+  /** Every result from here on carries Nasiko's trace id for the hop, when there is one. */
+  const tag = (r: AgentResult): AgentResult => (nasikoTraceId ? { ...r, nasiko_trace_id: nasikoTraceId } : r);
   if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {
     // Nasiko's orchestrator always answers as an event stream, even for a plain send.
     let events: string;
@@ -348,8 +351,9 @@ export async function callAgent(endpoint: AgentEndpoint, request: AgentRequest, 
       return transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} stream broke: ${(err as Error).message}`);
     }
     const streamed = readEventStream(events);
+    nasikoTraceId = streamed.traceId;
     if (streamed.failure) {
-      return transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} task failed: ${streamed.failure}`);
+      return tag(transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} task failed: ${streamed.failure}`));
     }
     text = streamed.text;
   } else {
@@ -370,15 +374,15 @@ export async function callAgent(endpoint: AgentEndpoint, request: AgentRequest, 
     text = task?.artifacts?.[0]?.parts?.[0]?.text;
   }
   if (typeof text !== 'string') {
-    return transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} returned a task with no result artifact`);
+    return tag(transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} returned a task with no result artifact`));
   }
   try {
     const parsed: unknown = JSON.parse(text);
-    if (isAgentResult(parsed)) return parsed;
+    if (isAgentResult(parsed)) return tag(parsed);
   } catch {
     // fall through
   }
-  return transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} returned an artifact that is not a Vitta AgentResult`);
+  return tag(transportFailure(endpoint.agent, 'AGENT_UNREACHABLE', `${endpoint.agent} returned an artifact that is not a Vitta AgentResult`));
 }
 
 interface TaskLike {
@@ -388,9 +392,10 @@ interface TaskLike {
 /** Reads an A2A event stream (the shape Nasiko's orchestrator returns): `artifactUpdate` events carry
  *  the agent's reply in chunks, a terminal `statusUpdate` says how the task ended. Events may arrive
  *  bare or wrapped in `{result: …}`; the task states are the v1 enum names (`TASK_STATE_FAILED`). */
-export function readEventStream(body: string): { text?: string; failure?: string } {
+export function readEventStream(body: string): { text?: string; failure?: string; traceId?: string } {
   const chunks = new Map<string, string>();
   let failure: string | undefined;
+  let traceId: string | undefined;
   for (const line of body.split('\n')) {
     if (!line.startsWith('data:')) continue;
     let event: any;
@@ -407,13 +412,17 @@ export function readEventStream(body: string): { text?: string; failure?: string
       chunks.set(id, event.artifactUpdate.append === true ? (chunks.get(id) ?? '') + piece : piece);
     }
     const status = event?.statusUpdate?.status;
+    // Nasiko announces its own trace id for the dispatch as a data part: {type: 'trace_meta', trace_id}.
+    for (const p of status?.message?.parts ?? []) {
+      if (p?.data?.type === 'trace_meta' && typeof p.data.trace_id === 'string' && traceId === undefined) traceId = p.data.trace_id;
+    }
     if (status && /FAILED|REJECTED|CANCELED|CANCELLED/i.test(String(status.state ?? ''))) {
       const said = (status.message?.parts ?? []).map((p: { text?: unknown }) => (typeof p?.text === 'string' ? p.text : '')).join('');
       failure = said || String(status.state);
     }
   }
   const first = [...chunks.values()].find((t) => t.length > 0);
-  return failure !== undefined && first === undefined ? { failure } : { text: first };
+  return failure !== undefined && first === undefined ? { failure, traceId } : { text: first, traceId };
 }
 
 /** Dispatches over HTTP, one endpoint per agent. */

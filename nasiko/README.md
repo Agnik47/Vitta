@@ -35,17 +35,29 @@ fixed in `src/agents/a2a.ts` and pinned in `a2a.test.ts`:
 3. The orchestrator always replies as an event stream (`text/event-stream`), even for a plain send. The
    client now reads the `artifactUpdate` events.
 
+Also verified, once Anakin had credits: a request with no buy words ran Planner → Discovery → Evaluator
+through Nasiko on live Anakin results (15–30 real candidates; Blinkit fails in the container because
+`webcmd` is not in the image) and ended `NO_PURCHASE`, the Purchase hop skipped. Two limits you will meet:
+
+- Nasiko's shared HTTP client cuts every agent call off at 60 s, so Discovery gives each merchant search its
+  own 50 s deadline (`VITTA_DISCOVERY_TIMEOUT_MS`); a slow merchant is then one recorded failure, not a dead hop.
+- The dashboard's Anakin key can be overridden by a stale `ANAKIN_API_KEY` in `dashboard/.env.local`
+  (`runtime-env.ts` lets it win over the root `.env`) — an out-of-credit key there shows up as HTTP 402.
+
+Traces: Nasiko keys its trace view by its own id, announced in each dispatch stream's `trace_meta` event, not by
+our `traceparent` (looking ours up returns 404). The client now captures that id and stores it on each stage as
+`nasiko_trace_id`; `shop run` prints them, and `GET /api/observability/trace/<id>` resolved each to an
+`a2a.dispatch` span (allow a few seconds — Nasiko indexes a trace shortly after the call). The Purchase hop is
+direct, so it has none.
+
 What has **not** been verified:
 
-- The Purchase hop through Nasiko (kept beside the gate, see below), and an end-to-end run with real
-  candidates: on the machine this was verified on, Anakin had no credits (HTTP 402) and `webcmd` was not
-  installed, so Discovery failed honestly (`ANAKIN_ERROR`). The Evaluator hop was exercised through Nasiko
-  with a synthetic candidate list, not live search results.
-- Traces. A hop's `traceparent` reaches Nasiko (its header audit logs it), but Nasiko labels its own trace
-  with a different id — the one in the stream's `trace_meta` event — and `GET /api/observability/trace/<our
-  trace id>` returned 404. The run record still stores only our id, so it cannot yet be linked to Nasiko's
-  trace view. Whether the agents' own OTel spans show up is unknown. **The dashboard's trace panel shows
-  only what Nasiko actually returns — it invents nothing.**
+- A real purchase. The Purchase agent was reached directly with a synthetic proposal and failed closed at the
+  empty-cart check (`spawn webcmd ENOENT`) before the gate ran — nothing spent, no mandate touched. A run that
+  actually buys needs `webcmd` with logged-in merchant sessions and a funded Razorpay mandate on the machine
+  running the gate; neither was available. The Evaluator's proposal-to-purchase handoff is covered by unit tests.
+- Whether the agents' own OpenTelemetry spans (beyond Nasiko's `a2a.dispatch` span per hop) show up.
+  **The dashboard's trace panel shows only what Nasiko actually returns — it invents nothing.**
 - The Rust `nasiko` CLI path (`nasiko validate` / `nasiko deploy`): `deploy.sh` without `--upload` still
   calls it and has not been run.
 - Agent → agent ACL. Not used: the orchestrator calls each agent itself (Nasiko's agent→agent calls
@@ -78,9 +90,10 @@ NASIKO_AGENT_ID_PLANNER=...  NASIKO_AGENT_ID_DISCOVERY=...  NASIKO_AGENT_ID_EVAL
 node dist/cli/shop.js run "cheapest 2kg atta under ₹300" --mode test
 ```
 
-Then open Nasiko's dashboard → Observability. The run's trace id printed by the CLI is Vitta's own; Nasiko
-files each dispatch under an id of its own (see "not verified" above), so look for the run by time and
-agent, not by that id. Agents that need secrets get them the Nasiko way — `--upload` sets
+Then open Nasiko's dashboard → Observability and search for the "Nasiko traces" ids the CLI prints under the
+stages (one per hop dispatched through Nasiko; they are also stored on each stage of the run record as
+`nasiko_trace_id`). The `trace` id on the run's header line is Vitta's own W3C trace id, which Nasiko does not
+index. Agents that need secrets get them the Nasiko way — `--upload` sets
 `VITTA_DASHBOARD_URL` on Discovery for you (the CLI route: `nasiko secrets set VITTA_DASHBOARD_URL …
 --agent vitta-deal-discovery`); a deployed container does not read your `.env`. Discovery reaches the
 dashboard's Anakin-first search from inside Docker via `http://host.docker.internal:<dashboard port>`.

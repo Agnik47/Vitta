@@ -67,6 +67,28 @@ async function run(h: Record<AgentName, AgentHandler>, input: Parameters<typeof 
   return { record, saves };
 }
 
+test('a hop dispatched through Nasiko records Nasiko’s own trace id on its stage; hops that were not, record none', async () => {
+  const inner = createInProcessCaller(handlers());
+  // Stand-in for the HTTP client: it tags results with the trace id Nasiko announced, except the Purchase hop,
+  // which is called directly (beside the gate) and so has no Nasiko trace.
+  const caller = {
+    call: async (agent: AgentName, req: AgentRequest) => {
+      const r = await inner.call(agent, req);
+      return agent === 'vitta-purchase-agent' ? r : { ...r, nasiko_trace_id: `nsk_${agent}` };
+    },
+  };
+  const record = await runShoppingFlow({ request: 'Find me the cheapest 2kg atta and buy it', mode: 'TEST' }, { caller, save: () => {} });
+  assert.deepEqual(
+    record.stages.map((s) => [s.agent, s.nasiko_trace_id]),
+    [
+      ['vitta-shopping-planner', 'nsk_vitta-shopping-planner'],
+      ['vitta-deal-discovery', 'nsk_vitta-deal-discovery'],
+      ['vitta-deal-evaluator', 'nsk_vitta-deal-evaluator'],
+      ['vitta-purchase-agent', undefined],
+    ],
+  );
+});
+
 test('the spec flow: Planner → Discovery → Evaluator → Purchase, ending PURCHASED at Zepto ₹229', async () => {
   const { record } = await run(handlers(), { request: 'Find me the cheapest 2kg atta and buy it', mode: 'TEST' });
   assert.equal(record.status, 'PURCHASED');

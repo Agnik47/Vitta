@@ -95,6 +95,9 @@ export interface AgentOk<T> {
   version: string;
   data: T;
   steps: AgentStep[];
+  /** Nasiko's own trace id for this hop (the dispatch stream's `trace_meta`). Set by the client, only
+   *  when the hop went through Nasiko; it is what Nasiko's trace view is keyed by, not our traceparent. */
+  nasiko_trace_id?: string;
 }
 
 export interface AgentFailure {
@@ -103,6 +106,7 @@ export interface AgentFailure {
   version: string;
   error: AgentError;
   steps: AgentStep[];
+  nasiko_trace_id?: string;
 }
 
 export type AgentResult<T = unknown> = AgentOk<T> | AgentFailure;
