@@ -15,7 +15,7 @@ import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '..
 import type { Receipt } from '../receipt/schema';
 import { buildAndSignAuthorization, type TransactionAuthorization } from '../receipt/authorization';
 import { parseExecutionMode, receiptExecutionMode } from '../receipt/execution-mode';
-import { PravaLedger } from '../ledger/PravaLedger';
+import { RazorpayLedger } from '../ledger/RazorpayLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
 import { resolveCartTotalInr, type CheckoutRow, type CartLineRow } from '../webcmd/cart-total';
 import {
@@ -118,7 +118,7 @@ function cmdMandateCreate(args: string[]): void {
     // Not funded yet — gate fund is a separate step (docs/01-ARCHITECTURE.md's own data flow
     // treats create and fund as two commands) and is itself blocked on Phase 1c. blocked_inr: 0 /
     // ref: '' is this codebase's "unfunded" sentinel state until Ledger.fund() is real.
-    reserve: { type: 'prava_mandate_sandbox', blocked_inr: 0, ref: '' },
+    reserve: { type: 'razorpay_test_order', blocked_inr: 0, ref: '' },
   };
   const sig = sign(unsigned, privateKey);
   const mandate: Mandate = { ...unsigned, sig };
@@ -186,7 +186,7 @@ function cmdReceiptShow(args: string[]): void {
   console.log(`✓ RECEIPT ${receipt.receipt_id} signed\n`);
   console.log(`  mandate  ${receipt.mandate_hash}        cart     ${receipt.cart.merchant} · ${receipt.cart.items} items · ₹${formatInr(receipt.cart.total_inr)}`);
   console.log(`  payment  ${receipt.payment.rail} · ${receipt.payment.status}`);
-  console.log(`  mode     ${mode}${mode === 'TEST' ? ' — settled against the Prava sandbox reserve; no merchant order was placed' : ''}`);
+  console.log(`  mode     ${mode}${mode === 'TEST' ? ' — settled against the Razorpay test reserve; no merchant order was placed' : ''}`);
   console.log(`  run      ${receipt.execution.command} · ${receipt.execution.run_id}`);
   const orderSuffix = receipt.evidence.network_order_id ? ` · order #${receipt.evidence.network_order_id}` : '';
   console.log(`  evidence trace ${receipt.evidence.trace_digest}${orderSuffix}`);
@@ -226,15 +226,45 @@ function cmdVerify(args: string[]): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// gate fund — fund a mandate's reserve via Prava sandbox checkout or attach an approved reserve
+// gate fund — fund a mandate's reserve via a Razorpay test-mode order, or attach an already-paid one
 // ---------------------------------------------------------------------------------------------
+
+/**
+ * A mandate has ONE reserve. Pointing it at a different order orphans whatever is still unspent on
+ * the old one — real captured money the mandate could no longer reach — so that is refused unless
+ * the human says `--replace`. Applies both to creating a new order (`--amount`, which swaps the
+ * reference in immediately) and to attaching another (`--reserve-ref`). An unreadable balance also
+ * refuses: not knowing whether money is stranded is not a reason to strand it. A reference from an
+ * older rail can't hold money on this one, so it is always replaceable.
+ */
+async function guardExistingReserve(mandate: Mandate, ledger: RazorpayLedger, incomingRef: string | undefined, replace: boolean): Promise<void> {
+  const current = mandate.reserve.ref;
+  if (!current || current === incomingRef || replace) return;
+  let remainingPaise: number;
+  try {
+    remainingPaise = await ledger.balance(current);
+  } catch (err) {
+    if (/Invalid Razorpay reserve reference/.test((err as Error).message)) return;
+    throw new Error(
+      `Mandate ${mandate.mandate_id} already has a reserve (${current}) and its balance could not be read: ${(err as Error).message}. ` +
+        'Refusing to replace it blind — fix the connection, or pass --replace if you are sure.',
+    );
+  }
+  if (remainingPaise > 0) {
+    throw new Error(
+      `Mandate ${mandate.mandate_id} already has a funded reserve (${current}) with ₹${formatInr(remainingPaise / 100)} left. ` +
+        'Pointing it at a different order would strand that money on Razorpay (it stays refundable from the Razorpay dashboard). ' +
+        'Spend it first, or pass --replace to switch anyway.',
+    );
+  }
+}
 
 async function cmdFund(args: string[]): Promise<void> {
   const { positionals, flags } = parseArgs(args);
   const mandateId = positionals[0];
   if (!mandateId) {
     throw new Error(
-      'Usage: gate fund <mandate_id> --amount <n> | gate fund <mandate_id> --reserve-ref <ref> | gate fund <mandate_id> --auto --amount <n>',
+      'Usage: gate fund <mandate_id> --amount <n> [--replace] | gate fund <mandate_id> --reserve-ref <ref> [--replace] | gate fund <mandate_id> --auto --amount <n>',
     );
   }
   // --reserve-ref attaches an ALREADY-FUNDED real reserve instead of creating a new checkout
@@ -243,6 +273,7 @@ async function cmdFund(args: string[]): Promise<void> {
   // without a fresh out-of-band payment every time. See docs/common/02-DECISIONS.md ADR-012.
   const existingReserveRef = flags['reserve-ref'];
   const auto = flags.auto !== undefined;
+  const replace = flags.replace !== undefined;
 
   const mandate = loadMandate(mandateId);
   const { sig: existingSig, ...existingUnsigned } = mandate;
@@ -251,7 +282,7 @@ async function cmdFund(args: string[]): Promise<void> {
     throw new Error(`Existing mandate ${mandateId}'s signature does not verify — refusing to fund a mandate that may have been tampered with.`);
   }
 
-  const ledger = new PravaLedger();
+  const ledger = new RazorpayLedger();
   const { privateKey } = getOrCreateKeyPair('issuer');
 
   if (auto) {
@@ -298,13 +329,29 @@ async function cmdFund(args: string[]): Promise<void> {
 
     console.log(`✓ MANDATE ${mandateId} auto-funded — ₹${formatInr(newBalanceInr)} (was ₹${formatInr(currentBalanceInr)})`);
     console.log(`  reserve reference ${mandate.reserve.ref}`);
-    console.log(`  real balance read from Prava after the credit`);
+    console.log(`  real balance read from Razorpay after the credit`);
     return;
   }
 
   if (existingReserveRef) {
     if (flags.amount) {
-      throw new Error('--amount and --reserve-ref are mutually exclusive: --reserve-ref attaches an already-funded reserve, whose real balance is read from Prava rather than asserted locally.');
+      throw new Error('--amount and --reserve-ref are mutually exclusive: --reserve-ref attaches an already-funded reserve, whose real balance is read from Razorpay rather than asserted locally.');
+    }
+    // A reserve is only attachable to the mandate it was created for. Without this, one paid order
+    // could be attached to several mandates (spending the same money more than once), or someone
+    // else's order attached at all.
+    if (ledger.reserveOwner) {
+      const owner = await ledger.reserveOwner(existingReserveRef);
+      if (owner !== mandateId) {
+        throw new Error(`Reserve ${existingReserveRef} was created for mandate ${owner}, not ${mandateId} — refusing to attach it.`);
+      }
+    }
+    await guardExistingReserve(mandate, ledger, existingReserveRef, replace);
+    // The human has paid; complete anything the rail left pending (Razorpay: capture an `authorized`
+    // payment — uncaptured payments are refunded by Razorpay and count as ₹0 here).
+    if (ledger.settle) {
+      const { captured } = await ledger.settle(existingReserveRef);
+      if (captured.length > 0) console.log(`  captured ${captured.length} authorized payment(s): ${captured.join(', ')}`);
     }
     // Read the REAL balance rather than trusting the ref. This is what makes attaching an existing
     // reserve safe: a typo'd, unpaid, or wrong-customer ref fails loudly here instead of producing
@@ -321,26 +368,28 @@ async function cmdFund(args: string[]): Promise<void> {
 
     const funded: Omit<Mandate, 'sig'> = {
       ...existingUnsigned,
-      reserve: { type: 'prava_mandate_sandbox', blocked_inr: balanceInr, ref: existingReserveRef },
+      reserve: { type: 'razorpay_test_order', blocked_inr: balanceInr, ref: existingReserveRef },
     };
     const updatedMandate: Mandate = { ...funded, sig: sign(funded, privateKey) };
     saveMandate(updatedMandate);
 
     console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(balanceInr)} (existing reserve)`);
     console.log(`  reserve reference ${existingReserveRef}`);
-    console.log(`  real balance read from Prava — no new checkout needed`);
+    console.log(`  real balance read from Razorpay — no new checkout needed`);
     return;
   }
 
   const amountInr = Number(requireFlag(flags, 'amount'));
   if (Number.isNaN(amountInr) || amountInr <= 0) throw new Error('--amount must be a positive number');
   const amountInrPaise = Math.round(amountInr * 100);
+  // Checked BEFORE the order is created, so a refusal leaves no dangling order behind.
+  await guardExistingReserve(mandate, ledger, undefined, replace);
   const { reserveRef, checkoutUrl } = await ledger.fund(mandateId, amountInrPaise);
 
   // Update and re-sign the mandate with the new reserve
   const funded: Omit<Mandate, 'sig'> = {
     ...existingUnsigned,
-    reserve: { type: 'prava_mandate_sandbox', blocked_inr: amountInr, ref: reserveRef },
+    reserve: { type: 'razorpay_test_order', blocked_inr: amountInr, ref: reserveRef },
   };
   const sig = sign(funded, privateKey);
   const updatedMandate: Mandate = { ...funded, sig };
@@ -349,9 +398,9 @@ async function cmdFund(args: string[]): Promise<void> {
   console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(amountInr)}`);
   console.log(`  reserve reference ${reserveRef}`);
   if (checkoutUrl) {
-    console.log(`  checkout required: complete the Prava checkout at ${checkoutUrl}`);
+    console.log(`  checkout required: pay the test order at ${checkoutUrl}`);
   } else {
-    console.log(`  checkout required: open your browser to complete the Prava checkout before running commands`);
+    console.log(`  checkout required: pay the Razorpay test order (Checkout) before running commands`);
   }
 }
 
@@ -554,7 +603,7 @@ async function cmdRun(args: string[]): Promise<void> {
 
   // Call decide()
   const now = new Date();
-  const ledger = new PravaLedger();
+  const ledger = new RazorpayLedger();
   let ledgerBalanceInr = 0;
   try {
     if (mandate.reserve.ref) {
@@ -568,7 +617,7 @@ async function cmdRun(args: string[]): Promise<void> {
     // exhausted mandate: decide() returns OVER_TOTAL_CAP and the operator reads
     // "cart ₹179 · mandate ₹500 · over by ₹179" — arithmetic that cannot be true unless the
     // balance was 0. Hit for real on 2026-07-31 by running `node dist/cli/gate.js` without the
-    // PRAVA_* vars loaded (the CLI expects a shell that has sourced .env; use
+    // RAZORPAY_* vars loaded (the CLI expects a shell that has sourced .env; use
     // `node --env-file=.env` otherwise). The verdict stays fail-closed either way — this only
     // makes the cause visible instead of costing a demo several minutes of misdiagnosis.
     ledgerBalanceInr = 0;
@@ -658,12 +707,12 @@ async function cmdRun(args: string[]): Promise<void> {
   }
 
   // Two independent, both-real facts, kept separate rather than conflated into one artifact:
-  //   1. TRANSACTION AUTHORIZATION — decide() said ALLOW and the real Prava reserve balance already
+  //   1. TRANSACTION AUTHORIZATION — decide() said ALLOW and the real Razorpay reserve balance already
   //      read (ledgerBalanceInr) covers this cart. True right now, before the browser touches
   //      anything. Signed and saved immediately below, BEFORE execute() runs.
   //   2. MERCHANT CONFIRMATION + the real Receipt — only real once the merchant itself proves an
   //      order exists (evaluateCommitProof). draw()/recordDraw()/buildAndSignReceipt() stay exactly
-  //      where they always were: gated on that proof, never moved earlier. Moving the real Prava
+  //      where they always were: gated on that proof, never moved earlier. Moving the real Razorpay
   //      draw() before merchant confirmation would recreate ADR-013's exact failure — draw() is an
   //      immediate, real ledger debit here, not a reversible authorization hold, so a merchant that
   //      never confirms would leave the reserve genuinely short for nothing.
@@ -689,9 +738,9 @@ async function cmdRun(args: string[]): Promise<void> {
   // TEST mode settles here, WITHOUT driving the merchant's checkout.
   //
   // Everything above this point ran identically to LIVE: the real cart was read from the merchant,
-  // the real mandate's signature/expiry/caps were checked by the one real decide(), the real Prava
-  // reserve balance was read, and a real signed authorization was written. Below, the Prava draw and
-  // the signed, chain-linked receipt are also real — the Prava side has always been sandbox-only
+  // the real mandate's signature/expiry/caps were checked by the one real decide(), the real Razorpay
+  // reserve balance was read, and a real signed authorization was written. Below, the Razorpay draw and
+  // the signed, chain-linked receipt are also real — the Razorpay side is test-mode-only
   // (CLAUDE.md hard rule 1), so nothing about it changes between modes.
   //
   // What is deliberately NOT done: execute() is never called, so webcmd never walks Blinkit's
@@ -714,7 +763,7 @@ async function cmdRun(args: string[]): Promise<void> {
         authorization_id: authorization.authorization_id,
         mandate_hash: sha256Hex(mandate),
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
-        payment: { rail: 'prava_sandbox', reserve_ref: mandate.reserve.ref, status: 'authorized' },
+        payment: { rail: 'razorpay_test', reserve_ref: mandate.reserve.ref, status: 'authorized' },
         execution: { command: fullCommand, run_id: runId, profile: '', mode: 'TEST' },
         // No trace digest: no browser command was run, so there is no trace to digest. Empty is the
         // truthful value here, not a placeholder standing in for something that exists.
@@ -726,7 +775,7 @@ async function cmdRun(args: string[]): Promise<void> {
     saveReceipt(testReceipt);
 
     console.log(`✓ SETTLED IN TEST MODE · ${site}`);
-    console.log(`  reserve drawn ₹${formatInr(cartAmountInr)} from the real Prava sandbox reserve`);
+    console.log(`  reserve drawn ₹${formatInr(cartAmountInr)} from the Razorpay test reserve`);
     console.log(`  NO MERCHANT ORDER PLACED — ${site}'s checkout was not driven in test mode`);
     console.log(`✓ ${fullCommand} executed · runId ${runId}`);
     console.log(`  receipt ${testReceipt.receipt_id}`);
@@ -813,7 +862,7 @@ async function cmdRun(args: string[]): Promise<void> {
         authorization_id: authorization.authorization_id,
         mandate_hash: sha256Hex(mandate),
         cart: { merchant: site, items: cartItemCount, total_inr: cartAmountInr },
-        payment: { rail: 'prava_sandbox', reserve_ref: mandate.reserve.ref, status: 'authorized' },
+        payment: { rail: 'razorpay_test', reserve_ref: mandate.reserve.ref, status: 'authorized' },
         execution: { command: fullCommand, run_id: runId, profile: '', mode: 'LIVE' },
         evidence: {
           trace_digest: result.traceDigest,
@@ -847,7 +896,7 @@ async function cmdRun(args: string[]): Promise<void> {
 // value flags) — found live: `gate fund <id> --auto --amount 25` silently set flags.auto = '--amount'
 // and stranded '25' as an unclaimed positional, because parseArgs had no notion of a boolean flag at
 // all until `--auto` became this CLI's first one.
-const BOOLEAN_ONLY_FLAGS = new Set(['auto']);
+const BOOLEAN_ONLY_FLAGS = new Set(['auto', 'replace']);
 
 function parseArgs(args: string[]): { positionals: string[]; flags: Record<string, string> } {
   const positionals: string[] = [];

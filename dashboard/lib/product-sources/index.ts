@@ -53,7 +53,7 @@ export async function searchMerchant(merchant: LiveMerchant, query: string): Pro
 
   for (const source of SOURCES) {
     if (!source.isAvailable() || !source.supports(merchant)) continue;
-    const result = await source.search(merchant, query);
+    const result: MerchantSearchResult = { ...(await source.search(merchant, query)), source: source.name };
     if (result.ok) {
       // Only successful results are cached — caching a failure would keep a merchant dark for the
       // full TTL after a transient blip.

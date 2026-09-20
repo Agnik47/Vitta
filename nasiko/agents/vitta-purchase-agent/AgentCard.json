@@ -1,0 +1,45 @@
+{
+  "name": "vitta-purchase-agent",
+  "description": "Attempts the proposed purchase. Every merchant write goes through the Vitta gate, which reads the real cart and deterministically ALLOWs or DENYs; a denial stops the browser action and is returned verbatim.",
+  "version": "0.1.0",
+  "protocolVersion": "0.3.0",
+  "url": "http://localhost:8000",
+  "preferredTransport": "JSONRPC",
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8000",
+      "protocolBinding": "JSONRPC"
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "purchase-through-gate",
+      "name": "Purchase through the Vitta gate",
+      "description": "Build the cart and place the order, subject to the signed mandate. Idempotent per request id.",
+      "tags": [
+        "purchase",
+        "checkout",
+        "vitta-gate",
+        "mandate"
+      ],
+      "examples": [
+        "Buy the proposed Zepto item under the current mandate"
+      ]
+    }
+  ],
+  "provider": {
+    "organization": "Vitta",
+    "url": "https://github.com/Agnik47/Vitta"
+  }
+}

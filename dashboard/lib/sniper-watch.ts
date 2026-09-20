@@ -3,7 +3,7 @@
 //
 // The watch does not implement any purchasing of its own. When it fires it calls the same
 // startPurchaseJob() the cart's "Proceed to purchase" button calls, so the mandate gate, cart
-// verification, Prava draw and receipt signing are all the real, single, audited path — the sniper
+// verification, Razorpay draw and receipt signing are all the real, single, audited path — the sniper
 // only decides WHEN to pull the trigger, never what the trigger does.
 //
 // Store shape (Map + JSON file, load-at-init) deliberately mirrors lib/purchase-job.ts.
@@ -11,8 +11,10 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { getAgentRun, startAgentRun } from "./agent-runs";
 import { getBlinkitProductDetail } from "./live-search";
 import { getPurchaseJob, startPurchaseJob } from "./purchase-job";
+import { runtimeEnv } from "./runtime-env";
 import { isWatchTerminal, type ExecutionMode, type SniperWatch } from "./sniper-shared";
 
 export { MIN_INTERVAL_MS, DEFAULT_INTERVAL_MS, MAX_WINDOW_MS } from "./sniper-shared";
@@ -92,6 +94,7 @@ function reconcileOnStartup(): void {
   for (const watch of watches.values()) {
     if (watch.status !== "FIRED") continue;
     if (watch.firedJobId && getPurchaseJob(watch.firedJobId)) continue;
+    if (watch.firedRunId && getAgentRun(watch.firedRunId)) continue;
     watch.status = "FAILED";
     watch.failureReason =
       "Recorded as fired but no purchase job was found for it — the server was interrupted mid-fire. " +
@@ -157,11 +160,44 @@ async function runCheck(watch: SniperWatch): Promise<void> {
   }
 }
 
+/** The Price Sniper's hand-off to the agent pipeline: a pinned intent, so Deal Discovery re-reads THIS
+ *  product's live price, the Deal Evaluator re-checks it against the target, and only then does the
+ *  Purchase Agent go to the gate. Reaching the target price authorizes nothing by itself. Mirrors
+ *  src/agents/protocol.ts's ShoppingIntent by hand, per this app's convention. */
+function sniperIntent(watch: SniperWatch): Record<string, unknown> {
+  return {
+    raw_request: `Price Sniper: ${watch.productName} at or below ₹${watch.targetPriceInr}`.slice(0, 2000),
+    product_query: watch.productName.slice(0, 200),
+    category: "groceries",
+    quantity: watch.quantity,
+    // The ceiling covers the whole line; the watch's target is per unit.
+    max_price_inr: watch.targetPriceInr * watch.quantity,
+    purchase_required: true,
+    preferred_merchants: ["blinkit"],
+    source: "price-sniper",
+    pinned: { merchant: "blinkit", product_id: watch.productId },
+  };
+}
+
 /** Starts the real purchase. Status and job id are written together so the store can never claim
  *  a fire that has no job behind it. */
 function fire(watch: SniperWatch, priceInr: number): void {
   recordCheck(watch, priceInr, `₹${priceInr} at or below target ₹${watch.targetPriceInr} — firing purchase`);
   try {
+    // Opt-in: route through Planner-skipped Discovery → Evaluator → Purchase Agent → gate. Off by
+    // default, so existing deployments keep the direct path unchanged.
+    if (runtimeEnv("VITTA_AGENT_PIPELINE") === "on") {
+      const { runId } = startAgentRun({
+        intent: sniperIntent(watch),
+        mode: watch.mode,
+        mandateId: watch.mandateId,
+        sessionId: watch.sessionId,
+      });
+      watch.status = "FIRED";
+      watch.firedRunId = runId;
+      persist();
+      return;
+    }
     const job = startPurchaseJob(watch.sessionId, {
       merchant: "blinkit",
       items: [{ product: watch.productId, productName: watch.productName, quantity: watch.quantity }],

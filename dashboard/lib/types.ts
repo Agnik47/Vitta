@@ -15,7 +15,7 @@ export interface Mandate {
     expires_at: string;
   };
   reserve: {
-    type: 'prava_mandate_sandbox';
+    type: 'razorpay_test_order' | 'prava_mandate_sandbox';
     blocked_inr: number;
     ref: string;
   };
@@ -58,9 +58,9 @@ export interface Receipt {
   authorization_id?: string;
   mandate_hash: string;
   cart: { merchant: string; items: number; total_inr: number };
-  payment: { rail: 'prava_sandbox'; reserve_ref: string; status: 'authorized' };
+  payment: { rail: 'razorpay_test' | 'prava_sandbox'; reserve_ref: string; status: 'authorized' };
   // `mode` distinguishes a receipt whose merchant order was really placed (LIVE) from one that
-  // settled against the Prava test reserve without placing an order (TEST). Optional for backward
+  // settled against the Razorpay test reserve without placing an order (TEST). Optional for backward
   // compatibility: receipts written before the mode existed are LIVE by definition. Mirrors
   // src/receipt/schema.ts by hand, per this file's existing convention.
   execution: { command: string; run_id: string; profile: string; mode?: "TEST" | "LIVE" };

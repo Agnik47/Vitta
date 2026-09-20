@@ -31,6 +31,9 @@ export interface MerchantSearchResult {
   /** Set only on a genuine failure — never populated alongside fabricated products. */
   error?: string;
   authRequired?: boolean;
+  /** Which real source answered ("anakin" or "webcmd") — set by lib/product-sources, so a consumer
+   *  like the Deal Discovery agent can report where a price actually came from. */
+  source?: string;
 }
 
 function searchCliEntryPoint(): string {

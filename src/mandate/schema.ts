@@ -13,9 +13,12 @@ export interface Mandate {
     expires_at: string; // ISO 8601
   };
   reserve: {
-    type: 'prava_mandate_sandbox'; // labelled honestly — see docs/00-PRODUCT-BRIEF.md § Hard scope boundary
+    // Labelled honestly — a test-mode reserve. 'prava_mandate_sandbox' is the previous rail: mandates
+    // written under it stay readable and their signatures still verify, but a Razorpay ledger cannot
+    // read their reserve, so they have to be funded again.
+    type: 'razorpay_test_order' | 'prava_mandate_sandbox';
     blocked_inr: number;
-    ref: string; // Prava reserveRef from Ledger.fund()
+    ref: string; // reserveRef from Ledger.fund(), e.g. razorpay-order:order_XXXX
   };
   sig: string; // Ed25519 signature, base64 or hex
 }
@@ -40,7 +43,7 @@ export function isMandate(value: unknown): value is Mandate {
 
   if (typeof m.reserve !== 'object' || m.reserve === null) return false;
   const reserve = m.reserve as Record<string, unknown>;
-  if (reserve.type !== 'prava_mandate_sandbox') return false;
+  if (reserve.type !== 'razorpay_test_order' && reserve.type !== 'prava_mandate_sandbox') return false;
   if (typeof reserve.blocked_inr !== 'number') return false;
   if (typeof reserve.ref !== 'string') return false;
 

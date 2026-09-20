@@ -1,7 +1,7 @@
-// GET-only. Reads the current mandate.json and the live Prava reserve balance (read-only key).
-// Never writes anything, never imports PRAVA_SECRET_KEY from client code.
+// GET-only. Reads the current mandate.json and the live Razorpay reserve balance (captured − spent).
+// Never writes anything; RAZORPAY_KEY_SECRET stays server-side.
 import { readCurrentMandate } from '@/lib/read';
-import { getReserveBalance } from '@/lib/prava';
+import { getReserveBalance } from '@/lib/razorpay';
 
 export async function GET() {
   const mandate = readCurrentMandate();

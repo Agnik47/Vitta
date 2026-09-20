@@ -1,0 +1,45 @@
+{
+  "name": "vitta-deal-discovery",
+  "description": "Discovers candidate products and live prices across Blinkit, Zepto and BigBasket using Anakin web access (with a read-only webcmd fallback). Read-only: it cannot place an order.",
+  "version": "0.1.0",
+  "protocolVersion": "0.3.0",
+  "url": "http://localhost:8000",
+  "preferredTransport": "JSONRPC",
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8000",
+      "protocolBinding": "JSONRPC"
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "discover-deals",
+      "name": "Discover deals",
+      "description": "Search the supported merchants for a product and return normalized candidates.",
+      "tags": [
+        "product-search",
+        "merchant-search",
+        "price-discovery",
+        "anakin"
+      ],
+      "examples": [
+        "Search Blinkit, Zepto and BigBasket for atta 2kg"
+      ]
+    }
+  ],
+  "provider": {
+    "organization": "Vitta",
+    "url": "https://github.com/Agnik47/Vitta"
+  }
+}

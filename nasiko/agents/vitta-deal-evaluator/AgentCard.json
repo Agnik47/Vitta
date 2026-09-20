@@ -1,0 +1,44 @@
+{
+  "name": "vitta-deal-evaluator",
+  "description": "Compares discovered candidates against the user’s constraints and proposes the best purchase. A proposal is not authorization — Vitta’s gate decides whether it may be spent.",
+  "version": "0.1.0",
+  "protocolVersion": "0.3.0",
+  "url": "http://localhost:8000",
+  "preferredTransport": "JSONRPC",
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8000",
+      "protocolBinding": "JSONRPC"
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "evaluate-deals",
+      "name": "Evaluate deals",
+      "description": "Select the cheapest eligible candidate (size, stock, merchant and price ceiling respected) and explain why.",
+      "tags": [
+        "evaluation",
+        "comparison",
+        "deterministic"
+      ],
+      "examples": [
+        "Pick the cheapest eligible 2kg atta under ₹300"
+      ]
+    }
+  ],
+  "provider": {
+    "organization": "Vitta",
+    "url": "https://github.com/Agnik47/Vitta"
+  }
+}

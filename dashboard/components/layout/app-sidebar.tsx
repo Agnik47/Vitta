@@ -6,6 +6,7 @@ import { useRef } from "react";
 import gsap from "gsap";
 import {
   Activity,
+  Bot,
   BookOpen,
   Columns3,
   Crosshair,
@@ -37,6 +38,7 @@ const SHOP_NAV = [
   { href: "/shop", label: "Search & compare", icon: Store },
   { href: "/shop/cart", label: "Cart", icon: ShoppingCart, cartBadge: true },
   { href: "/shop/sniper", label: "Price sniper", icon: Crosshair },
+  { href: "/shop/agents", label: "Agent activity", icon: Bot },
 ];
 
 const REAL_NAV = [

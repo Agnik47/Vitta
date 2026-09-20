@@ -330,7 +330,7 @@ export default function DocsPage() {
           <P className="max-w-2xl mt-3">
             The command-line policy engine and execution gateway for Vitta. Gates AI browser-automation
             commands behind human-issued, <strong className="text-foreground font-semibold">Ed25519-signed spending mandates</strong>,
-            settles via Prava Payments, and records cryptographically verifiable receipts in a hash chain.
+            settles against a Razorpay test-mode reserve, and records cryptographically verifiable receipts in a hash chain.
           </P>
 
           {/* Command quick-ref */}
@@ -345,7 +345,7 @@ export default function DocsPage() {
                 { cmd: "gate scan", desc: "Inspect webcmd coverage", id: "gate-scan" },
                 { cmd: "gate mandate create", desc: "Issue a signed mandate", id: "gate-mandate-create" },
                 { cmd: "gate mandate resign", desc: "Re-sign with new caps", id: "gate-mandate-resign" },
-                { cmd: "gate fund", desc: "Attach a Prava reserve", id: "gate-fund" },
+                { cmd: "gate fund", desc: "Fund a mandate via a Razorpay test order", id: "gate-fund" },
                 { cmd: "gate run", desc: "Execute with policy enforcement", id: "gate-run" },
                 { cmd: "gate verify", desc: "Verify cryptographic chain", id: "gate-verify" },
               ].map((item, i, arr) => (
@@ -435,7 +435,7 @@ export default function DocsPage() {
             { layer: "Policy", path: "src/policy/decide.ts", desc: "Pure function: mandate × spend request → ALLOW | DENY | STEP_UP. Zero I/O, 65 unit tests." },
             { layer: "Mandate", path: "src/mandate/", desc: "Ed25519 key management, mandate schema validation, signing, and DID derivation." },
             { layer: "Receipt", path: "src/receipt/", desc: "SHA-256 hash chain construction, receipt signing, and chain verification." },
-            { layer: "Ledger", path: "src/ledger/", desc: "Prava Payments credit entitlement — balance queries, deduction, and reserve management." },
+            { layer: "Ledger", path: "src/ledger/", desc: "Razorpay test-mode Orders — the reserve is what Razorpay reports as captured, less what Vitta has drawn." },
             { layer: "webcmd", path: "src/webcmd/", desc: "Manifest loading, cart-total resolution, and process spawning (childProcess.spawn, not shell)." },
           ].map((row, i, arr) => (
             <div key={row.layer} className={cn("flex items-start gap-5 px-5 py-4", i < arr.length - 1 && "border-b border-border")}>
@@ -504,17 +504,17 @@ export default function DocsPage() {
         {/* ══ gate fund ═════════════════════════════════════════════════ */}
         <DocH2 id="gate-fund">gate fund</DocH2>
         <P>
-          Attaches a funded Prava Payments credit reserve to a mandate. In test mode, this creates a
+          Funds a mandate through Razorpay. In test mode, this creates a
           credit entitlement checked by the policy engine before allowing any write transaction.
         </P>
         <DocH3 id="gate-fund-usage">Usage</DocH3>
-        <CodeBlock code={`# Fund a new reserve\ngate fund <mandate_id> --amount <inr>\n\n# Attach an existing reserve reference\ngate fund <mandate_id> --reserve-ref <prava_session_ref>`} />
+        <CodeBlock code={`# Fund a new reserve\ngate fund <mandate_id> --amount <inr>\n\n# Attach an existing reserve reference\ngate fund <mandate_id> --reserve-ref razorpay-order:<order_id>`} />
         <FlagTable flags={[
-          { flag: "--amount", description: "Amount in INR (₹) to fund. Creates a new Prava credit entitlement." },
-          { flag: "--reserve-ref", description: "Attach an existing Prava reserve reference instead of creating a new one." },
+          { flag: "--amount", description: "Amount in INR (₹) to fund. Creates a Razorpay test order — pay it in Checkout." },
+          { flag: "--reserve-ref", description: "Attach an order that has been paid — the real captured balance is read from Razorpay." },
         ]} />
         <Callout type="info">
-          Configure <IC>PRAVA_API_KEY</IC> and <IC>PRAVA_CREDIT_ENTITLEMENT_ID</IC> in <IC>.env</IC> to enable
+          Configure <IC>RAZORPAY_KEY_ID</IC> (a <IC>rzp_test_…</IC> key) and <IC>RAZORPAY_KEY_SECRET</IC> in <IC>.env</IC> to enable
           live reserve balance queries. Without these, the reserve shows as unavailable in the dashboard.
         </Callout>
 
@@ -537,7 +537,7 @@ export default function DocsPage() {
             { step: "02", label: "Cart resolution", desc: "Calls webcmd blinkit cart -f json and checkout -f json to get the live cart total from the real site." },
             { step: "03", label: "Policy decision", desc: "decide() evaluates 9 ordered rules against the mandate. Pure TypeScript, zero LLM calls, deterministic." },
             { step: "04", label: "Process execution", desc: "If ALLOW, spawns the webcmd binary via Node.js childProcess.spawn — not shell, so no injection risk." },
-            { step: "05", label: "Ledger deduction", desc: "Calls Prava Payments API to deduct the settled amount from the mandate's credit reserve." },
+            { step: "05", label: "Ledger deduction", desc: "Records the draw against the Razorpay reserve (a local append-only log plus the order's server-side note); idempotent on the run id." },
             { step: "06", label: "Signed receipt", desc: "Writes a hash-linked, Ed25519-signed receipt to receipts/ and appends an event line to events.jsonl." },
           ].map((s, i, arr) => (
             <div key={s.step} className={cn("flex gap-4 px-5 py-4", i < arr.length - 1 && "border-b border-border")}>
@@ -577,7 +577,7 @@ export default function DocsPage() {
         <DocH3 id="gate-receipt-show-usage">Usage</DocH3>
         <CodeBlock code={`gate receipt show <receipt_id>`} />
         <DocH3 id="gate-receipt-show-output">Output</DocH3>
-        <CodeBlock title="output" code={`✓ RECEIPT rcp_01JKEY5678 signed\n\n  mandate   mnd_01JKEY1234\n  cart      blinkit · 2 items · ₹476\n  payment   prava_sandbox · captured\n  run       blinkit/place-order · run_9876\n  evidence  trace sha256:a1b2c3…  order #ORD12345\n  prev      0000…0000  (chain head)`} />
+        <CodeBlock title="output" code={`✓ RECEIPT rcp_01JKEY5678 signed\n\n  mandate   mnd_01JKEY1234\n  cart      blinkit · 2 items · ₹476\n  payment   razorpay_test · authorized\n  run       blinkit/place-order · run_9876\n  evidence  trace sha256:a1b2c3…  order #ORD12345\n  prev      0000…0000  (chain head)`} />
 
         {/* ══ gate verify ═══════════════════════════════════════════════ */}
         <DocH2 id="gate-verify">gate verify</DocH2>
@@ -648,7 +648,7 @@ export default function DocsPage() {
           and signed. The signature is stored in the <IC>sig</IC> field. Rule 1 re-verifies this on every{" "}
           <IC>gate run</IC>.
         </P>
-        <CodeBlock language="json" title="receipt schema" code={`{\n  "receipt_id":        "rcp_01JKEY5678",\n  "mandate_hash":      "sha256:…",\n  "signed_at":         "2024-01-01T12:00:00.000Z",\n  "cart": {\n    "merchant":  "blinkit",\n    "items":     2,\n    "total_inr": 476\n  },\n  "payment": {\n    "rail":        "prava_sandbox",\n    "reserve_ref": "ent_…",\n    "status":      "captured"\n  },\n  "prev_receipt_hash": "sha256:…",   // ← hash chain link\n  "sig":               "4w/Lk00q…"  // ← Ed25519, 64 bytes\n}`} />
+        <CodeBlock language="json" title="receipt schema" code={`{\n  "receipt_id":        "rcp_01JKEY5678",\n  "mandate_hash":      "sha256:…",\n  "signed_at":         "2024-01-01T12:00:00.000Z",\n  "cart": {\n    "merchant":  "blinkit",\n    "items":     2,\n    "total_inr": 476\n  },\n  "payment": {\n    "rail":        "razorpay_test",\n    "reserve_ref": "razorpay-order:order_…",\n    "status":      "authorized"\n  },\n  "prev_receipt_hash": "sha256:…",   // ← hash chain link\n  "sig":               "4w/Lk00q…"  // ← Ed25519, 64 bytes\n}`} />
 
         {/* ══ Receipt chain ═════════════════════════════════════════════ */}
         <DocH2 id="receipt-chain">Receipt chain</DocH2>

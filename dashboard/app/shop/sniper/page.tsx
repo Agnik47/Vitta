@@ -115,6 +115,15 @@ function WatchCard({ watch, onChanged }: { watch: SniperWatch; onChanged: () => 
               <ExternalLink className="size-3" strokeWidth={1.75} />
             </Link>
           )}
+          {watch.firedRunId && (
+            <Link
+              href={`/shop/agents?run=${watch.firedRunId}`}
+              className="flex items-center gap-1.5 rounded-lg border border-seal/30 bg-seal/5 px-3 py-1.5 text-xs font-medium text-seal transition-colors hover:bg-seal/10"
+            >
+              View the agent run
+              <ExternalLink className="size-3" strokeWidth={1.75} />
+            </Link>
+          )}
           {!isWatchTerminal(watch.status) && (
             <Button size="sm" variant="outline" className="rounded-lg" onClick={handleCancel} disabled={cancelling}>
               {cancelling ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}

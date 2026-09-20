@@ -1,0 +1,44 @@
+{
+  "name": "vitta-shopping-planner",
+  "description": "Turns a natural-language shopping request into a structured shopping intent (product, quantity, price ceiling, merchants, whether to buy). Plans only — never searches or buys.",
+  "version": "0.1.0",
+  "protocolVersion": "0.3.0",
+  "url": "http://localhost:8000",
+  "preferredTransport": "JSONRPC",
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8000",
+      "protocolBinding": "JSONRPC"
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "plan-shopping-intent",
+      "name": "Plan shopping intent",
+      "description": "Parse a request like \"find the cheapest 2kg atta under ₹300 and buy it\" into a ShoppingIntent.",
+      "tags": [
+        "planning",
+        "shopping",
+        "intent-parsing"
+      ],
+      "examples": [
+        "Find me the cheapest 2kg atta under ₹300 and buy it"
+      ]
+    }
+  ],
+  "provider": {
+    "organization": "Vitta",
+    "url": "https://github.com/Agnik47/Vitta"
+  }
+}
