@@ -35,6 +35,10 @@ function timeRange(startIso: string, endIso: string): string {
 function WatchCard({ watch, onChanged }: { watch: SniperWatch; onChanged: () => void }) {
   const [cancelling, setCancelling] = useState(false);
   const lastCheck = watch.checks[watch.checks.length - 1];
+  // When the last-seen price was actually read: the newest check that got a real price.
+  const lastPriced = [...watch.checks].reverse().find((c) => c.priceInr !== null);
+  const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const failedChecks = watch.checks.filter((c) => c.priceInr === null).length;
 
   async function handleCancel() {
     setCancelling(true);
@@ -80,6 +84,9 @@ function WatchCard({ watch, onChanged }: { watch: SniperWatch; onChanged: () => 
           <div className="mt-0.5 font-heading text-lg font-bold tabular-nums text-foreground">
             {watch.lastSeenPriceInr !== undefined ? `₹${watch.lastSeenPriceInr.toLocaleString("en-IN")}` : "—"}
           </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {lastPriced ? `as of ${clock(lastPriced.ts)}` : "no price read yet"}
+          </div>
         </div>
         <div className="px-5 py-3">
           <div className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Target</div>
@@ -91,6 +98,10 @@ function WatchCard({ watch, onChanged }: { watch: SniperWatch; onChanged: () => 
           <div className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Checks</div>
           <div className="mt-0.5 font-heading text-lg font-bold tabular-nums text-foreground">
             {watch.checks.length}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {watch.lastCheckedAt ? `last at ${clock(watch.lastCheckedAt)}` : "none yet"}
+            {failedChecks > 0 && ` · ${failedChecks} couldn't read a price`}
           </div>
         </div>
       </div>

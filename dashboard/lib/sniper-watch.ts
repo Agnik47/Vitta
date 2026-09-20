@@ -21,6 +21,10 @@ export { MIN_INTERVAL_MS, DEFAULT_INTERVAL_MS, MAX_WINDOW_MS } from "./sniper-sh
 export type { SniperWatch, SniperWatchStatus, SniperCheck } from "./sniper-shared";
 
 const TICK_MS = 15_000;
+/** While a watch waits for its window, its price is still read (never acted on) this often, so the
+ *  page shows a real last-seen price and a running check count instead of a blank until the window
+ *  opens. Kept slower than the in-window interval: each read drives the shared browser. */
+const PREVIEW_INTERVAL_MS = 10 * 60_000;
 const MAX_WATCHES = 100;
 const MAX_CHECKS_PER_WATCH = 200;
 const STORAGE_FILE = path.join(process.cwd(), "sniper_watches_store.json");
@@ -116,22 +120,35 @@ if (!store.initialized) {
 // The ticker
 // --------------------------------------------------------------------------------------------
 
-async function runCheck(watch: SniperWatch): Promise<void> {
+/** `preview` reads the price BEFORE the window opens. It records what it saw and returns: nothing
+ *  a preview sees can ever start a purchase — only an in-window check reaches fire(). */
+async function runCheck(watch: SniperWatch, preview = false): Promise<void> {
   try {
     const result = await getBlinkitProductDetail(watch.productId);
 
     // Re-read from the store: this check took 20-40s, during which the watch may have been
     // cancelled. Acting on the stale object would fire a watch the user already called off.
     const current = watches.get(watch.id);
-    if (!current || current.status !== "WATCHING") return;
+    if (!current || current.status !== (preview ? "SCHEDULED" : "WATCHING")) return;
+    const tag = preview ? "Preview — " : "";
 
     if (!result.ok) {
-      recordCheck(current, null, result.authRequired ? `Not logged in to Blinkit — ${result.error}` : result.error);
+      recordCheck(current, null, tag + (result.authRequired ? `Not logged in to Blinkit — ${result.error}` : result.error));
       persist();
       return;
     }
 
     const { product } = result;
+    if (preview) {
+      const opens = new Date(current.windowStartIso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+      recordCheck(
+        current,
+        product.priceInr,
+        `${tag}₹${product.priceInr}${product.available ? "" : " (out of stock)"} — the window opens at ${opens}; nothing is bought before then`
+      );
+      persist();
+      return;
+    }
     if (!product.available) {
       recordCheck(current, product.priceInr, `₹${product.priceInr} but out of stock — not buying`);
       persist();
@@ -216,6 +233,7 @@ function fire(watch: SniperWatch, priceInr: number): void {
 function tick(): void {
   const now = Date.now();
   const due: SniperWatch[] = [];
+  const previews: SniperWatch[] = [];
   let changed = false;
 
   // One synchronous pass: every eligible watch is flagged before any check starts, so a slow check
@@ -231,7 +249,15 @@ function tick(): void {
       changed = true;
       continue;
     }
-    if (now < start) continue;
+    if (now < start) {
+      // Not open yet: read the price now and then (a preview), so the card has something real to show.
+      const lastPreview = watch.lastCheckedAt ? new Date(watch.lastCheckedAt).getTime() : 0;
+      if (watch.status === "SCHEDULED" && !checking.has(watch.id) && now - lastPreview >= Math.max(PREVIEW_INTERVAL_MS, watch.intervalMs)) {
+        checking.add(watch.id);
+        previews.push(watch);
+      }
+      continue;
+    }
 
     if (watch.status === "SCHEDULED") {
       watch.status = "WATCHING";
@@ -250,6 +276,7 @@ function tick(): void {
   // Dispatched, never awaited in the loop: a real check takes 20-40s, so awaiting them in sequence
   // would stretch every watch's true interval by the number of watches ahead of it.
   for (const watch of due) void runCheck(watch);
+  for (const watch of previews) void runCheck(watch, true);
 }
 
 // Exactly one ticker per process, over the shared store declared above. See that comment for why

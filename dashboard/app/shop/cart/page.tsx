@@ -43,6 +43,29 @@ export default function CartPage() {
   const [starting, setStarting] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [minCartInr, setMinCartInr] = useState<number | null>(null);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  // The cart provider lives in the root layout, so it keeps its state across pages. Re-read the real
+  // cart whenever this page opens, so anything added elsewhere (another tab, the agents' hand-off) shows.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Signed out, the cart lives in Vitta's own shopping browser as a guest cart — say so.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/shop/blinkit-session")
+      .then((r) => r.json())
+      .then((json: { ok?: boolean; signedIn?: boolean }) => {
+        if (!cancelled && json.ok && typeof json.signedIn === "boolean") setSignedIn(json.signedIn);
+      })
+      .catch(() => {
+        // Unknown is fine: the notice simply is not shown.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +153,18 @@ export default function CartPage() {
         title="Cart"
         description={`Your real ${MERCHANT_LABEL[MERCHANT]} cart, read live. Every quantity and total here comes from ${MERCHANT_LABEL[MERCHANT]} itself.`}
       />
+
+      {signedIn === false && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-step-up/30 bg-step-up/5 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-step-up" strokeWidth={1.75} />
+          <span>
+            <strong className="font-semibold text-foreground">This is a guest cart.</strong> Vitta fills it in its own shopping browser, which
+            isn&apos;t signed in to Blinkit — so these items are real and checked live, but they won&apos;t appear in your own Blinkit app or
+            website. To use your account&apos;s cart, run <code className="font-mono text-foreground">webcmd blinkit login</code>, finish the
+            login in the window it opens, then refresh this page.
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-deny/30 bg-deny/5 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">

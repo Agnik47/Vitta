@@ -3,7 +3,7 @@
 // with the CLI process, not an error — see docs/agent-b/ERROR-HANDLING.md § Dashboard.
 import { readFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Mandate, GateEvent, Receipt, TransactionAuthorization } from './types';
+import type { Mandate, GateEvent, Receipt, TransactionAuthorization, FundingReceipt } from './types';
 import { sha256Hex, CHAIN_HEAD_HASH, verifySignature } from './hash';
 
 export function getDataDir(): string {
@@ -118,6 +118,30 @@ export function readAuthorizations(): TransactionAuthorization[] {
     }
   }
   return authorizations;
+}
+
+export function readFundingReceipts(): FundingReceipt[] {
+  const dir = path.join(getRuntimeDataDir(), 'funding-receipts');
+  if (!existsSync(dir)) return [];
+
+  const receipts: FundingReceipt[] = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      receipts.push(JSON.parse(readFileSync(path.join(dir, file), 'utf-8')) as FundingReceipt);
+    } catch {
+      // Mid-write or malformed file — skip it, don't crash the route.
+    }
+  }
+  return receipts;
+}
+
+/** A FundingReceipt is signed but not chain-linked, so — like an authorization — only its own
+ *  signature is checked. null = no gate key on this machine yet. */
+export function verifyFundingReceiptSignature(receipt: FundingReceipt, gatePublicKeyPem: string | null): boolean | null {
+  if (!gatePublicKeyPem) return null;
+  const { sig, ...unsigned } = receipt;
+  return verifySignature(unsigned, sig, gatePublicKeyPem);
 }
 
 /** A TransactionAuthorization is signed but never chain-linked (see authorization.ts's own header

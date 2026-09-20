@@ -8,6 +8,7 @@
 // process-spawning path is a real command-injection hole. Every argument here can originate from a
 // browser request, so this is not optional hardening — it's the actual security boundary.
 import { execFile } from "node:child_process";
+import { markBrowserWrite, runBrowserTask } from "@/lib/browser-queue";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { getDataDir, getRuntimeDataDir, resolveCliEntryPoint } from "@/lib/read";
@@ -88,7 +89,24 @@ export function loadRootEnvOverrides(): Record<string, string> {
  * Never rejects on a non-zero exit — a DENY/STEP_UP is a normal, expected result, not a fault of
  * this function, so callers inspect `ok`/`exitCode` rather than catching.
  */
+// Browser commands that land on an absolute state, so running one twice cannot do anything the first
+// run did not. Only these may be retried after a stuck-session reset; a purchase never is.
+const REPEAT_SAFE_BROWSER_COMMANDS = new Set(["set-cart-quantity", "clear-cart"]);
+
 export function runGateCli(argv: string[], timeoutMs = 60_000): Promise<GateCliResult> {
+  // Only `gate run -- webcmd …` drives the browser; fund / mandate / scan never touch it.
+  if (argv[0] !== "run") return spawnGateCli(argv, timeoutMs);
+  markBrowserWrite();
+  // `gate run -- webcmd <site> <command> …`: the site is the word after `webcmd`.
+  const webcmdAt = argv.indexOf("webcmd");
+  return runBrowserTask(() => spawnGateCli(argv, timeoutMs), {
+    site: (webcmdAt >= 0 ? argv[webcmdAt + 1] : undefined) ?? "shared",
+    failure: (r) => (r.ok ? null : `${r.stdout}\n${r.stderr}`),
+    retryable: argv.some((a) => REPEAT_SAFE_BROWSER_COMMANDS.has(a)),
+  });
+}
+
+function spawnGateCli(argv: string[], timeoutMs: number): Promise<GateCliResult> {
   return new Promise((resolve) => {
     execFile(
       process.execPath, // the same node binary running this server — never a shell-resolved "node"

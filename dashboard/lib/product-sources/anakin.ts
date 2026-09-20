@@ -16,6 +16,7 @@
 // `outputSchema` is used rather than bare `generateJson` so the extracted fields are ones we
 // specified, not an undocumented guess — and any record missing a real name or price is dropped
 // downstream rather than defaulted, so a card never shows an invented price.
+import { parseBigBasketMarkdown } from "@/lib/product-sources/bigbasket-markdown";
 import { runtimeEnv } from "@/lib/runtime-env";
 import type { LiveMerchant, LiveProduct, MerchantSearchResult, ProductSource } from "@/lib/product-sources/types";
 
@@ -71,6 +72,23 @@ interface AnakinScrapeResponse {
   generatedJson?: { products?: AnakinProductRow[]; data?: { products?: AnakinProductRow[] } };
   error?: string | null;
   durationMs?: number;
+  /** The rendered page as markdown — used as a deterministic fallback when the AI extraction is empty. */
+  markdown?: string;
+  html?: string;
+}
+
+/** Zepto (and others) sometimes hand Anakin's browser a JS bot-check page instead of results: a ~2KB
+ * shell with a `challenge-container` and no content. Retrying does not help (verified live with a
+ * 7s settle wait), so it is reported at once — and the next source gets its turn while the caller's
+ * time budget is still intact. */
+/** Once Anakin is shown a bot-check for a merchant, further scrapes for it would only spend a credit
+ * and 16s to fail the same way. Skip Anakin for that merchant for a while and let the next source
+ * (webcmd) serve it at once. */
+const BOT_CHECK_COOLDOWN_MS = 10 * 60_000;
+const botCheckedUntil = new Map<string, number>();
+
+function isBotChallenge(body: AnakinScrapeResponse): boolean {
+  return typeof body.html === "string" && body.html.includes("challenge-container") && !body.markdown?.trim();
 }
 
 function apiKey(): string | undefined {
@@ -101,7 +119,8 @@ function httpUrl(raw: unknown): string | undefined {
 export const anakinSource: ProductSource = {
   name: "anakin",
   isAvailable: () => apiKey() !== undefined,
-  supports: (merchant) => confirmedMerchants().has(merchant) && SEARCH_URL[merchant] !== undefined,
+  supports: (merchant) =>
+    confirmedMerchants().has(merchant) && SEARCH_URL[merchant] !== undefined && (botCheckedUntil.get(merchant) ?? 0) <= Date.now(),
 
   async search(merchant: LiveMerchant, query: string): Promise<MerchantSearchResult> {
     const buildUrl = SEARCH_URL[merchant];
@@ -117,8 +136,17 @@ export const anakinSource: ProductSource = {
     // (chips/milk/eggs empty, atta/Maggi real) — beyond what "one retry covers most misses" assumed.
     // A 3rd attempt is still bounded (never hammers indefinitely) and directly targets that gap.
     const maxAttempts = 3;
+    // The retries are worth having, but not without a ceiling: for a page that renders empty, three
+    // attempts of 10-16s plus the webcmd fallback ran past a minute (measured live, "biscuit" on
+    // BigBasket) — and the Deal Discovery agent gives each merchant a hard 50s. A total budget keeps
+    // the whole merchant search inside that.
+    const startedAt = Date.now();
+    const budgetMs = Number(runtimeEnv("VITTA_ANAKIN_BUDGET_MS")) || 40_000;
+    const MIN_ATTEMPT_MS = 10_000;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const isLastAttempt = attempt === maxAttempts - 1;
+      const remainingMs = budgetMs - (Date.now() - startedAt);
+      // Another attempt takes ~10-16s; if there is not room for one after this, this is the last.
+      const isLastAttempt = attempt === maxAttempts - 1 || remainingMs < 2 * MIN_ATTEMPT_MS + 4_000;
       try {
         const res = await fetch(ANAKIN_SCRAPE_URL, {
           method: "POST",
@@ -131,7 +159,8 @@ export const anakinSource: ProductSource = {
             outputSchema: OUTPUT_SCHEMA,
           }),
           cache: "no-store", // never let a framework-level cache serve a stale price
-          signal: AbortSignal.timeout(90_000), // docs: the inline endpoint blocks up to ~90s
+          // docs: the inline endpoint blocks up to ~90s — but never longer than the budget has left
+          signal: AbortSignal.timeout(Math.max(MIN_ATTEMPT_MS, Math.min(90_000, remainingMs))),
         });
 
         if (!res.ok) {
@@ -143,6 +172,16 @@ export const anakinSource: ProductSource = {
         if (body.error) {
           if (!isLastAttempt) continue;
           return { merchant, ok: false, products: [], error: body.error };
+        }
+
+        if (isBotChallenge(body)) {
+          botCheckedUntil.set(merchant, Date.now() + BOT_CHECK_COOLDOWN_MS);
+          return {
+            merchant,
+            ok: false,
+            products: [],
+            error: `${merchant} showed Anakin's browser a bot-check page instead of results, so nothing could be read`,
+          };
         }
 
         const rows = body.generatedJson?.products ?? body.generatedJson?.data?.products ?? [];
@@ -166,6 +205,24 @@ export const anakinSource: ProductSource = {
             availabilityLabel: inStock ? "Available" : "Out of stock",
             url: httpUrl(row.url),
           });
+        }
+
+        // The AI extraction can come back empty for a page that plainly has products (seen live on
+        // BigBasket). Read the page itself before deciding it has none.
+        if (products.length === 0 && merchant === "bigbasket" && body.markdown) {
+          for (const item of parseBigBasketMarkdown(body.markdown)) {
+            products.push({
+              merchant,
+              productId: "", // same as above: the product URL is the identifier
+              name: item.name,
+              priceInr: item.priceInr,
+              mrpInr: item.mrpInr,
+              imageUrl: item.imageUrl,
+              available: item.available,
+              availabilityLabel: item.available ? "Available" : "Out of stock",
+              url: item.url,
+            });
+          }
         }
 
         if (products.length > 0) return { merchant, ok: true, products };

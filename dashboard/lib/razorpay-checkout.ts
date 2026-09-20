@@ -58,9 +58,18 @@ export interface CheckoutDetails {
   mandateId: string;
 }
 
+/** The order was already paid (HTTP 409 from the checkout route) — a normal state, not a failure. */
+export class OrderAlreadyPaidError extends Error {
+  constructor(message = "This order has already been paid.") {
+    super(message);
+    this.name = "OrderAlreadyPaidError";
+  }
+}
+
 export async function fetchCheckoutDetails(orderId: string): Promise<CheckoutDetails> {
   const res = await fetch(`/api/shop/razorpay/checkout?orderId=${encodeURIComponent(orderId)}`, { cache: "no-store" });
-  const body = (await res.json()) as { ok: boolean; message?: string } & Partial<CheckoutDetails>;
+  const body = (await res.json()) as { ok: boolean; message?: string; alreadyPaid?: boolean } & Partial<CheckoutDetails>;
+  if (!body.ok && body.alreadyPaid) throw new OrderAlreadyPaidError(body.message);
   if (!body.ok || !body.keyId || !body.orderId || body.amountPaise === undefined || !body.currency || !body.mandateId) {
     throw new Error(body.message ?? "Could not load the order for checkout");
   }

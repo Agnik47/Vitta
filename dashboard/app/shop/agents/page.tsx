@@ -74,7 +74,7 @@ function AgentsView() {
       setSelectedId(body.runId);
       setRequest("");
       setConfirm(false);
-      toast.success("Agents started");
+      toast.success(confirm ? "Agents started" : "Agents started — they will hand the pick to you");
       void refresh();
     } catch (err) {
       toast.error((err as Error).message);
@@ -83,7 +83,9 @@ function AgentsView() {
     }
   }
 
-  const canStart = request.trim().length > 0 && confirm && !starting;
+  // A run needs no authorization by default: it ends with a hand-off to the person. Ticking the box is
+  // the explicit opt-in to an autonomous purchase.
+  const canStart = request.trim().length > 0 && !starting;
 
   return (
     <div>
@@ -115,8 +117,13 @@ function AgentsView() {
           <label className="flex max-w-md cursor-pointer items-start gap-2.5 text-[13px] leading-relaxed text-muted-foreground">
             <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-1 size-4 accent-current" />
             <span>
-              I authorize these agents to place an order under my current mandate with no further input. The mandate’s caps, merchants and
-              expiry still apply — the gate enforces them, not the agents.
+              <strong className="font-semibold text-foreground">Let the agents place the order for me</strong>, with no further input. The
+              mandate’s caps, merchants and expiry still apply — the gate enforces them, not the agents.
+              <span className="mt-1 block text-ink-faint">
+                {confirm
+                  ? "The Purchase Agent may buy the pick under your mandate."
+                  : "Left off (recommended): the agents find and pick the deal, then hand it to you — review it in your cart and press Proceed to purchase."}
+              </span>
             </span>
           </label>
         </div>

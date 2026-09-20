@@ -86,3 +86,19 @@ export interface TransactionAuthorization {
   authorized_at: string;
   sig: string;
 }
+
+// Read-only mirror of src/receipt/funding.ts's FundingReceipt — the signed record of a Razorpay TEST
+// payment funding a mandate's reserve. Separate from the spend Receipt chain: a top-up is not a spend.
+export interface FundingReceipt {
+  funding_receipt_id: string;
+  mandate_id: string;
+  mandate_hash: string;
+  reserve_ref: string;
+  order_id: string;
+  payments: Array<{ id: string; amount_inr: number; method: string; paid_at: string }>;
+  amount_inr: number;
+  currency: 'INR';
+  mode: 'TEST';
+  issued_at: string;
+  sig: string;
+}

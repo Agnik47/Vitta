@@ -9,9 +9,9 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
-import { TEST_CARD_HELP, fetchCheckoutDetails, openCheckout, verifyPayment, type CheckoutDetails } from "@/lib/razorpay-checkout";
+import { OrderAlreadyPaidError, TEST_CARD_HELP, fetchCheckoutDetails, openCheckout, verifyPayment, type CheckoutDetails } from "@/lib/razorpay-checkout";
 
-type Phase = "loading" | "ready" | "paying" | "verifying" | "done" | "error";
+type Phase = "loading" | "ready" | "paying" | "verifying" | "done" | "already-paid" | "error";
 
 export default function RazorpayPayPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -29,6 +29,10 @@ export default function RazorpayPayPage() {
       })
       .catch((err: Error) => {
         if (cancelled) return;
+        if (err instanceof OrderAlreadyPaidError) {
+          setPhase("already-paid");
+          return;
+        }
         setMessage(err.message);
         setPhase("error");
       });
@@ -105,6 +109,22 @@ export default function RazorpayPayPage() {
             </div>
             <Link href="/mandate" className="text-sm text-seal underline underline-offset-2">
               Back to the mandate
+            </Link>
+          </div>
+        )}
+
+        {phase === "already-paid" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-allow">
+              <CheckCircle2 className="size-5" /> This order is already paid — there is nothing more to pay.
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Razorpay has the payment. The mandate&apos;s reserve is whatever Razorpay reports as captured; open the mandate to see it. If the
+              balance is missing, attach the order with the &ldquo;confirm funding&rdquo; button or
+              {" "}<code className="font-mono">gate fund &lt;mandate&gt; --reserve-ref razorpay-order:{orderId}</code>.
+            </p>
+            <Link href="/mandate" className="text-sm text-seal underline underline-offset-2">
+              Go to the mandate
             </Link>
           </div>
         )}

@@ -55,6 +55,9 @@ export interface StartAgentRunInput {
   mode: "TEST" | "LIVE";
   mandateId?: string;
   sessionId?: string;
+  /** Human in the loop: stop at the Evaluator's pick and hand it to the person (their cart), instead of
+   *  letting the Purchase Agent buy it. Off only for a run the person explicitly authorized. */
+  review?: boolean;
   /** The dashboard's own origin — lets the Deal Discovery agent search through /api/shop/search (Anakin first). */
   dashboardOrigin?: string;
 }
@@ -95,6 +98,7 @@ export function startAgentRun(input: StartAgentRunInput): { runId: string } {
     "--run-id",
     runId,
   ];
+  if (input.review) argv.push("--review");
   if (input.mandateId) argv.push("--mandate", input.mandateId);
   if (input.sessionId) argv.push("--session", input.sessionId);
   // Agents run in-process unless the deployment says they are separate A2A servers / behind Nasiko.

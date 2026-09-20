@@ -12,6 +12,7 @@ export type AgentRunStatus =
   | "STEP_UP_REQUIRED"
   | "NO_PRODUCTS"
   | "NO_PURCHASE"
+  | "REVIEW"
   | "FAILED";
 
 export interface AgentStep {
@@ -44,6 +45,9 @@ export interface AgentRunCandidate {
   product_name: string;
   price_inr: number;
   source: string;
+  /** What the person needs to put the pick in their cart. Optional: not every source has both. */
+  product_id?: string;
+  product_url?: string;
 }
 
 export interface AgentRunOutcome {
@@ -78,6 +82,7 @@ export interface AgentRun {
   proposal?: {
     proposed_action: "purchase" | "none";
     selected?: AgentRunCandidate;
+    quantity?: number;
     expected_total_inr?: number;
     reason: string;
     considered: number;
@@ -112,6 +117,7 @@ export const RUN_STATUS_LABEL: Record<AgentRunStatus, string> = {
   STEP_UP_REQUIRED: "Step-up required",
   NO_PRODUCTS: "No products found",
   NO_PURCHASE: "Nothing bought",
+  REVIEW: "Ready for your review",
   FAILED: "Failed",
 };
 

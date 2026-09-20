@@ -21,6 +21,7 @@ import { useCart } from "@/lib/cart-context";
 import { MERCHANT_LABEL, type ShopMerchant } from "@/lib/shop-catalog";
 import { canAddToCart, type AddToCartMerchant } from "@/lib/product-ref";
 import type { LiveMerchant, LiveProduct, MerchantSearchResult } from "@/lib/live-search";
+import { toastCartError } from "@/lib/cart-toast";
 
 const ALL_MERCHANTS: LiveMerchant[] = ["blinkit", "zepto", "bigbasket"];
 
@@ -108,7 +109,7 @@ function ProductCard({
     });
     setAdding(false);
     if (!result.ok) {
-      toast.error("Could not add to real cart", { description: result.message });
+      toastCartError("Could not add to real cart", result.message);
       return;
     }
     toast.success(`Added to real ${MERCHANT_LABEL[product.merchant]} cart`, {

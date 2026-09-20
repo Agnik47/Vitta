@@ -1,9 +1,13 @@
 // Lists agent runs and starts new ones.
 //
-// Starting a run means four agents hand a request down to a Purchase Agent that can, with no
-// further input, place an order under the mandate. As with /api/shop/purchase-run and the sniper,
-// that authorization is made explicit here: `confirm: true` and an explicit `mode` are both
-// required, never defaulted — a forgotten field must not decide whether a real order is placed.
+// A run has two shapes, and the person picks between them when they start it:
+//   • REVIEW (the default): the agents search, evaluate and pick, then HAND THE PICK TO THE PERSON.
+//     The Purchase Agent is never entered; the pick is offered for their cart, where "Proceed to
+//     purchase" is the existing gated purchase path. Nothing is bought without a human.
+//   • AUTONOMOUS (`confirm: true`): the Purchase Agent may place an order under the mandate with no
+//     further input. As with /api/shop/purchase-run and the sniper, that authorization has to be
+//     explicit — never defaulted, so a forgotten field can only ever produce the safer REVIEW run.
+// `mode` is required in both, never defaulted: it decides whether a real order can be placed.
 // The mandate itself (caps, merchants, expiry) is enforced later, and only, by the gate.
 import { listAgentRuns, startAgentRun } from "@/lib/agent-runs";
 
@@ -23,16 +27,6 @@ export async function POST(req: Request) {
   }
   const { request, mode, mandateId, confirm } = (body ?? {}) as Record<string, unknown>;
 
-  if (confirm !== true) {
-    return Response.json(
-      {
-        ok: false,
-        message:
-          "Explicit confirmation required — the agents can place an order under your mandate with no further input, so it must be confirmed when the run is started",
-      },
-      { status: 400 }
-    );
-  }
   if (mode !== "TEST" && mode !== "LIVE") {
     return Response.json({ ok: false, message: 'mode must be "TEST" or "LIVE"' }, { status: 400 });
   }
@@ -50,6 +44,8 @@ export async function POST(req: Request) {
     request: request.trim(),
     mode,
     mandateId: typeof mandateId === "string" ? mandateId : undefined,
+    // Anything other than an explicit `confirm: true` is a review run.
+    review: confirm !== true,
     dashboardOrigin: new URL(req.url).origin,
   });
   return Response.json({ ok: true, runId }, { status: 202 });

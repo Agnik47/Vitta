@@ -8,7 +8,12 @@
 // a stage that hasn't run is "pending", a denial shows the gate's own deny code and the amounts it
 // actually saw, and the Nasiko trace is only ever the real one fetched from Nasiko.
 import { useState } from "react";
-import { Bot, Check, ChevronDown, ExternalLink, Loader2, Minus, ShieldCheck, ShieldX, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { toastCartError } from "@/lib/cart-toast";
+import { useCart } from "@/lib/cart-context";
+import { Bot, Check, ChevronDown, ExternalLink, Loader2, Minus, ShoppingCart, ShieldCheck, ShieldX, X } from "lucide-react";
 import { ExecutionModeBadge } from "@/components/shop/execution-mode-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +34,7 @@ export const RUN_TONE: Record<AgentRunStatus, string> = {
   STEP_UP_REQUIRED: "border-deny/40 bg-deny/10 text-deny",
   NO_PRODUCTS: "border-border bg-muted/40 text-muted-foreground",
   NO_PURCHASE: "border-border bg-muted/40 text-muted-foreground",
+  REVIEW: "border-step-up/40 bg-step-up/10 text-step-up",
   FAILED: "border-deny/40 bg-deny/10 text-deny",
 };
 
@@ -244,6 +250,87 @@ function TraceBox({ run }: { run: AgentRun }) {
   );
 }
 
+/**
+ * The human in the loop. When the agents stop at a pick — because the run was a search, or because the
+ * person did not authorize an autonomous purchase — the pick is offered for THEIR cart. Adding to the
+ * cart spends nothing; "Proceed to purchase" on the cart page is the existing path where the mandate
+ * and the gate decide. Blinkit is the merchant whose real cart the dashboard can set today; for the
+ * others the person is sent to the product page instead.
+ */
+function HandoffCard({ run }: { run: AgentRun }) {
+  const router = useRouter();
+  const { setQuantity } = useCart();
+  const [adding, setAdding] = useState(false);
+  const selected = run.proposal?.selected;
+  if (!selected || (run.status !== "REVIEW" && run.status !== "NO_PURCHASE")) return null;
+
+  const quantity = run.proposal?.quantity ?? run.intent?.quantity ?? 1;
+  const canAdd = selected.merchant === "blinkit" && Boolean(selected.product_id);
+  const merchant = selected.merchant.charAt(0).toUpperCase() + selected.merchant.slice(1);
+
+  async function addToCart() {
+    if (!selected?.product_id) return;
+    setAdding(true);
+    try {
+      // Through the cart context, not a bare fetch: the Cart page shows the context's state, and only a
+      // write that goes through it updates that state — a bare fetch left "Go to your cart" showing the
+      // cart as it was before the add.
+      const result = await setQuantity(selected.product_id, "blinkit", quantity);
+      if (!result.ok) {
+        toastCartError("Could not add it to your cart", result.message);
+        return;
+      }
+      toast.success("Added to your cart — review it before buying");
+      router.push("/shop/cart");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-step-up/40 bg-step-up/5 p-4 text-[13px]">
+      <div className="text-[10px] font-semibold tracking-wider text-step-up uppercase">Your turn — nothing has been bought</div>
+      <div className="mt-1 text-foreground">
+        The agents picked <strong className="font-semibold">{selected.product_name}</strong> at {merchant} for{" "}
+        <strong className="font-semibold">{inr(run.proposal?.expected_total_inr ?? selected.price_inr)}</strong>
+        {quantity > 1 ? ` (×${quantity})` : ""}.
+      </div>
+      <p className="mt-1 text-muted-foreground">
+        Add it to your cart, review it there, and press <em>Proceed to purchase</em> if you want it. That step still goes through your mandate and
+        the gate.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {canAdd ? (
+          <Button size="sm" onClick={addToCart} disabled={adding}>
+            {adding ? <Loader2 className="size-3.5 animate-spin" /> : <ShoppingCart className="size-3.5" />}
+            Add to cart &amp; review
+          </Button>
+        ) : selected.product_url ? (
+          <a
+            href={selected.product_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-ink-faint/60"
+          >
+            Open on {merchant}
+            <ExternalLink className="size-3" strokeWidth={1.75} />
+          </a>
+        ) : null}
+        <Link href="/shop/cart" className="text-xs font-medium text-seal underline underline-offset-2">
+          Go to your cart
+        </Link>
+      </div>
+      {!canAdd ? (
+        <p className="mt-2 text-[12px] text-ink-faint">
+          One-click add to cart works for Blinkit today; {merchant} picks open on the merchant&apos;s own page.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function AgentRunPanel({ run }: { run: AgentRun }) {
   const selected = run.proposal?.selected;
   return (
@@ -282,6 +369,8 @@ export function AgentRunPanel({ run }: { run: AgentRun }) {
           <div className="mt-0.5 text-muted-foreground">{run.proposal?.reason}</div>
         </section>
       ) : null}
+
+      <HandoffCard run={run} />
 
       <GateVerdict run={run} />
 
