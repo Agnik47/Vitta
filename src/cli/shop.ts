@@ -19,7 +19,10 @@ import { AGENT_NAMES, isShoppingIntent, type AgentName, type ExecutionMode } fro
 import { AGENT_DEFS, resolveEndpoints } from '../agents/registry';
 import { listRuns, loadRun, saveRun, type FlowRecord, type FlowStage, type NasikoRouting } from '../agents/runs-store';
 
-function parseArgs(argv: string[]): { positionals: string[]; flags: Record<string, string | true> } {
+/** Flags that never take a value, so `--review "find biscuit"` cannot swallow the request as its value. */
+const BOOLEAN_FLAGS = new Set(['review', 'in-process', 'json']);
+
+export function parseArgs(argv: string[]): { positionals: string[]; flags: Record<string, string | true> } {
   const positionals: string[] = [];
   const flags: Record<string, string | true> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -32,7 +35,7 @@ function parseArgs(argv: string[]): { positionals: string[]; flags: Record<strin
     }
     if (a.startsWith('--')) {
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) flags[a.slice(2)] = true;
+      if (BOOLEAN_FLAGS.has(a.slice(2)) || next === undefined || next.startsWith('--')) flags[a.slice(2)] = true;
       else {
         flags[a.slice(2)] = next;
         i++;
@@ -85,10 +88,21 @@ function printFinal(r: FlowRecord): void {
       break;
     case 'NO_PURCHASE':
       console.log(`– Nothing bought — ${r.proposal?.reason}`);
+      if (r.proposal?.selected) console.log(`  To review it yourself, add it to your cart: ${cartUrl()}`);
+      break;
+    case 'REVIEW':
+      console.log(`→ READY FOR YOUR REVIEW — ${r.proposal?.selected?.product_name} at ${r.proposal?.selected?.merchant} for ₹${r.proposal?.expected_total_inr}`);
+      console.log('  Nothing was bought. Add it to your cart and press "Proceed to purchase" — the mandate and the gate decide from there:');
+      console.log(`  ${cartUrl()}`);
       break;
     default:
       console.log(`✗ FAILED — ${r.error?.code}: ${r.error?.message}`);
   }
+}
+
+/** Where the person reviews the pick: the dashboard's cart. */
+function cartUrl(): string {
+  return `${(process.env.VITTA_DASHBOARD_URL || 'http://localhost:3000').replace(/\/+$/, '')}/shop/cart`;
 }
 
 async function cmdRun(argv: string[]): Promise<void> {
@@ -105,6 +119,8 @@ async function cmdRun(argv: string[]): Promise<void> {
     mandateId: typeof flags.mandate === 'string' ? flags.mandate : undefined,
     sessionId: typeof flags.session === 'string' ? flags.session : undefined,
     requestId: typeof flags['run-id'] === 'string' ? flags['run-id'] : undefined,
+    // --review: stop at a proposal and hand it to a human instead of buying it.
+    review: flags.review === true,
   };
   if (typeof flags['intent-json'] === 'string') {
     const parsed: unknown = JSON.parse(flags['intent-json']);
@@ -147,7 +163,7 @@ async function cmdRun(argv: string[]): Promise<void> {
 
   if (flags.json) console.log(JSON.stringify(record, null, 2));
   else printFinal(record);
-  if (record.status !== 'PURCHASED' && record.status !== 'HANDOFF' && record.status !== 'NO_PURCHASE') process.exitCode = 1;
+  if (record.status !== 'PURCHASED' && record.status !== 'HANDOFF' && record.status !== 'NO_PURCHASE' && record.status !== 'REVIEW') process.exitCode = 1;
 }
 
 function cmdList(): void {
@@ -172,7 +188,9 @@ async function main(): Promise<void> {
   throw new Error('Usage: shop <run|list|show> ...');
 }
 
-main().catch((err: Error) => {
-  console.error(err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err: Error) => {
+    console.error(err.message);
+    process.exit(1);
+  });
+}

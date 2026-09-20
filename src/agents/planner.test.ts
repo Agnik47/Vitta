@@ -79,3 +79,56 @@ test('the planner returns a valid ShoppingIntent plus a timed step', async () =>
     assert.equal(r.agent, 'vitta-shopping-planner');
   }
 });
+
+// ---- conversational lead-ins ----------------------------------------------------------------------
+// Found live: "Help me in buying 1L milk under 70." became the product name "Help me in buying 1L milk",
+// so the Evaluator rejected all 15 real candidates ("does not look like …") and nothing was bought. It
+// was also read as a search-only request, because the buy-word check knew "buy" but not "buying".
+
+const product = (request: string) => parseIntent(request).product_query;
+
+test('the exact phrasings that failed live reduce to the product', () => {
+  assert.equal(product('Help me in buying 1L milk under 70.'), '1L milk');
+  assert.equal(product('Help me in buying the cheapest aata.'), 'aata');
+  assert.equal(product('Find cheapest paneer'), 'paneer');
+  assert.equal(product('find cheapest biscuit'), 'biscuit');
+});
+
+test('"buying" / "ordering" / "purchasing" are buy requests, "help me in buying 1L milk under 70" included', () => {
+  const i = parseIntent('Help me in buying 1L milk under 70.');
+  assert.equal(i.purchase_required, true);
+  assert.equal(i.max_price_inr, 70);
+  assert.equal(i.quantity, 1);
+  assert.equal(parseIntent('I am ordering some paneer').purchase_required, true);
+  assert.equal(parseIntent('thinking about purchasing curd').purchase_required, true);
+});
+
+test('any stack of lead-ins peels down to the product', () => {
+  for (const [request, want] of [
+    ['can you please help me find the cheapest atta', 'atta'],
+    ['Hey, could you help me to buy some paneer', 'paneer'],
+    ['I want to buy 2kg atta', '2kg atta'],
+    ["I'm looking to buy eggs", 'eggs'],
+    ['looking for the best basmati rice', 'basmati rice'],
+    ['please help me order 1L milk', '1L milk'],
+    ['I need 1L milk', '1L milk'],
+    ['show me cheapest curd', 'curd'],
+    ['buy amul butter please', 'amul butter'],
+    ['add amul butter to my cart', 'amul butter'],
+    ['get me the cheapest bread for me', 'bread'],
+  ]) {
+    assert.equal(product(request), want, request);
+  }
+});
+
+test('a product name that merely contains a lead-in word is left alone', () => {
+  assert.equal(product('order Amul Gold milk 500ml'), 'Amul Gold milk 500ml');
+  assert.equal(product('find Good Day biscuits'), 'Good Day biscuits');
+  assert.equal(product('buy Kellogg\'s Corn Flakes'), 'Kellogg\'s Corn Flakes');
+});
+
+test('a request that is only lead-ins names no product and is refused, not guessed', () => {
+  assert.throws(() => parseIntent('help me in buying'), /Could not find a product/);
+  assert.throws(() => parseIntent('please help me'), /Could not find a product/);
+  assert.throws(() => parseIntent('can you buy it'), /Could not find a product/);
+});

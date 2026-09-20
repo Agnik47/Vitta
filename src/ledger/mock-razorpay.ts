@@ -32,6 +32,8 @@ export interface MockPayment {
   status: 'created' | 'authorized' | 'captured' | 'refunded' | 'failed';
   order_id: string;
   amount_refunded: number;
+  method: string;
+  created_at: number;
 }
 
 export interface MockRequest {
@@ -93,6 +95,8 @@ export function createMockRazorpay(): MockRazorpay {
         status: opts.status ?? 'captured',
         order_id: orderId,
         amount_refunded: 0,
+        method: 'card',
+        created_at: Math.floor(Date.now() / 1000),
       };
       payments.set(payment.id, payment);
       return payment;

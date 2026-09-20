@@ -256,3 +256,47 @@ test('mode is passed to the Purchase Agent exactly as given', async () => {
   await run(h, { request: 'buy 2kg atta', mode: 'LIVE' });
   assert.equal(modeSeen, 'LIVE');
 });
+
+// ---- human in the loop: the review hand-off -------------------------------------------------------
+
+test('review mode hands the pick to a human: ends REVIEW, the Purchase Agent is never entered, nothing is bought', async () => {
+  const seen: string[] = [];
+  const h = handlers();
+  h['vitta-purchase-agent'] = createPurchaseAgent(purchaseDeps({ ok: true, verdict: 'ALLOW' }, seen));
+  const { record } = await run(h, { request: 'buy 2kg atta under 300', mode: 'TEST', review: true });
+
+  assert.equal(record.status, 'REVIEW');
+  assert.equal(record.stages[3].status, 'skipped');
+  assert.match(record.stages[3].summary ?? '', /hand-off to you/);
+  assert.match(record.stages[3].summary ?? '', /nothing is bought until you press Proceed to purchase/);
+  assert.equal(record.proposal?.proposed_action, 'purchase');
+  assert.ok(record.proposal?.selected, 'the pick is recorded so the dashboard can offer it');
+  assert.equal(record.outcome, undefined, 'no purchase outcome exists');
+  assert.deepEqual(seen, [], 'the purchase pipeline (and so the gate) was never entered');
+});
+
+test('without review the same request is unchanged: autonomous runs still purchase', async () => {
+  const { record } = await run(handlers(), { request: 'buy 2kg atta under 300', mode: 'TEST' });
+  assert.equal(record.status, 'PURCHASED');
+});
+
+test('a search-only request still ends NO_PURCHASE, now pointing the person at their cart', async () => {
+  const { record } = await run(handlers(), { request: 'compare prices for 2kg atta', mode: 'TEST', review: true });
+  assert.equal(record.status, 'NO_PURCHASE');
+  assert.match(record.stages[3].summary ?? '', /Add it to your cart to review and buy it yourself/);
+  assert.ok(record.proposal?.selected);
+});
+
+test('review mode with nothing eligible stays NO_PURCHASE: there is no pick to hand over', async () => {
+  const { record } = await run(handlers(), { request: 'buy 2kg atta under 100', mode: 'TEST', review: true });
+  assert.equal(record.status, 'NO_PURCHASE');
+  assert.match(record.stages[3].summary ?? '', /nothing to buy/);
+});
+
+test('the sentence that failed live now works end to end: "Help me in buying …" reaches a pick and hands it over', async () => {
+  const { record } = await run(handlers(), { request: 'Help me in buying 2kg atta under 300.', mode: 'TEST', review: true });
+  assert.equal(record.intent?.product_query, '2kg atta', 'the lead-in is not part of the product');
+  assert.equal(record.intent?.purchase_required, true, '"buying" is a buy request');
+  assert.equal(record.status, 'REVIEW');
+  assert.ok(record.proposal?.selected);
+});

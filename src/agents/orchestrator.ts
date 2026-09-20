@@ -30,6 +30,14 @@ export interface FlowInput {
   mode: ExecutionMode;
   mandateId?: string;
   sessionId?: string;
+  /**
+   * Human in the loop. When true the run stops after the Evaluator: it never enters the Purchase Agent,
+   * and ends REVIEW with the pick as a proposal. The person adds it to their cart and presses
+   * "Proceed to purchase", which is the existing gated purchase path — so nothing is bought without a
+   * human, and the mandate and gate still decide whether it may be. Default false: an autonomous run,
+   * which callers have to ask for explicitly (the dashboard makes it a confirmed opt-in).
+   */
+  review?: boolean;
   /** Lets a caller (the dashboard) name its run up front so it can follow it. Becomes the shopping
    *  request id, the run id and the purchase idempotency key. */
   requestId?: string;
@@ -155,8 +163,25 @@ export async function runShoppingFlow(input: FlowInput, deps: FlowDeps): Promise
   save(record);
 
   if (proposal.proposed_action !== 'purchase') {
-    skip('vitta-purchase-agent', 'nothing to buy — ' + proposal.reason);
+    // A search, or nothing eligible. When there IS a best pick it is still worth a human's look, so
+    // say so: the dashboard offers to add it to the cart.
+    skip(
+      'vitta-purchase-agent',
+      proposal.selected
+        ? `no order placed — ${proposal.reason} Add it to your cart to review and buy it yourself.`
+        : 'nothing to buy — ' + proposal.reason,
+    );
     return finish('NO_PURCHASE');
+  }
+
+  // Human in the loop: hand the pick to the person instead of buying it.
+  if (input.review && proposal.selected) {
+    skip(
+      'vitta-purchase-agent',
+      `hand-off to you — ${proposal.selected.product_name} at ${proposal.selected.merchant} for ₹${proposal.expected_total_inr}. ` +
+        'Review it in your cart; nothing is bought until you press Proceed to purchase.',
+    );
+    return finish('REVIEW');
   }
 
   // 4 — Purchase. Everything money-related past this point happens behind the gate.

@@ -43,6 +43,9 @@ interface RazorpayPayment {
   status: string;
   order_id: string;
   amount_refunded?: number;
+  method?: string;
+  /** Unix seconds. */
+  created_at?: number;
 }
 
 interface RazorpayError {
@@ -316,6 +319,22 @@ export class RazorpayLedger implements Ledger {
   async reserveOwner(reserveRef: string): Promise<string> {
     const order = await this.fetchOrder(parseReserveRef(reserveRef));
     return String(this.assertVittaOrder(order).vitta_mandate_id);
+  }
+
+  /** The captured payments behind a reserve, exactly as Razorpay reports them — the evidence a funding
+   *  receipt is built from. Refunded amounts are netted out, so the total is what actually funds it. */
+  async fundingPayments(reserveRef: string): Promise<{ orderId: string; payments: Array<{ id: string; amountPaise: number; method: string; paidAtIso: string }> }> {
+    const orderId = parseReserveRef(reserveRef);
+    const payments = (await this.fetchPayments(orderId))
+      .filter((p) => p.status === 'captured')
+      .map((p) => ({
+        id: p.id,
+        amountPaise: Math.max(0, p.amount - (p.amount_refunded ?? 0)),
+        method: p.method ?? 'unknown',
+        paidAtIso: new Date((p.created_at ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+      }))
+      .filter((p) => p.amountPaise > 0);
+    return { orderId, payments };
   }
 
   /** Captures any payment on this order that is `authorized` but not yet `captured` (accounts on

@@ -41,6 +41,7 @@ export type FlowStatus =
   | 'STEP_UP_REQUIRED'
   | 'NO_PRODUCTS'
   | 'NO_PURCHASE'
+  | 'REVIEW'
   | 'FAILED';
 
 export interface FlowRecord {

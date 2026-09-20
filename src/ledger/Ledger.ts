@@ -16,4 +16,7 @@ export interface Ledger {
   /** Optional: complete any payment the human made but the rail hasn't finalized yet (Razorpay:
    * capture `authorized` payments). Idempotent. */
   settle?(reserveRef: string): Promise<{ captured: string[] }>;
+  /** Optional: the captured payments behind a reserve, as the rail reports them — the evidence a
+   * signed funding receipt is built from. */
+  fundingPayments?(reserveRef: string): Promise<{ orderId: string; payments: Array<{ id: string; amountPaise: number; method: string; paidAtIso: string }> }>;
 }

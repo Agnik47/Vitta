@@ -28,8 +28,41 @@ const PRICE_CEILING =
   /\b(?:under|below|less than|within|upto|up to|at most|not more than|max(?:imum)?(?: of)?|budget(?: of)?)\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d+)?)/i;
 const BARE_RUPEE = /(?:₹|\brs\.?|\binr)\s*(\d[\d,]*(?:\.\d+)?)/i;
 
-const BUY_WORDS = /\b(buy|order|purchase|get me|grab|checkout)\b/i;
-const NEGATED_BUY = /\b(?:don'?t|do not|without|no need to|not)\s+(?:actually\s+)?(?:buy|order|purchase)\b/i;
+const BUY_WORDS = /\b(buy(?:ing)?|order(?:ing)?|purchas(?:e|ing)|get me|grab(?:bing)?|check ?out|place an order)\b/i;
+const NEGATED_BUY = /\b(?:don'?t|do not|without|no need to|not|never)\s+(?:actually\s+)?(?:buy(?:ing)?|order(?:ing)?|purchas(?:e|ing))\b/i;
+
+/**
+ * Conversational scaffolding that precedes the product, peeled off from the front one layer at a time
+ * until nothing more comes off — so any stack of them reduces to the product: "help me in buying 1L
+ * milk", "can you please help me find the cheapest atta", "I want to buy some paneer".
+ * (A single pass used to strip one verb and leave the rest of the sentence as the product name — the
+ * Evaluator then rejected every real candidate as "does not look like 'Help me in buying 1L milk'".)
+ */
+const LEAD_INS: RegExp[] = [
+  /^\s*(?:hey|hi|hello|ok(?:ay)?|so|well)\b[,!.\s]*/i,
+  /^\s*(?:please|pls|kindly)\b[,\s]*/i,
+  /^\s*(?:can|could|would|will)\s+you\s+(?:please\s+)?/i,
+  /^\s*help(?:\s+me)?(?:\s+(?:to|in|with|out\s+with|out))?(?:\s+|$)/i,
+  /^\s*(?:i\s+(?:really\s+)?(?:want|need|wish|would\s+like|am\s+looking|am\s+trying|am\s+planning|will|'ll|'d\s+like)|i'd\s+like|i'm\s+(?:looking|trying|planning)|let'?s)(?:\s+(?:you\s+)?to)?(?:\s+|$)/i,
+  /^\s*looking\s+(?:for|to)\s+/i,
+  /^\s*(?:buy(?:ing)?|order(?:ing)?|purchas(?:e|ing)|get(?:ting)?|find(?:ing)?|search(?:ing)?(?:\s+for)?|show|look(?:ing)?\s+for|compare|comparing|pick(?:ing)?(?:\s+up)?|grab(?:bing)?|add|put)\b\s*(?:me\s+|for\s+me\s+|us\s+)?/i,
+  /^\s*(?:the\s+)?(?:cheapest|lowest[- ]priced|lowest|best|a|an|some)\s+/i,
+];
+
+/** Peels the lead-ins (and any trailing filler) until the query stops changing. */
+function peel(text: string): string {
+  let query = text.trim();
+  for (let pass = 0; pass < 8; pass++) {
+    const before = query;
+    for (const lead of LEAD_INS) query = query.replace(lead, '');
+    query = query.replace(TRAILING_FILLER, '').trim();
+    if (query === before) break;
+  }
+  return query;
+}
+
+/** Filler after the product: "…milk please", "…milk to my cart", "…milk for me". */
+const TRAILING_FILLER = /\s+(?:(?:in|to|into)\s+(?:my\s+)?(?:cart|basket)|for\s+me|please|pls|thanks|thank\s+you|now|today|asap)$/i;
 const QUANTITY = /\b(?:qty|quantity)\s*[:=]?\s*(\d+)\b|\bx\s?(\d+)\b|\b(\d+)\s?x\b|\b(\d+)\s+(?:packs?|units?|pieces?|pcs|bottles?|packets?|cartons?)\b/i;
 
 function toNumber(raw: string): number {
@@ -78,23 +111,21 @@ export function parseIntent(request: string): ShoppingIntent {
   const purchaseRequired = BUY_WORDS.test(raw) && !NEGATED_BUY.test(raw);
 
   // Strip the conversational scaffolding down to the product.
-  let query = rest
+  // Lead-ins go first: the mid-sentence rules below would otherwise eat words out of them ("looking
+  // FOR the best rice" → "looking rice").
+  let query = peel(rest)
     .replace(/\b(?:and|then)\s+(?:buy|order|purchase|checkout)(?:\s+(?:it|that|them))?\b/gi, ' ')
     .replace(/\b(?:at|for)\s+the\s+(?:cheapest|lowest|best)(?:\s+available)?\s+price\b/gi, ' ')
     .replace(/\b(?:at|for)\s+(?:the\s+)?(?:cheapest|lowest|best)\b/gi, ' ')
-    .replace(/^\s*please\s+/i, '')
-    .replace(/^\s*(?:can|could) you\s+(?:please\s+)?/i, '')
-    .replace(/^\s*(?:i\s+(?:want|need|would like)(?:\s+to)?|i'd like(?:\s+to)?)\s+/i, '')
-    .replace(/^\s*(?:find|get|buy|order|purchase|search(?:\s+for)?|show|look\s+for|compare)\s+(?:me\s+|for\s+me\s+)?/i, '')
-    .replace(/^\s*(?:the\s+)?(?:cheapest|lowest[- ]priced|lowest|best|a|an|some)\s+/i, '')
     .replace(/\b(?:the\s+)?(?:cheapest|lowest|best)\b/gi, ' ')
     .replace(/\bavailable\b/gi, ' ')
     .replace(/[.,;:!?]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  query = peel(query);
   query = query.replace(/^(?:the|a|an|of)\s+/i, '').replace(/\s+(?:and|or|at|from|on|for|to|in)$/i, '').trim();
   // What is left may be only a pronoun ("buy it under ₹100") — that names no product.
-  if (/^(?:it|that|this|them|these|those|one|something|anything|stuff)$/i.test(query)) query = '';
+  if (/^(?:it|that|this|them|these|those|one|something|anything|stuff|me|us|help)$/i.test(query)) query = '';
 
   if (query === '') {
     throw new AgentFault('PLANNER_ERROR', `Could not find a product in "${raw}".`, { raw_request: raw });

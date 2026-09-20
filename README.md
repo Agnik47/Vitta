@@ -14,7 +14,7 @@ No LLM sits in the decision path.**
 ![Node](https://img.shields.io/badge/Node-20%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)
 ![Razorpay](https://img.shields.io/badge/Razorpay-Test_Mode-0C2451?style=for-the-badge)
-![Tests](https://img.shields.io/badge/tests-590_passing-2EA043?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-672_passing-2EA043?style=for-the-badge)
 ![Ed25519](https://img.shields.io/badge/signing-Ed25519-F5A623?style=for-the-badge)
 
 </div>
@@ -244,7 +244,7 @@ The single difference is whether the **merchant's** checkout is driven to a plac
 | Payments | Razorpay REST API via `fetch` (no SDK) | Test mode only — `rzp_live_` keys are refused |
 | Browser automation | `@agentrhq/webcmd` | Real stealth-Chromium — **109 sites, 807 commands, 230 write** |
 | Dashboard | Next.js 16 · React 19 · Tailwind v4 · shadcn/ui | — |
-| Tests | `node:test` | **590 passing**, no external runner |
+| Tests | `node:test` | **672 passing**, no external runner |
 
 ---
 
@@ -304,6 +304,8 @@ node dist/cli/shop.js run "cheapest 2kg atta under ₹300" --mode test
 
 **Price Sniper.** With `VITTA_AGENT_PIPELINE=on`, a fired watch runs Discovery (re-reads that product's live price) → Evaluator (re-checks the target) → Purchase Agent → gate. Hitting the target price authorizes nothing by itself.
 
+**Human in the loop by default.** A run started from the dashboard's *Agent activity* page does not buy anything unless you tick "Let the agents place the order for me". Otherwise the agents search, evaluate and pick, and the Purchase Agent is never entered: the run ends **Ready for your review**, with the pick offered as *Add to cart & review*. You review it in the Cart and press *Proceed to purchase* — the existing path where the mandate and the gate decide. From the CLI the same thing is `shop run --review "…"`.
+
 **Idempotent by request.** A shopping request id buys at most once: a replayed or retried request (Nasiko retries failed steps) returns the recorded result. An interrupted purchase is never silently retried.
 
 ## Quickstart
@@ -319,7 +321,12 @@ cd dashboard && npm install && cd ..
 cp .env.example .env                              # RAZORPAY_KEY_ID (rzp_test_…), RAZORPAY_KEY_SECRET
 cp dashboard/.env.local.example dashboard/.env.local   # the same test keys (+ optional webhook secret)
 
-# 3 — install the custom merchant adapters
+# 3a — webcmd 0.8+ ships each site as a plugin. Search (read-only) needs these, or the dashboard
+#      shows "webcmd is not installed" / "Site \"blinkit\" is not installed" for that merchant:
+webcmd plugin install github:agentrhq/webcmd-plugins/blinkit
+webcmd plugin install github:agentrhq/webcmd-plugins/zepto
+
+# 3b — install the custom merchant adapters
 node webcmd-adapters/install.mjs
 webcmd scan | grep -E "set-cart-quantity|clear-cart"
 
@@ -327,7 +334,7 @@ webcmd scan | grep -E "set-cart-quantity|clear-cart"
 npm run build
 
 # 5 — verify
-npm test        # 590 passing
+npm test        # 672 passing
 
 # 6 — run
 cd dashboard && npm run dev     # → http://localhost:3000
@@ -384,7 +391,7 @@ vitta/
 │   ├── mandate/      # schema · Ed25519 signing · plain-English rendering
 │   ├── policy/       # decide() — the rule engine (pure / sync / zero-I/O)
 │   ├── ledger/       # RazorpayLedger — real test-mode Razorpay Orders/Payments API (+ signature checks)
-│   ├── receipt/      # receipt schema · hash-chain build & verify
+│   ├── receipt/      # receipt schema · hash-chain build & verify · signed funding receipts
 │   ├── webcmd/       # manifest loading · safe command execution
 │   ├── agent/        # purchase agent — cart sync, gate spawn, state machine
 │   ├── events/       # GateEvent — the one schema every consumer reads
@@ -395,7 +402,8 @@ vitta/
 ├── assets/           # README media
 │
 ├── mandates/         # runtime · signed mandates
-├── receipts/         # runtime · signed receipts
+├── receipts/         # runtime · signed spend receipts (hash-chained)
+├── funding-receipts/ # runtime · one signed receipt per Razorpay test order that funded a mandate
 ├── events.jsonl      # runtime · append-only decision log
 └── keys/             # runtime · Ed25519 keypairs (gitignored)
 ```

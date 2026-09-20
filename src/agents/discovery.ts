@@ -8,6 +8,7 @@
 //                       manifest `access: 'read'` commands, so it CANNOT reach a write or a spend.
 // Either way this agent is read-only by construction: it has no way to place an order.
 import { runSearch, type CliResult } from '../agent/gate-spawn';
+import { withPackSize } from './pack-size';
 import {
   AgentFault,
   MERCHANT_IDS,
@@ -73,7 +74,9 @@ function httpUrl(raw: unknown): string | undefined {
 /** One row of `webcmd <site> search|product -f json`. Blinkit and the other two name fields differently. */
 export function normalizeWebcmdRow(merchant: MerchantId, row: Record<string, unknown>): Candidate | undefined {
   const isBlinkit = merchant === 'blinkit';
-  const name = String((isBlinkit ? row.name : row.title) ?? '').trim();
+  // The merchant states the pack size in its own field (Blinkit `variant`, Zepto `pack_size`), not in
+  // the name — carry it in, or the Evaluator cannot confirm a size the person asked for.
+  const name = withPackSize(String((isBlinkit ? row.name : row.title) ?? '').trim(), isBlinkit ? row.variant : row.pack_size);
   const price = positive(row.price);
   // A row without a real name or price is dropped, never defaulted — an invented price on a
   // candidate would flow straight into a purchase proposal.

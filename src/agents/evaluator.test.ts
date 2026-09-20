@@ -126,3 +126,10 @@ test('the agent validates its input and returns a Proposal', async () => {
   const good = await agent({ vitta: 1, correlation: newCorrelation(), input: { intent: intent(), candidates: [cand('zepto', ATTA, 229)] } });
   assert.ok(good.ok);
 });
+
+test('a common spelling variant matches: "aata" finds "atta" listings (a spelling, never a substitution)', () => {
+  assert.equal(relevance('aata', 'Aashirvaad Select Atta 2kg'), 1);
+  assert.equal(relevance('aatta 2kg', 'Aashirvaad Atta 2kg'), 1);
+  assert.equal(relevance('panir', 'Amul Fresh Paneer 200g'), 1);
+  assert.equal(relevance('aata', 'Amul Taaza Milk 1L'), 0, 'a different product is still not a match');
+});

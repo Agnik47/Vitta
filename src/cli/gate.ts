@@ -14,6 +14,7 @@ import { decide } from '../policy/decide';
 import { verifyChain, CHAIN_HEAD_HASH, buildAndSignReceipt, sha256Hex } from '../receipt/chain';
 import type { Receipt } from '../receipt/schema';
 import { buildAndSignAuthorization, type TransactionAuthorization } from '../receipt/authorization';
+import { buildAndSignFundingReceipt } from '../receipt/funding';
 import { parseExecutionMode, receiptExecutionMode } from '../receipt/execution-mode';
 import { RazorpayLedger } from '../ledger/RazorpayLedger';
 import { execute, hasAlreadyDrawn, recordDraw, type LedgerEntry } from '../webcmd/executor';
@@ -26,7 +27,7 @@ import {
 } from '../webcmd/commit-spec';
 import { formatGateEventLine, formatAgentLine } from './ui';
 import { getOrCreateKeyPair } from './keys';
-import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, saveAuthorization, appendEvent } from './store';
+import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, saveAuthorization, saveFundingReceipt, appendEvent } from './store';
 import type { GateEvent } from '../events/GateEvent';
 
 async function main(): Promise<void> {
@@ -376,6 +377,32 @@ async function cmdFund(args: string[]): Promise<void> {
     console.log(`✓ MANDATE ${mandateId} funded — ₹${formatInr(balanceInr)} (existing reserve)`);
     console.log(`  reserve reference ${existingReserveRef}`);
     console.log(`  real balance read from Razorpay — no new checkout needed`);
+
+    // The payment is done and verified: write the signed funding receipt for it. Evidence comes from
+    // Razorpay's own payment records, and the receipt is only written when there is captured money
+    // to attest to. It never fails the funding itself — the mandate is already funded and signed.
+    if (ledger.fundingPayments) {
+      try {
+        const { orderId, payments } = await ledger.fundingPayments(existingReserveRef);
+        if (payments.length > 0) {
+          const fundingReceipt = buildAndSignFundingReceipt(
+            {
+              mandate_id: mandateId,
+              mandate_hash: sha256Hex(updatedMandate),
+              reserve_ref: existingReserveRef,
+              order_id: orderId,
+              payments: payments.map((p) => ({ id: p.id, amount_inr: p.amountPaise / 100, method: p.method, paid_at: p.paidAtIso })),
+              amount_inr: payments.reduce((sum, p) => sum + p.amountPaise, 0) / 100,
+            },
+            getOrCreateKeyPair('gate').privateKey,
+          );
+          const written = saveFundingReceipt(fundingReceipt);
+          console.log(written ? `✓ FUNDING RECEIPT ${fundingReceipt.funding_receipt_id} signed · ₹${formatInr(fundingReceipt.amount_inr)} paid via Razorpay (test)` : `  funding receipt ${fundingReceipt.funding_receipt_id} already on file`);
+        }
+      } catch (err) {
+        console.log(`  (funding receipt not written: ${(err as Error).message})`);
+      }
+    }
     return;
   }
 
@@ -686,7 +713,9 @@ async function cmdRun(args: string[]): Promise<void> {
   // "gated, but ₹0 committed until checkout" per docs/03-WEBCMD-INTEGRATION.md.
   if (!isCommitCommand) {
     try {
-      await execute(site, command, cmdArgs);
+      // A non-commit write (a cart change) produces no receipt, so it needs no trace — and asking webcmd
+      // for one is what made add-to-cart hang. See ExecuteOptions.trace.
+      await execute(site, command, cmdArgs, undefined, { trace: false });
       console.log(`  ₹0 committed`);
     } catch (err) {
       throw new Error(`Execution failed: ${(err as Error).message}`);

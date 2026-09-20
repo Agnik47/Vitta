@@ -3,8 +3,10 @@
 // Needs the compiled gate — `npm test` builds first.
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { createPublicKey } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { verifyFundingReceipt, type FundingReceipt } from '../receipt/funding';
 import { DEMO_MANDATE, createSandbox, sandboxSupported, type Sandbox } from '../agents/sandbox/harness';
 
 const skip = sandboxSupported() ? false : 'sandbox needs a POSIX shell shim for webcmd';
@@ -61,6 +63,47 @@ describe('gate fund with Razorpay', { skip }, () => {
     assert.match(r.stdout + r.stderr, /real balance of ₹0/);
   });
 
+  const fundingReceiptFile = (orderId: string) => path.join(sb.dir, 'funding-receipts', `fnd_${orderId.replace(/^order_/, '')}.json`);
+  const readFundingReceipt = (orderId: string) => JSON.parse(readFileSync(fundingReceiptFile(orderId), 'utf-8')) as FundingReceipt;
+
+  test('attaching a PAID order writes a signed funding receipt built from Razorpay\'s own payment records', async () => {
+    const id = await newMandate();
+    const orderId = await orderFor(id);
+    const pay = sb.razorpay.pay(orderId);
+    const r = await sb.gate(['fund', id, '--reserve-ref', `razorpay-order:${orderId}`]);
+    assert.ok(r.ok, r.stdout + r.stderr);
+    assert.match(r.stdout, new RegExp(`FUNDING RECEIPT fnd_${orderId.replace('order_', '')} signed · ₹500`));
+
+    const receipt = readFundingReceipt(orderId);
+    assert.equal(receipt.mandate_id, id);
+    assert.equal(receipt.order_id, orderId);
+    assert.equal(receipt.amount_inr, 500);
+    assert.equal(receipt.mode, 'TEST');
+    assert.deepEqual(receipt.payments.map((p) => ({ id: p.id, amount_inr: p.amount_inr, method: p.method })), [{ id: pay.id, amount_inr: 500, method: 'card' }]);
+    const gateKey = createPublicKey(readFileSync(path.join(sb.dir, 'keys', 'gate.public.pem'), 'utf-8'));
+    assert.equal(verifyFundingReceipt(receipt, gateKey), true, 'signed with the gate key');
+    assert.equal(verifyFundingReceipt({ ...receipt, amount_inr: 5000 }, gateKey), false, 'and tamper-evident');
+  });
+
+  test('NO funding receipt exists for an order that was refused as unpaid', async () => {
+    const id = await newMandate();
+    const orderId = await orderFor(id);
+    await sb.gate(['fund', id, '--reserve-ref', `razorpay-order:${orderId}`]);
+    assert.equal(existsSync(fundingReceiptFile(orderId)), false);
+  });
+
+  test('re-attaching the same paid order keeps the FIRST funding receipt untouched', async () => {
+    const id = await newMandate();
+    const orderId = await orderFor(id);
+    sb.razorpay.pay(orderId);
+    await sb.gate(['fund', id, '--reserve-ref', `razorpay-order:${orderId}`]);
+    const first = readFileSync(fundingReceiptFile(orderId), 'utf-8');
+    const again = await sb.gate(['fund', id, '--reserve-ref', `razorpay-order:${orderId}`]);
+    assert.ok(again.ok, again.stdout + again.stderr);
+    assert.match(again.stdout, /already on file/);
+    assert.equal(readFileSync(fundingReceiptFile(orderId), 'utf-8'), first, 'same bytes: not re-issued');
+  });
+
   test('a reserve can only be attached to the mandate it was created for', async () => {
     const other = await newMandate();
     const orderId = await orderFor(other);
@@ -94,6 +137,8 @@ describe('gate fund with Razorpay', { skip }, () => {
     assert.match(r.stdout, new RegExp(`captured 1 authorized payment\\(s\\): ${pay.id}`));
     assert.equal(sb.razorpay.paidPaise(orderId), 50000);
     assert.equal(readMandate(id).reserve.blocked_inr, 500);
+    // the receipt records the payment as CAPTURED money, which it only became on this confirmation
+    assert.deepEqual(readFundingReceipt(orderId).payments.map((p) => p.id), [pay.id]);
   });
 
   test('funding a mandate that still holds money is refused (it would strand the old order), unless --replace is given', async () => {

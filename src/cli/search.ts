@@ -31,6 +31,20 @@ function isReadCommand(site: string, command: string): boolean {
   return manifest.some((c) => c.site === site && c.name === command && c.access === 'read');
 }
 
+/** webcmd reports failures as a JSON document ({"ok":false,"error":{"code","message","help"}}). Shown to
+ *  a person that is a wall of braces; the message and code say everything the UI needs. Anything that
+ *  is not that shape is passed through unchanged. */
+export function readableWebcmdError(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as { error?: { code?: unknown; message?: unknown } };
+    const message = typeof parsed.error?.message === 'string' ? parsed.error.message : '';
+    if (message) return typeof parsed.error?.code === 'string' ? `${message} (${parsed.error.code})` : message;
+  } catch {
+    // not JSON — fall through
+  }
+  return raw;
+}
+
 function fail(message: string): never {
   process.stdout.write(JSON.stringify({ ok: false, message }));
   process.exit(1);
@@ -52,9 +66,9 @@ async function main(): Promise<void> {
   proc.stderr.on('data', (d) => (stderr += d));
   proc.on('close', (code) => {
     if (code !== 0) {
-      const reason = stderr.trim() || `webcmd exited ${code}`;
+      const reason = stderr.trim() || stdout.trim() || `webcmd exited ${code}`;
       const authRequired = /auth|login|not.?logged.?in/i.test(reason);
-      process.stdout.write(JSON.stringify({ ok: false, message: reason, authRequired }));
+      process.stdout.write(JSON.stringify({ ok: false, message: readableWebcmdError(reason), authRequired }));
       process.exit(1);
     }
     try {
@@ -88,7 +102,13 @@ async function main(): Promise<void> {
       process.exit(1);
     }
   });
-  proc.on('error', (err) => fail(err.message));
+  proc.on('error', (err) =>
+    fail(
+      (err as NodeJS.ErrnoException).code === 'ENOENT'
+        ? `webcmd is not installed on this machine, so ${site} cannot be searched — install it with: npm i -g @agentrhq/webcmd`
+        : err.message,
+    ),
+  );
 }
 
-main();
+if (require.main === module) main();

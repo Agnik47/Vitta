@@ -51,8 +51,13 @@ function sizeMatches(want: Size, have: Size[]): boolean {
   return have.some((h) => h.dim === want.dim && Math.abs(h.amount - want.amount) < 0.5);
 }
 
+/** Common Indian-English spellings of the same product, so "aata" finds "atta". Spelling variants
+ *  only — never a substitution of one product for another. */
+const SPELLING: Record<string, string> = { aata: 'atta', aatta: 'atta', panir: 'paneer' };
+
 function stem(word: string): string {
-  return word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word;
+  const spelled = SPELLING[word] ?? word;
+  return spelled.length > 3 && spelled.endsWith('s') ? spelled.slice(0, -1) : spelled;
 }
 
 function tokens(text: string): string[] {

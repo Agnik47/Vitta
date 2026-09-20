@@ -116,3 +116,6 @@ Agent's hop is expected to appear only in Vitta's own run record (unconfirmed un
 
 - `agents/<name>/AgentCard.json` — generated from `src/agents/registry.ts` (`npm run nasiko:cards`); a test fails if they drift.
 - `Dockerfile` — one recipe, `AGENT` selects the agent; `deploy.sh` stages one project dir per agent.
+
+> **`VITTA_DASHBOARD_URL` is baked into the Discovery container when it is deployed** — the container does not read `.env` or the caller's environment. If Discovery searches through a dashboard that is not the one you are running (or one on an older build), its results silently lack whatever that build lacks. Point it at the dashboard you actually use and redeploy:
+> `VITTA_DASHBOARD_URL=http://host.docker.internal:3000 bash nasiko/deploy.sh discovery --upload`. Check what a running container has with `docker exec <discovery container> printenv VITTA_DASHBOARD_URL`.

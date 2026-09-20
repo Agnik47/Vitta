@@ -15,7 +15,10 @@
     "shop": "node dist/cli/shop.js",
     "nasiko:cards": "tsc && node dist/agents/write-cards.js",
     "demo:agents": "tsc && node dist/agents/demo.js",
-    "check:razorpay-dashboard": "node scripts/check-razorpay-dashboard.js"
+    "check:razorpay-dashboard": "node scripts/check-razorpay-dashboard.js",
+    "check:bigbasket-parser": "node --no-warnings scripts/check-bigbasket-parser.js",
+    "check:browser-queue": "node --no-warnings scripts/check-browser-queue.js",
+    "check:pack-size": "node --no-warnings scripts/check-pack-size.js"
   },
   "repository": {
     "type": "git",
