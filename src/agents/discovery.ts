@@ -9,6 +9,7 @@
 // Either way this agent is read-only by construction: it has no way to place an order.
 import { runSearch, type CliResult } from '../agent/gate-spawn';
 import { withPackSize } from './pack-size';
+import { EXAMPLE_INTENT, invalidInput } from './usage-hint';
 import {
   AgentFault,
   MERCHANT_IDS,
@@ -289,7 +290,7 @@ export function createDiscoveryAgent(deps: DiscoveryDeps = defaultDiscoveryDeps(
     try {
       const input = request.input as { intent?: unknown } | null;
       if (!isShoppingIntent(input?.intent)) {
-        throw new AgentFault('INVALID_REQUEST', 'Discovery input must be {"intent": <ShoppingIntent>}.');
+        throw invalidInput(request.input, 'vitta-deal-discovery', 'Discovery input must be {"intent": <ShoppingIntent>}.', { intent: EXAMPLE_INTENT });
       }
       const result = await discover(input.intent, deps, steps);
       return agentOk(NAME, result, steps.steps);

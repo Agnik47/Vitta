@@ -80,6 +80,33 @@ export function resolveWebcmdCommand(): { command: string; prefixArgs: string[] 
 // that should ever block a decision that already resolved to ALLOW.
 const TRACE_ARTIFACT_LINE = /Webcmd trace artifact:\s*(.+)/;
 
+/**
+ * The reason a webcmd command gave for failing. webcmd reports it as a JSON document on stdout
+ * (`{"ok":false,"error":{"code":"ARGUMENT","message":"productId must be a Blinkit product id…"}}`),
+ * sometimes as plain text on stderr. Without this the gate could only say "webcmd exited 2", and a
+ * person adding a product to their cart saw an ALLOW line and no reason at all.
+ */
+export function describeWebcmdFailure(stdout: string, stderr: string): string {
+  const MAX = 300;
+  // The JSON error document has been seen on either stream (exit 2 → stdout, exit 66 → stderr).
+  for (const stream of [stdout, stderr]) {
+    try {
+      const parsed = JSON.parse(stream) as { error?: { code?: unknown; message?: unknown; help?: unknown } };
+      const message = typeof parsed.error?.message === 'string' ? parsed.error.message.trim() : '';
+      if (!message) continue;
+      // `help` is advice for someone repairing the adapter, and often the only place that says WHICH
+      // input was at fault ("No cart payload for product 88888888") — keep its first sentence.
+      const rawHelp = typeof parsed.error?.help === 'string' ? parsed.error.help.split(/(?<=\.)\s|\s(?=Treat this)/)[0].trim() : '';
+      const help = /^Treat this as adapter breakage/i.test(rawHelp) ? '' : rawHelp; // pure repair advice: not a reason
+      const code = typeof parsed.error?.code === 'string' ? ` (${parsed.error.code})` : '';
+      return `${message}${help && !message.includes(help) ? ` — ${help}` : ''}${code}`.slice(0, MAX);
+    } catch {
+      // not a JSON error document on this stream
+    }
+  }
+  return (stderr.trim() || stdout.trim()).replace(/\s+/g, ' ').slice(0, MAX);
+}
+
 export interface ExecuteOptions {
   /**
    * Capture webcmd's trace artifact (default true). Only a COMMIT command needs it — the trace digest
@@ -110,7 +137,10 @@ export function execute(site: string, command: string, args: string[], presetRun
     proc.stdout.on('data', (d) => (stdout += d));
     proc.stderr.on('data', (d) => (stderr += d));
     proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`webcmd exited ${code}`));
+      if (code !== 0) {
+        const detail = describeWebcmdFailure(stdout, stderr);
+        return reject(new Error(`webcmd exited ${code}${detail ? ` — ${detail}` : ''}`));
+      }
       const columns = JSON.parse(stdout);
       const { tracePath, traceDigest } = resolveTraceArtifact(stderr);
       resolve({ runId, columns, tracePath, traceDigest });

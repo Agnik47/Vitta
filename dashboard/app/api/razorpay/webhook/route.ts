@@ -10,6 +10,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 import { getRuntimeDataDir } from "@/lib/read";
 import { ORDER_ID_RE, getCheckoutOrder, verifyWebhookSignature } from "@/lib/razorpay";
 import { runtimeEnv } from "@/lib/runtime-env";
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
   if (!result.ok) {
     // e.g. payment.authorized arrived before capture and there is still ₹0 paid: a permanent no-op for
     // THIS event (a later captured/paid event completes the funding), so acknowledge rather than retry.
-    return Response.json({ ok: true, handled: false, reason: (result.stdout.trim() || result.stderr.trim()).slice(0, 300) });
+    return Response.json({ ok: true, handled: false, reason: describeGateFailure(result.stdout, result.stderr, "").slice(0, 300) });
   }
   return Response.json({ ok: true, handled: true, mandateId, orderId });
 }

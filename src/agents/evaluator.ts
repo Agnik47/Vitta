@@ -20,6 +20,7 @@ import {
   type RejectedCandidate,
   type ShoppingIntent,
 } from './protocol';
+import { EXAMPLE_CANDIDATES, EXAMPLE_INTENT, invalidInput } from './usage-hint';
 
 const NAME = 'vitta-deal-evaluator' as const;
 
@@ -205,7 +206,12 @@ export function createEvaluatorAgent(): AgentHandler {
     try {
       const input = request.input as { intent?: unknown; candidates?: unknown } | null;
       if (!isShoppingIntent(input?.intent) || !Array.isArray(input?.candidates) || !input.candidates.every(isCandidate)) {
-        throw new AgentFault('INVALID_REQUEST', 'Evaluator input must be {"intent": <ShoppingIntent>, "candidates": [<Candidate>...]}.');
+        throw invalidInput(
+          request.input,
+          'vitta-deal-evaluator',
+          'Evaluator input must be {"intent": <ShoppingIntent>, "candidates": [<Candidate>...]}.',
+          { intent: EXAMPLE_INTENT, candidates: EXAMPLE_CANDIDATES },
+        );
       }
       const { intent, candidates } = input as { intent: ShoppingIntent; candidates: Candidate[] };
       const proposal = await steps.run(

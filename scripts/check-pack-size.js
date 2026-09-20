@@ -9,7 +9,7 @@ const path = require('node:path');
 
 (async () => {
   const src = require(path.resolve(__dirname, '../dist/agents/pack-size.js'));
-  const dash = await import(path.resolve(__dirname, '../dashboard/lib/pack-size.ts'));
+  const dash = await import(require('node:url').pathToFileURL(path.resolve(__dirname, '../dashboard/lib/pack-size.ts')).href);
   const cases = [
     ['Amul Taaza Toned Milk', '500 ml'], ['Amul Gold Milk', '1 L'], ['Superior MP Wheat Atta', '1 pack (1 kg)'],
     ['Aashirvaad Atta - 5 kg', '5 kg'], ['Aashirvaad Atta 5kg', '5 KG'], ['Amul Milk (1 L)', '1 l'],

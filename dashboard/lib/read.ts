@@ -3,7 +3,9 @@
 // with the CLI process, not an error — see docs/agent-b/ERROR-HANDLING.md § Dashboard.
 import { readFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Mandate, GateEvent, Receipt, TransactionAuthorization, FundingReceipt } from './types';
+import os from 'node:os';
+import type { Mandate, DecisionLogEntry, Receipt, TransactionAuthorization, FundingReceipt } from './types';
+import { isActivityEvent } from './types';
 import { sha256Hex, CHAIN_HEAD_HASH, verifySignature } from './hash';
 
 export function getDataDir(): string {
@@ -24,7 +26,7 @@ export function getDataDir(): string {
  */
 export function getRuntimeDataDir(): string {
   if (!process.env.VERCEL) return getDataDir();
-  const dir = '/tmp/vitta-data';
+  const dir = path.join(os.tmpdir(), 'vitta-data');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -68,24 +70,32 @@ export function readCurrentMandate(): Mandate | null {
 
 /** Reads events.jsonl, optionally returning only events after `sinceId` (by file position, not
  * by value comparison — event_id is a UUID, not orderable). If `sinceId` isn't found (first poll,
- * or the log was rotated), returns everything rather than risk silently dropping events. */
-export function readEventsSince(sinceId: string | null): GateEvent[] {
+ * or the log was rotated), returns everything rather than risk silently dropping events.
+ *
+ * The log holds gate verdicts AND activity entries (payments, mandate creation, purchase outcomes…).
+ * Callers that only understand verdicts (the Home stats, the timeline) get gate events only by
+ * default; the Decisions page asks for everything with `includeActivity`. `sinceId` is always
+ * resolved against the FULL log first, so a client's last-seen id is found whichever kind it was. */
+export function readEventsSince(sinceId: string | null, includeActivity = false): DecisionLogEntry[] {
   const filePath = path.join(getRuntimeDataDir(), 'events.jsonl');
   if (!existsSync(filePath)) return [];
 
   const lines = readFileSync(filePath, 'utf-8').split('\n').filter(Boolean);
-  const events: GateEvent[] = [];
+  const events: DecisionLogEntry[] = [];
   for (const line of lines) {
     try {
-      events.push(JSON.parse(line) as GateEvent);
+      events.push(JSON.parse(line) as DecisionLogEntry);
     } catch {
       // Last line mid-append, or a corrupt line — skip it, don't crash the route.
     }
   }
 
-  if (!sinceId) return events;
-  const idx = events.findIndex((e) => e.event_id === sinceId);
-  return idx === -1 ? events : events.slice(idx + 1);
+  let result = events;
+  if (sinceId) {
+    const idx = events.findIndex((e) => e.event_id === sinceId);
+    if (idx !== -1) result = events.slice(idx + 1);
+  }
+  return includeActivity ? result : result.filter((e) => !isActivityEvent(e));
 }
 
 export function readReceipts(): Receipt[] {

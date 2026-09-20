@@ -34,10 +34,26 @@ import {
   DOMAIN,
   openCartPanel,
   readCartState,
-  requireProductId,
   resolveCoordinates,
   summarizeCartResponse,
 } from './utils.js';
+
+/** Accepts any real Blinkit product id — a bare id, a `prid/<id>` path, or a product URL.
+ *
+ *  Not utils.js's requireProductId: that one insists on THREE OR MORE digits, and Blinkit sells products
+ *  with shorter ids — its own search returns "Aashirvaad Select 100% MP Sharbati Atta" as `prid/7`.
+ *  With the packaged check, adding any such product failed every time ("productId must be a Blinkit
+ *  product id, for example 19512") even though Blinkit lists it (found live, 2026-09-20). An id is a
+ *  positive whole number; that is all this needs to be, and it is only ever interpolated into a URL and
+ *  a JSON string after this check. */
+function requireProductId(raw) {
+  const value = String(raw ?? '').trim();
+  // A product URL/path names the id after `/prid/`; a bare id must be nothing BUT digits (so "-5", "1.5"
+  // and a URL's trailing "?utm=1" can never be mistaken for one).
+  const match = value.match(/\/prid\/(\d+)(?![\d])/) || value.match(/^(?:prid\/)?(\d+)$/);
+  if (!match || !Number(match[1])) throw new ArgumentError('productId must be a Blinkit product id, for example 19512');
+  return match[1];
+}
 
 /** Like utils.js's parseQuantity, but 0 is legal and meaningful here: it means "remove this line".
  *  The packaged helper rejects 0 outright (it only ever describes an amount to ADD), which is

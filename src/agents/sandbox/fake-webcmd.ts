@@ -123,6 +123,9 @@ function main(): void {
       return out([{ status: 'ok', itemCount: state.carts[site].length, itemsTotal: total, deliveryCharge: 0, handlingCharge: 0, payable: total, cartState: 'ready', checkoutBlocked: false, validations: [] }]);
     }
     case 'clear-cart':
+      // Failure injection: a clear-cart that REPORTS success and leaves the items — a failure this
+      // project has seen for real, and why cart emptying is always confirmed by a read.
+      if (process.env.FAKE_WEBCMD_CLEAR_CART_IS_A_NOOP === '1') return out([{ status: 'cleared' }]);
       state.carts[site] = [];
       save();
       return out([{ status: 'cleared' }]);

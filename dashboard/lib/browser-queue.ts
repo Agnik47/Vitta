@@ -57,8 +57,12 @@ export function browserWriteEpoch(): number {
 /** Closes webcmd's shared automation session. Best effort: if webcmd is missing there is nothing to
  *  reset, and the retry will simply report the real error. */
 export function resetBrowserSession(): Promise<void> {
+  // On Windows an npm-installed CLI is `webcmd.cmd`, which Node will only run through a shell. The
+  // command and arguments are fixed here (nothing from a request), so that is safe; elsewhere no
+  // shell is involved.
+  const windows = process.platform === "win32";
   return new Promise((resolve) => {
-    execFile("webcmd", ["session", "close", "adapter-default"], { timeout: 15_000 }, () => resolve());
+    execFile(windows ? "webcmd.cmd" : "webcmd", ["session", "close", "adapter-default"], { timeout: 15_000, shell: windows }, () => resolve());
   });
 }
 

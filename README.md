@@ -14,7 +14,7 @@ No LLM sits in the decision path.**
 ![Node](https://img.shields.io/badge/Node-20%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)
 ![Razorpay](https://img.shields.io/badge/Razorpay-Test_Mode-0C2451?style=for-the-badge)
-![Tests](https://img.shields.io/badge/tests-672_passing-2EA043?style=for-the-badge)
+![Tests](https://img.shields.io/badge/tests-702_passing-2EA043?style=for-the-badge)
 ![Ed25519](https://img.shields.io/badge/signing-Ed25519-F5A623?style=for-the-badge)
 
 </div>
@@ -244,7 +244,7 @@ The single difference is whether the **merchant's** checkout is driven to a plac
 | Payments | Razorpay REST API via `fetch` (no SDK) | Test mode only — `rzp_live_` keys are refused |
 | Browser automation | `@agentrhq/webcmd` | Real stealth-Chromium — **109 sites, 807 commands, 230 write** |
 | Dashboard | Next.js 16 · React 19 · Tailwind v4 · shadcn/ui | — |
-| Tests | `node:test` | **672 passing**, no external runner |
+| Tests | `node:test` | **702 passing**, no external runner |
 
 ---
 
@@ -308,6 +308,26 @@ node dist/cli/shop.js run "cheapest 2kg atta under ₹300" --mode test
 
 **Idempotent by request.** A shopping request id buys at most once: a replayed or retried request (Nasiko retries failed steps) returns the recorded result. An interrupted purchase is never silently retried.
 
+## Platform support
+
+Vitta is meant to run the same on **macOS, Linux and Windows** with **Node 20+**. What is covered, and how it is checked:
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Gate CLI, mandates, receipts, ledger, agents | ✓ | ✓ | ✓ |
+| Dashboard (`next build` / `next start`) | ✓ | ✓ | ✓ |
+| Nasiko deploy (`node nasiko/deploy.js`) — Node only: no bash, python, curl or zip | ✓ | ✓ | ✓ |
+| Test suite | ✓ all | ✓ all | ✓ all except the sandbox end-to-end tests, which need a POSIX shell shim for `webcmd` and skip themselves |
+
+- **CI** (`.github/workflows/ci.yml`) runs the build, the tests and the checks on all three systems and Node 20/22/24. Locally, this project has been run on macOS; the Linux and Windows results come from CI.
+- **Line endings:** `.gitattributes` keeps LF everywhere, so a Windows checkout does not turn scripts or hashed fixtures into CRLF.
+- **`.env` files** may have a UTF-8 BOM, Windows line endings, `export` prefixes or quoted values — all read the same way.
+- **`webcmd`** installs as `webcmd.cmd` on Windows; the gate and the dashboard resolve it themselves.
+- **Docker + Nasiko:** `host.docker.internal` works on Docker Desktop (macOS, Windows). On Linux add `--add-host=host.docker.internal:host-gateway` (or use the host's LAN address) so the Discovery container can reach your dashboard.
+- **Some `npm run check:*` scripts** load dashboard TypeScript directly and need Node 22.18+ (type stripping is built in from there).
+
+Setup steps in the quickstart below use POSIX commands; the Windows PowerShell equivalents are `Copy-Item .env.example .env` for `cp`, and `$env:NAME = "value"` for `export NAME=value`.
+
 ## Quickstart
 
 **Prerequisites** — Node 20+, `npm i -g @agentrhq/webcmd`, a Razorpay **test-mode** key pair (Dashboard → API Keys, Test Mode), and a merchant account logged into the webcmd session (`webcmd blinkit whoami`).
@@ -334,7 +354,7 @@ webcmd scan | grep -E "set-cart-quantity|clear-cart"
 npm run build
 
 # 5 — verify
-npm test        # 672 passing
+npm test        # 702 passing
 
 # 6 — run
 cd dashboard && npm run dev     # → http://localhost:3000

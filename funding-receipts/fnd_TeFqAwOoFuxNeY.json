@@ -1,0 +1,20 @@
+{
+  "funding_receipt_id": "fnd_TeFqAwOoFuxNeY",
+  "mandate_id": "mnd_mu9ntoym4083b956e65b",
+  "mandate_hash": "sha256:68e5362b9113878c48e226ae9ec14c1c4201bcfc75ca7e932b75542e34f831ff",
+  "reserve_ref": "razorpay-order:order_TeFqAwOoFuxNeY",
+  "order_id": "order_TeFqAwOoFuxNeY",
+  "payments": [
+    {
+      "id": "pay_TeFqwgATA6Q5Mn",
+      "amount_inr": 500,
+      "method": "card",
+      "paid_at": "2026-09-20T10:15:46.000Z"
+    }
+  ],
+  "amount_inr": 500,
+  "currency": "INR",
+  "mode": "TEST",
+  "issued_at": "2026-09-20T10:16:09.794Z",
+  "sig": "jMqqmGBG85TYA5ocv1RMkdmF3L2uZXdq8xvq4i7z/9TuRJFAGXQarrtoO9VF6rtEdoDrh2binnJIuEmDr3azDQ=="
+}

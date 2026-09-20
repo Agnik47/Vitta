@@ -6,6 +6,7 @@
 // the signature check for someone else's payment would find nothing paid on THIS mandate's order.
 // The mandate id comes from Razorpay's own order notes, never from the request.
 import { runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 import { ORDER_ID_RE, PAYMENT_ID_RE, getCheckoutOrder, verifyCheckoutSignature } from "@/lib/razorpay";
 
 export async function POST(req: Request) {
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
 
   const result = await runGateCli(["fund", mandateId, "--reserve-ref", `razorpay-order:${orderId}`]);
   if (!result.ok) {
-    return Response.json({ ok: false, message: result.stdout.trim() || result.stderr.trim() || "gate fund failed" }, { status: 422 });
+    return Response.json({ ok: false, message: describeGateFailure(result.stdout, result.stderr, "gate fund failed") }, { status: 422 });
   }
   return Response.json({ ok: true, mandateId, raw: result.stdout.trim() });
 }

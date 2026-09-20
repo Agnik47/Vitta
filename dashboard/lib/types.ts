@@ -102,3 +102,41 @@ export interface FundingReceipt {
   issued_at: string;
   sig: string;
 }
+
+// Read-only mirror of src/events/ActivityEvent.ts — an entry in the decision log that is NOT a gate
+// verdict (a mandate created, a payment received, a purchase completed or failed…). It never carries
+// a `verdict`: only the gate says whether a spend was allowed.
+export type ActivityAction =
+  | 'mandate.create'
+  | 'mandate.resign'
+  | 'payment.order_created'
+  | 'payment.received'
+  | 'payment.fund'
+  | 'purchase.completed'
+  | 'purchase.failed'
+  | 'cart.emptied'
+  | 'gate.run'
+  | 'agents.run';
+
+export interface ActivityEvent {
+  event_id: string;
+  ts: string;
+  kind: 'ACTIVITY';
+  action: ActivityAction;
+  outcome: 'SUCCESS' | 'FAILURE' | 'INFO';
+  summary: string;
+  mandate_id?: string;
+  amount_inr?: number;
+  run_id?: string;
+  reserve_ref?: string;
+  receipt_id?: string;
+  error?: string;
+  details?: Record<string, string | number | boolean>;
+}
+
+/** One line of events.jsonl: a gate verdict or an activity entry. */
+export type DecisionLogEntry = GateEvent | ActivityEvent;
+
+export function isActivityEvent(entry: DecisionLogEntry): entry is ActivityEvent {
+  return (entry as ActivityEvent).kind === 'ACTIVITY';
+}

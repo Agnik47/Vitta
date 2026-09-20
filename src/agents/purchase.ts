@@ -19,6 +19,7 @@ import { parseCommitOutput } from '../agent/parse-commit-output';
 import { loadAllMandates, loadAuthorization, loadReceipt } from '../cli/store';
 import { fileIdempotencyStore, type IdempotencyStore } from './idempotency';
 import { resolveProductRef } from './product-ref';
+import { invalidInput } from './usage-hint';
 import {
   AgentFault,
   StepRecorder,
@@ -203,7 +204,8 @@ interface PurchaseInputEnvelope {
 function parseInput(raw: unknown): PurchaseInputEnvelope {
   const input = raw as Partial<PurchaseInputEnvelope> | null;
   if (!isShoppingIntent(input?.intent) || !isProposal(input?.proposal)) {
-    throw new AgentFault('INVALID_REQUEST', 'Purchase input must be {"intent", "proposal", "mode"}.');
+    // No paste-ready example here, on purpose: this agent spends money, and a chat box is not how it is driven.
+    throw invalidInput(raw, 'vitta-purchase-agent', 'Purchase input must be {"intent", "proposal", "mode"}, where the proposal comes from the Evaluator.');
   }
   // Mode is explicit on every call. A missing mode must never quietly become LIVE (a real order) or
   // TEST (a skipped one) — same rule as the dashboard's own mode toggle.

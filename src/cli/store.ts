@@ -14,6 +14,7 @@ import type { Receipt } from '../receipt/schema';
 import type { TransactionAuthorization } from '../receipt/authorization';
 import type { FundingReceipt } from '../receipt/funding';
 import type { GateEvent } from '../events/GateEvent';
+import type { ActivityEvent } from '../events/ActivityEvent';
 
 const MANDATES_DIR = './mandates';
 const RECEIPTS_DIR = './receipts';
@@ -25,7 +26,7 @@ const EVENTS_PATH = './events.jsonl';
  * polls this same file. Every `gate run` decision (read or write, allow or deny) must call this,
  * not just print via formatGateEventLine() — the terminal line and the persisted line are two
  * separate, both-required outputs of the same event. */
-export function appendEvent(event: GateEvent, filePath = EVENTS_PATH): void {
+export function appendEvent(event: GateEvent | ActivityEvent, filePath = EVENTS_PATH): void {
   appendFileSync(filePath, JSON.stringify(event) + '\n');
 }
 

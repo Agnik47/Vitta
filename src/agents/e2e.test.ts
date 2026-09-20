@@ -382,4 +382,79 @@ describe('the four agents over the real gate', { skip }, () => {
     assert.equal(sb.merchantWrites().length, 0);
     assert.equal(sb.debits().length, 0);
   });
+
+  // ---- the cart is emptied once a purchase is done ---------------------------------------------------
+  // TEST mode never drives the merchant's checkout, so nothing else empties the merchant's cart: the
+  // bought items used to sit there afterwards, look unbought, and block the next purchase.
+
+  const fakeCart = (site: string): Array<{ id: string; quantity: number }> => {
+    const file = path.join(sb.dir, 'fake-webcmd-state.json');
+    return existsSync(file) ? ((JSON.parse(readFileSync(file, 'utf-8')) as { carts: Record<string, Array<{ id: string; quantity: number }>> }).carts[site] ?? []) : [];
+  };
+  const blinkitBuy = (productIndex: number, requestId: string) => {
+    const p = CATALOG.blinkit[productIndex];
+    const proposal: Proposal = {
+      proposed_action: 'purchase',
+      selected: { merchant: 'blinkit', product_name: p.name, price_inr: p.price, availability: true, product_url: p.url, product_id: p.id, source: 'sandbox' },
+      quantity: 1,
+      expected_total_inr: p.price,
+      reason: 'cart-emptying test',
+      considered: 1,
+      rejected: [],
+    };
+    return purchase(requestId, proposal, sb.mandateId);
+  };
+
+  test('after a completed purchase the cart is EMPTY — confirmed by a real read, not by the command\'s word', async () => {
+    const result = await blinkitBuy(0, 'req_empty_1');
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(sb.debits().length, 1, 'the purchase really happened');
+    assert.deepEqual(fakeCart('blinkit'), [], 'the bought item is not left in the cart');
+
+    const calls = sb.webcmdCalls();
+    const lastWrite = calls.map((c, i) => ({ c, i })).filter(({ c }) => c[0] === 'blinkit' && (c[1] === 'set-cart-quantity' || c[1] === 'add-to-cart')).pop();
+    const lastClear = calls.map((c, i) => ({ c, i })).filter(({ c }) => c[0] === 'blinkit' && c[1] === 'clear-cart').pop();
+    assert.ok(lastWrite && lastClear && lastClear.i > lastWrite.i, 'the cart was cleared AFTER the item was added, not just before');
+  });
+
+  test('a second purchase in the same session now works without anyone emptying the cart by hand', async () => {
+    await sb.cleanup();
+    sb = await createSandbox({ ...DEMO_MANDATE, maxTxns: 5 }); // headroom: the gate refuses ALL writes once the limit is hit
+    assert.equal((await blinkitBuy(0, 'req_empty_a')).ok, true);
+    assert.equal((await blinkitBuy(0, 'req_empty_b')).ok, true);
+    assert.equal(sb.debits().length, 2);
+    assert.deepEqual(fakeCart('blinkit'), []);
+  });
+
+  test('an EXHAUSTED mandate cannot empty the cart (the gate refuses every write, even ₹0) — the purchase still stands', async () => {
+    await sb.cleanup();
+    sb = await createSandbox({ ...DEMO_MANDATE, maxTxns: 1 });
+    const result = await blinkitBuy(0, 'req_empty_limit');
+    assert.equal(result.ok, true, 'the one allowed purchase went through');
+    assert.equal(sb.debits().length, 1);
+    assert.equal(dirCount(sb, 'receipts'), 1);
+    assert.equal(fakeCart('blinkit').length, 1, 'the gate — the only authority — did not allow the cart change, and nothing bypassed it');
+    const refused = gateEvents(sb).filter((e) => e.command === 'blinkit/clear-cart' && e.verdict === 'DENY');
+    assert.ok(refused.some((e) => e.code === 'TXN_LIMIT_REACHED'), 'the refusal is on the gate\'s own record');
+  });
+
+  test('an item that was NOT bought stays in the cart: a DENIED purchase does not empty it', async () => {
+    const denied = await blinkitBuy(1, 'req_empty_denied'); // Blinkit 5kg atta, ₹540 > the ₹500 per-transaction cap
+    assert.equal(denied.ok, false);
+    assert.equal(sb.debits().length, 0);
+    assert.equal(fakeCart('blinkit').length, 1, 'nothing was bought, so the cart is left exactly as it is');
+  });
+
+  test('a cart that cannot be emptied never undoes a completed purchase (the receipt and the draw stand)', async () => {
+    process.env.FAKE_WEBCMD_CLEAR_CART_IS_A_NOOP = '1'; // clear-cart says "cleared" and leaves the items
+    try {
+      const result = await blinkitBuy(0, 'req_empty_noop');
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.equal(sb.debits().length, 1, 'the money was drawn exactly once');
+      assert.equal(dirCount(sb, 'receipts'), 1, 'and the receipt exists');
+      assert.equal(fakeCart('blinkit').length, 1, 'the items are still there — and the run says so instead of claiming success');
+    } finally {
+      delete process.env.FAKE_WEBCMD_CLEAR_CART_IS_A_NOOP;
+    }
+  });
 });

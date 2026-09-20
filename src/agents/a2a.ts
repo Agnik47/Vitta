@@ -87,7 +87,8 @@ interface MessagePart {
 
 /** Pulls an AgentRequest out of an A2A message. A plain-text message (someone chatting with the
  *  agent from Nasiko's UI) becomes `{ request: text }` with fresh correlation, so an agent is also
- *  usable by hand; only the Planner accepts that shape, the others reject it as INVALID_REQUEST. */
+ *  usable by hand; only the Planner accepts that shape, the others reject it as INVALID_REQUEST — with a
+ *  message that says why and, where safe, an example to send instead (usage-hint.ts). */
 export function extractAgentRequest(message: unknown, headerTraceparent?: string): AgentRequest | { error: string } {
   if (typeof message !== 'object' || message === null) return { error: 'params.message is required' };
   const parts = (message as { parts?: unknown }).parts;

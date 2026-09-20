@@ -18,7 +18,9 @@
     "check:razorpay-dashboard": "node scripts/check-razorpay-dashboard.js",
     "check:bigbasket-parser": "node --no-warnings scripts/check-bigbasket-parser.js",
     "check:browser-queue": "node --no-warnings scripts/check-browser-queue.js",
-    "check:pack-size": "node --no-warnings scripts/check-pack-size.js"
+    "check:pack-size": "node --no-warnings scripts/check-pack-size.js",
+    "check:portability": "node --no-warnings scripts/check-portability.js",
+    "check:gate-failure": "node --no-warnings scripts/check-gate-failure.js"
   },
   "repository": {
     "type": "git",
@@ -28,6 +30,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "bugs": {
     "url": "https://github.com/Agnik47/Vitta/issues"
   },

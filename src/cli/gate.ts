@@ -29,6 +29,7 @@ import { formatGateEventLine, formatAgentLine } from './ui';
 import { getOrCreateKeyPair } from './keys';
 import { saveMandate, loadMandate, loadAllMandates, loadReceipt, loadAllReceipts, saveReceipt, saveAuthorization, saveFundingReceipt, appendEvent } from './store';
 import type { GateEvent } from '../events/GateEvent';
+import { recordActivity } from './activity-log';
 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
@@ -57,6 +58,48 @@ async function main(): Promise<void> {
     // to a deliberate, formatted message, per docs/AGENTS.md § UI rules.
     console.error(`✗ ${(err as Error).message}`);
     process.exitCode = 1;
+    recordCommandFailure(command, rest, err as Error);
+  }
+}
+
+/**
+ * A command that threw never reached (or never finished) a decision, so it has no gate verdict — and
+ * used to leave no trace at all. A refused funding, a bad mandate request, a `gate run` that could not
+ * even load a mandate: each is written to the decision log as a FAILURE. (A DENY is not one of these:
+ * it is a decision, and is already recorded as a gate event.)
+ */
+function recordCommandFailure(command: string | undefined, rest: string[], err: Error): void {
+  const { positionals } = parseArgs(rest.slice(1));
+  const message = err.message;
+  if (command === 'mandate') {
+    const sub = rest[0];
+    if (sub === 'create' || sub === 'resign') {
+      recordActivity({
+        action: sub === 'create' ? 'mandate.create' : 'mandate.resign',
+        outcome: 'FAILURE',
+        summary: `Could not ${sub} the mandate`,
+        error: message,
+        ...(sub === 'resign' && positionals[0] ? { mandate_id: positionals[0] } : {}),
+      });
+    }
+  } else if (command === 'fund') {
+    const mandateId = rest.find((a) => /^mnd_[a-z0-9]+$/.test(a));
+    const attaching = rest.includes('--reserve-ref');
+    recordActivity({
+      action: attaching ? 'payment.received' : rest.includes('--amount') ? 'payment.order_created' : 'payment.fund',
+      outcome: 'FAILURE',
+      summary: attaching ? 'Could not confirm funding — the reserve was not attached' : 'Could not fund the mandate',
+      error: message,
+      ...(mandateId ? { mandate_id: mandateId } : {}),
+    });
+  } else if (command === 'run') {
+    const at = rest.indexOf('--');
+    recordActivity({
+      action: 'gate.run',
+      outcome: 'FAILURE',
+      summary: `The gate could not run ${at >= 0 ? rest.slice(at + 1, at + 4).join(' ') : 'the command'}`,
+      error: message,
+    });
   }
 }
 
@@ -129,6 +172,14 @@ function cmdMandateCreate(args: string[]): void {
   console.log(`  "${renderConsent(mandate)}"\n`);
   console.log(`  ed25519 · issuer ${issuerDid}`);
   console.log(`  reserve: not yet funded — run \`gate fund ${mandate.mandate_id} --amount <n>\` to fund`);
+  recordActivity({
+    action: 'mandate.create',
+    outcome: 'SUCCESS',
+    summary: `Mandate created for ${subject}: up to ₹${formatInr(capInr)} (₹${formatInr(perTxnInr)} per order) at ${merchants.join(', ')}`,
+    mandate_id: mandate.mandate_id,
+    amount_inr: capInr,
+    details: { subject, merchants: merchants.join(','), per_txn_inr: perTxnInr, max_txns: maxTxns, expires_at: expiresAt },
+  });
 }
 
 function cmdMandateResign(args: string[]): void {
@@ -165,6 +216,14 @@ function cmdMandateResign(args: string[]): void {
   saveMandate(resigned);
 
   console.log(`✓ MANDATE ${resigned.mandate_id} signed — ₹${formatInr(newCap)}`);
+  recordActivity({
+    action: 'mandate.resign',
+    outcome: 'SUCCESS',
+    summary: `Mandate re-signed with a ₹${formatInr(newCap)} cap (₹${formatInr(newPerTxn)} per order), replacing ${mandateId}`,
+    mandate_id: resigned.mandate_id,
+    amount_inr: newCap,
+    details: { replaces: mandateId, per_txn_inr: newPerTxn },
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -381,6 +440,7 @@ async function cmdFund(args: string[]): Promise<void> {
     // The payment is done and verified: write the signed funding receipt for it. Evidence comes from
     // Razorpay's own payment records, and the receipt is only written when there is captured money
     // to attest to. It never fails the funding itself — the mandate is already funded and signed.
+    let fundingReceiptId: string | undefined;
     if (ledger.fundingPayments) {
       try {
         const { orderId, payments } = await ledger.fundingPayments(existingReserveRef);
@@ -396,6 +456,7 @@ async function cmdFund(args: string[]): Promise<void> {
             },
             getOrCreateKeyPair('gate').privateKey,
           );
+          fundingReceiptId = fundingReceipt.funding_receipt_id;
           const written = saveFundingReceipt(fundingReceipt);
           console.log(written ? `✓ FUNDING RECEIPT ${fundingReceipt.funding_receipt_id} signed · ₹${formatInr(fundingReceipt.amount_inr)} paid via Razorpay (test)` : `  funding receipt ${fundingReceipt.funding_receipt_id} already on file`);
         }
@@ -403,6 +464,16 @@ async function cmdFund(args: string[]): Promise<void> {
         console.log(`  (funding receipt not written: ${(err as Error).message})`);
       }
     }
+    recordActivity({
+      action: 'payment.received',
+      outcome: 'SUCCESS',
+      summary: `Razorpay test payment verified — reserve funded with ₹${formatInr(balanceInr)}`,
+      mandate_id: mandateId,
+      amount_inr: balanceInr,
+      reserve_ref: existingReserveRef,
+      ...(fundingReceiptId ? { receipt_id: fundingReceiptId } : {}),
+      details: { rail: 'razorpay_test' },
+    });
     return;
   }
 
@@ -429,6 +500,14 @@ async function cmdFund(args: string[]): Promise<void> {
   } else {
     console.log(`  checkout required: pay the Razorpay test order (Checkout) before running commands`);
   }
+  recordActivity({
+    action: 'payment.order_created',
+    outcome: 'SUCCESS',
+    summary: `Razorpay test order created for ₹${formatInr(amountInr)} — waiting for the payment`,
+    mandate_id: mandateId,
+    amount_inr: amountInr,
+    reserve_ref: reserveRef,
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -802,6 +881,17 @@ async function cmdRun(args: string[]): Promise<void> {
       gatePrivateKey,
     );
     saveReceipt(testReceipt);
+    recordActivity({
+      action: 'purchase.completed',
+      outcome: 'SUCCESS',
+      summary: `Purchase settled in TEST mode at ${site}: ₹${formatInr(cartAmountInr)} drawn from the Razorpay test reserve — no merchant order placed`,
+      mandate_id: mandate.mandate_id,
+      amount_inr: cartAmountInr,
+      run_id: runId,
+      receipt_id: testReceipt.receipt_id,
+      ...(mandate.reserve.ref ? { reserve_ref: mandate.reserve.ref } : {}),
+      details: { mode: 'TEST', merchant: site, items: cartItemCount },
+    });
 
     console.log(`✓ SETTLED IN TEST MODE · ${site}`);
     console.log(`  reserve drawn ₹${formatInr(cartAmountInr)} from the Razorpay test reserve`);
@@ -903,6 +993,17 @@ async function cmdRun(args: string[]): Promise<void> {
       gatePrivateKey,
     );
     saveReceipt(receipt);
+    recordActivity({
+      action: 'purchase.completed',
+      outcome: 'SUCCESS',
+      summary: `Purchase completed at ${site}: ₹${formatInr(cartAmountInr)}${networkOrderId ? ` (order #${networkOrderId})` : ''}`,
+      mandate_id: mandate.mandate_id,
+      amount_inr: cartAmountInr,
+      run_id: runId,
+      receipt_id: receipt.receipt_id,
+      ...(mandate.reserve.ref ? { reserve_ref: mandate.reserve.ref } : {}),
+      details: { mode: 'LIVE', merchant: site, items: cartItemCount, ...(networkOrderId ? { order_id: networkOrderId } : {}) },
+    });
 
     console.log(`✓ ${fullCommand} executed · runId ${runId}`);
     console.log(`  receipt ${receipt.receipt_id}`);

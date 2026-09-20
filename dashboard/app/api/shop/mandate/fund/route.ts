@@ -5,6 +5,7 @@
 // - `reserveRef`: attach an order that has been PAID — the gate reads the real captured balance from
 //   Razorpay (capturing an `authorized` payment first) and re-signs the mandate with it
 import { runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 
 const MANDATE_ID_RE = /^mnd_[a-z0-9]+$/;
 
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
 
   if (!result.ok) {
     return Response.json(
-      { ok: false, message: result.stdout.trim() || result.stderr.trim() || "gate fund failed" },
+      { ok: false, message: describeGateFailure(result.stdout, result.stderr, "gate fund failed") },
       { status: 422 }
     );
   }

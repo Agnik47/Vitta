@@ -86,7 +86,8 @@ export async function createSandbox(opts: SandboxOptions = DEMO_MANDATE): Promis
 
   // gate-spawn finds the compiled CLIs at <cwd>/dist first. Linking the repo's dist here makes that
   // hold from inside the sandbox even when the agents themselves run from src/ under ts-node.
-  symlinkSync(path.join(REPO_ROOT, 'dist'), path.join(dir, 'dist'), 'dir');
+  // 'junction' is what works on Windows without administrator rights; other platforms ignore the type.
+  symlinkSync(path.join(REPO_ROOT, 'dist'), path.join(dir, 'dist'), 'junction');
 
   const shim = path.join(dir, 'bin', 'webcmd');
   writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${fakeWebcmd}" "$@"\n`);

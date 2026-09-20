@@ -1,5 +1,5 @@
 # One image recipe for all four Vitta agents. AGENT picks which one this container runs
-# (planner | discovery | evaluator | purchase); nasiko/deploy.sh stages the build context and sets it.
+# (planner | discovery | evaluator | purchase); nasiko/deploy.js stages the build context and sets it.
 #
 # The agents have no runtime dependencies — compiled output plus the manifest is all they need.
 # Nasiko's contract (docs.nasiko.com/adlc/a2a-agents): serve /.well-known/agent-card.json and

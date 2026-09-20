@@ -26,8 +26,10 @@ const hmac = (secret, msg) => crypto.createHmac('sha256', secret).update(msg).di
   const sb = await createSandbox();
   const PORT = 3111, B = `http://127.0.0.1:${PORT}`, WH = 'whsec_test_123';
   const auth = 'Basic ' + Buffer.from(`${MOCK_KEY_ID}:${MOCK_KEY_SECRET}`).toString('base64');
-  const dash = spawn('npx', ['next', 'start', '-p', String(PORT)], {
-    cwd: R + '/dashboard',
+  const win = process.platform === 'win32'; // npx is npx.cmd there, which only runs through a shell (fixed arguments)
+  const dash = spawn(win ? 'npx.cmd' : 'npx', ['next', 'start', '-p', String(PORT)], {
+    shell: win,
+    cwd: path.join(R, 'dashboard'),
     env: { ...process.env, MANDATE_GATE_DATA_DIR: sb.dir, RAZORPAY_WEBHOOK_SECRET: WH, PATH: process.env.PATH },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

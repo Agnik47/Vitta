@@ -8,6 +8,7 @@
 // process-spawning path is a real command-injection hole. Every argument here can originate from a
 // browser request, so this is not optional hardening — it's the actual security boundary.
 import { execFile } from "node:child_process";
+import { parseEnvFile } from "@/lib/env-file";
 import { markBrowserWrite, runBrowserTask } from "@/lib/browser-queue";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -70,17 +71,7 @@ function gateCliEntryPoint(): string {
 export function loadRootEnvOverrides(): Record<string, string> {
   const envPath = path.join(getDataDir(), ".env");
   if (!existsSync(envPath)) return {};
-  const overrides: Record<string, string> = {};
-  for (const line of readFileSync(envPath, "utf-8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const value = trimmed.slice(eq + 1).trim();
-    if (key) overrides[key] = value;
-  }
-  return overrides;
+  return parseEnvFile(readFileSync(envPath, "utf-8"));
 }
 
 /**

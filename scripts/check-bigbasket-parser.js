@@ -8,7 +8,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 
 (async () => {
-  const { parseBigBasketMarkdown } = await import(path.resolve(__dirname, '../dashboard/lib/product-sources/bigbasket-markdown.ts'));
+  const { parseBigBasketMarkdown } = await import(require('node:url').pathToFileURL(path.resolve(__dirname, '../dashboard/lib/product-sources/bigbasket-markdown.ts')).href);
   const real = parseBigBasketMarkdown(readFileSync(path.resolve(__dirname, 'fixtures/bigbasket-atta.md'), 'utf-8'));
   let passed = 0;
   const check = (name, fn) => {

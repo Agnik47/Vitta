@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 (async () => {
-  const q = await import(path.resolve(__dirname, '../dashboard/lib/browser-queue.ts'));
+  const q = await import(require('node:url').pathToFileURL(path.resolve(__dirname, '../dashboard/lib/browser-queue.ts')).href);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ok = (v = 'ok') => ({ ok: true, v });
   const busy = { ok: false, msg: 'blinkit search navigation failed: Session is busy: blinkit/cart (pid 1) is already driving it.' };

@@ -18,6 +18,7 @@ import { runShoppingFlow, type FlowInput } from '../agents/orchestrator';
 import { AGENT_NAMES, isShoppingIntent, type AgentName, type ExecutionMode } from '../agents/protocol';
 import { AGENT_DEFS, resolveEndpoints } from '../agents/registry';
 import { listRuns, loadRun, saveRun, type FlowRecord, type FlowStage, type NasikoRouting } from '../agents/runs-store';
+import { recordActivity } from './activity-log';
 
 /** Flags that never take a value, so `--review "find biscuit"` cannot swallow the request as its value. */
 const BOOLEAN_FLAGS = new Set(['review', 'in-process', 'json']);
@@ -100,6 +101,32 @@ function printFinal(r: FlowRecord): void {
   }
 }
 
+/** One line in the decision log for every run of the four agents, however it ended. */
+function recordAgentRun(r: FlowRecord): void {
+  const failed = r.status === 'FAILED' || r.status === 'DENIED' || r.status === 'STEP_UP_REQUIRED';
+  const pick = r.proposal?.selected;
+  const summaries: Record<string, string> = {
+    PURCHASED: `Agents completed a purchase: ${pick?.product_name ?? 'the pick'} at ${pick?.merchant ?? ''}`,
+    HANDOFF: 'Agents got approval; the merchant needs a final human step',
+    REVIEW: `Agents picked ${pick?.product_name ?? 'a product'} at ${pick?.merchant ?? ''} for ₹${r.proposal?.expected_total_inr ?? '?'} and handed it to you to review`,
+    NO_PURCHASE: r.proposal?.selected ? 'Agents found a pick but placed no order' : 'Agents found nothing eligible to buy',
+    NO_PRODUCTS: 'Agents found no products',
+    DENIED: 'The mandate refused the agents\' purchase',
+    STEP_UP_REQUIRED: 'The agents\' purchase needs a step-up approval',
+    FAILED: 'The agents\' run failed',
+  };
+  recordActivity({
+    action: 'agents.run',
+    outcome: failed ? 'FAILURE' : r.status === 'NO_PURCHASE' || r.status === 'NO_PRODUCTS' ? 'INFO' : 'SUCCESS',
+    summary: `${summaries[r.status] ?? `Agents run ended ${r.status}`} — "${(r.request_text ?? r.intent?.raw_request ?? '').slice(0, 80)}"`,
+    run_id: r.run_id,
+    ...(r.mandate_id ? { mandate_id: r.mandate_id } : {}),
+    ...(pick && r.proposal?.expected_total_inr !== undefined ? { amount_inr: r.proposal.expected_total_inr } : {}),
+    ...(failed ? { error: r.error?.message ?? r.outcome?.deny_code ?? r.status } : {}),
+    details: { status: r.status, mode: r.mode, source: r.source },
+  });
+}
+
 /** Where the person reviews the pick: the dashboard's cart. */
 function cartUrl(): string {
   return `${(process.env.VITTA_DASHBOARD_URL || 'http://localhost:3000').replace(/\/+$/, '')}/shop/cart`;
@@ -161,6 +188,7 @@ async function cmdRun(argv: string[]): Promise<void> {
     },
   });
 
+  recordAgentRun(record);
   if (flags.json) console.log(JSON.stringify(record, null, 2));
   else printFinal(record);
   if (record.status !== 'PURCHASED' && record.status !== 'HANDOFF' && record.status !== 'NO_PURCHASE' && record.status !== 'REVIEW') process.exitCode = 1;

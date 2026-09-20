@@ -36,4 +36,11 @@ describe('gate run: webcmd trace flag', { skip }, () => {
     }
     assert.equal(sb.webcmdCalls().filter((argv) => argv[1] === 'set-cart-quantity').length, 2);
   });
+
+  test('when webcmd fails AFTER the gate allowed the write, the gate reports webcmd\'s own reason on stderr', async () => {
+    const r = await sb.gate(['run', '--', 'webcmd', 'blinkit', 'set-cart-quantity', 'no-such-product', '--quantity', '1']);
+    assert.equal(r.ok, false);
+    assert.match(r.stdout, /ALLOW/, 'the gate did allow the write — that line is on stdout…');
+    assert.match(r.stderr, /Execution failed: webcmd exited 1 — .*unknown product "no-such-product"/, '…and the reason it then failed is on stderr, not just "exited 1"');
+  });
 });

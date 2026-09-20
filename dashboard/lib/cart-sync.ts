@@ -31,6 +31,7 @@
 // a cart mutation is an access:'write' command and stays inside the one audited decision path, so it
 // still produces a real GateEvent. It commits ₹0 — only place-order moves money.
 import { friendlyGateFailureMessage, runGateCli } from "@/lib/gate-cli";
+import { describeGateFailure } from "@/lib/gate-failure";
 import type { AddToCartMerchant } from "@/lib/product-ref";
 import { quantityOf, readRealCart, type RealCart } from "@/lib/real-cart";
 
@@ -82,7 +83,7 @@ export async function syncCartQuantity(
 
   const result = await runGateCli(argv, timeoutMs);
   if (!result.ok) {
-    const raw = result.stdout.trim() || result.stderr.trim() || "cart update failed";
+    const raw = describeGateFailure(result.stdout, result.stderr, "cart update failed");
     return { ok: false, message: friendlyGateFailureMessage(raw) };
   }
 
@@ -124,7 +125,7 @@ export async function clearRealCart(merchant: AddToCartMerchant, timeoutMs = 120
 
   const result = await runGateCli(["run", "--", "webcmd", "blinkit", "clear-cart"], timeoutMs);
   if (!result.ok) {
-    const raw = result.stdout.trim() || result.stderr.trim() || "clear-cart failed";
+    const raw = describeGateFailure(result.stdout, result.stderr, "clear-cart failed");
     return { ok: false, message: friendlyGateFailureMessage(raw) };
   }
 
