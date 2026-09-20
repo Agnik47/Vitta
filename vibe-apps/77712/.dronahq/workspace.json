@@ -1,0 +1,7 @@
+{
+  "source": "mcp-local-mirror",
+  "pluginId": 77712,
+  "appName": "Vitta Agent Ops",
+  "mirroredAt": null,
+  "note": "Never pushed: vibe_write_file returned \"Storage not configured\" on 2026-09-20. Local files are the source of truth until a push succeeds."
+}
